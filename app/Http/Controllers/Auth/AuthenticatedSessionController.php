@@ -28,6 +28,10 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        if ($request->user()->isMasterAdmin()) {
+            return redirect()->intended('/master');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
@@ -42,6 +46,6 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect()->route('login');
     }
 }

@@ -18,7 +18,7 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::get('/master', function () {
-    return 'OralCares Master Area';
-})->middleware(['auth', 'master_admin']);
+    return view('master.dashboard');
+})->middleware(['auth', 'master_admin'])->name('master.dashboard');
 
 require __DIR__.'/auth.php';
