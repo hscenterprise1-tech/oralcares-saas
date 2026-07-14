@@ -84,4 +84,14 @@ class Clinic extends Model
     {
         return $this->hasMany(Role::class);
     }
+
+    /**
+     * Get the primary branch of the clinic.
+     *
+     * @return HasOne<Branch, $this>
+     */
+    public function primaryBranch(): HasOne
+    {
+        return $this->hasOne(Branch::class)->where('is_main', true);
+    }
 }
