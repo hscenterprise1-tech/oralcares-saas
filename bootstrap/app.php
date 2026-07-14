@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsMasterAdmin;
+use App\Http\Middleware\ResolveClinicContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            ResolveClinicContext::class,
+        ]);
         $middleware->alias([
             'master_admin' => EnsureUserIsMasterAdmin::class,
         ]);
