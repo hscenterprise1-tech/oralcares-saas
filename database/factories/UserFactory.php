@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\User;
+use App\UserType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -30,7 +31,28 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'user_type' => UserType::ClinicUser,
         ];
+    }
+
+    /**
+     * Indicate that the user is a master admin.
+     */
+    public function masterAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'user_type' => UserType::MasterAdmin,
+        ]);
+    }
+
+    /**
+     * Indicate that the user is a company user.
+     */
+    public function companyUser(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'user_type' => UserType::CompanyUser,
+        ]);
     }
 
     /**

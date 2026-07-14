@@ -114,4 +114,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Master Super Admin Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Here you may define the name, email, and password for the initial
+    | platform Master Super Admin account, to be used during seeding.
+    |
+    */
+
+    'master_admin' => [
+        'name' => env('MASTER_ADMIN_NAME', 'OralCares Master Admin'),
+        'email' => env('MASTER_ADMIN_EMAIL', 'master@oralcares.com'),
+        'password' => env('MASTER_ADMIN_PASSWORD'),
+    ],
+
 ];
