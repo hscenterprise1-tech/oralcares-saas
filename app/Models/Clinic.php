@@ -6,6 +6,7 @@ use App\ClinicStatus;
 use Database\Factories\ClinicFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Clinic extends Model
 {
@@ -33,5 +34,15 @@ class Clinic extends Model
         return [
             'status' => ClinicStatus::class,
         ];
+    }
+
+    /**
+     * Get the branches for the clinic.
+     *
+     * @return HasMany<Branch, $this>
+     */
+    public function branches(): HasMany
+    {
+        return $this->hasMany(Branch::class);
     }
 }
