@@ -74,4 +74,14 @@ class Clinic extends Model
     {
         return $this->primaryOwnerMembership?->user;
     }
+
+    /**
+     * Get the roles scoped to the clinic.
+     *
+     * @return HasMany<Role, $this>
+     */
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class);
+    }
 }

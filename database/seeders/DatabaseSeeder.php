@@ -24,6 +24,9 @@ class DatabaseSeeder extends Seeder
             'user_type' => UserType::ClinicUser,
         ]);
 
-        $this->call(MasterAdminSeeder::class);
+        $this->call([
+            MasterAdminSeeder::class,
+            SystemRoleTemplateSeeder::class,
+        ]);
     }
 }

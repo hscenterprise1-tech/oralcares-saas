@@ -24,6 +24,7 @@ class BranchFactory extends Factory
             'name' => fake()->city().' Branch',
             'slug' => fake()->unique()->slug(),
             'is_main' => false,
+            'status' => BranchStatus::Active,
         ];
     }
 
