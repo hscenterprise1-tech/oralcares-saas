@@ -6,6 +6,7 @@ namespace App\Models;
 use App\UserType;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -56,5 +57,15 @@ class User extends Authenticatable
     public function isMasterAdmin(): bool
     {
         return $this->user_type === UserType::MasterAdmin;
+    }
+
+    /**
+     * Get the clinic memberships for the user.
+     *
+     * @return HasMany<ClinicMembership, $this>
+     */
+    public function clinicMemberships(): HasMany
+    {
+        return $this->hasMany(ClinicMembership::class);
     }
 }

@@ -7,6 +7,7 @@ use Database\Factories\ClinicFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Clinic extends Model
 {
@@ -44,5 +45,33 @@ class Clinic extends Model
     public function branches(): HasMany
     {
         return $this->hasMany(Branch::class);
+    }
+
+    /**
+     * Get the memberships for the clinic.
+     *
+     * @return HasMany<ClinicMembership, $this>
+     */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(ClinicMembership::class);
+    }
+
+    /**
+     * Get the primary owner membership for the clinic.
+     *
+     * @return HasOne<ClinicMembership, $this>
+     */
+    public function primaryOwnerMembership(): HasOne
+    {
+        return $this->hasOne(ClinicMembership::class)->where('is_primary_owner', true);
+    }
+
+    /**
+     * Get the primary owner (user) of the clinic.
+     */
+    public function getPrimaryOwnerAttribute(): ?User
+    {
+        return $this->primaryOwnerMembership?->user;
     }
 }
