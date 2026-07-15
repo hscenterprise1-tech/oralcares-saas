@@ -2,11 +2,15 @@
 
 use App\ClinicStatus;
 use App\Data\ClinicOnboardingData;
+use App\LeadStatus;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicMembership;
+use App\Models\Lead;
+use App\Models\Task;
 use App\Models\User;
 use App\Services\OnboardClinicService;
+use App\TaskStatus;
 use Database\Seeders\SystemRoleTemplateSeeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -22,7 +26,9 @@ test('guest cannot access master dashboard', function () {
 test('master_admin can access dashboard', function () {
     $user = User::factory()->masterAdmin()->create();
     $response = $this->actingAs($user)->get('/master/dashboard');
-    $response->assertStatus(200)->assertSee('Master Dashboard');
+    $response->assertStatus(200)
+        ->assertSee('Executive Command Center')
+        ->assertDontSee('<h1 class="text-2xl font-bold text-gray-900 tracking-tight">Master Dashboard</h1>');
 });
 
 test('clinic_user cannot access master dashboard', function () {
@@ -283,4 +289,51 @@ test('Add New Clinic action points to the existing create-clinic route', functio
     $response->assertStatus(200)
         ->assertSee('Add New Clinic')
         ->assertSee(route('master.clinics.create'));
+});
+
+test('dashboard calculates and displays crm metrics and overdue actions correctly', function () {
+    $admin = User::factory()->masterAdmin()->create();
+
+    // 1. Create a lead
+    Lead::factory()->create([
+        'status' => LeadStatus::New,
+    ]);
+
+    // 2. Create an active lead
+    Lead::factory()->create([
+        'status' => LeadStatus::Contacted,
+    ]);
+
+    // 3. Create a pending task in the past (overdue action)
+    $lead = Lead::factory()->create();
+    Task::factory()->create([
+        'status' => TaskStatus::Pending,
+        'due_at' => now()->subDay(),
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+    ]);
+
+    // 4. Create a completed task in the past (not overdue)
+    Task::factory()->create([
+        'status' => TaskStatus::Completed,
+        'due_at' => now()->subDay(),
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+    ]);
+
+    // 5. Create a pending task in the future (not overdue)
+    Task::factory()->create([
+        'status' => TaskStatus::Pending,
+        'due_at' => now()->addDay(),
+        'taskable_type' => Lead::class,
+        'taskable_id' => $lead->id,
+    ]);
+
+    $response = $this->actingAs($admin)->get('/master/dashboard');
+
+    $response->assertStatus(200)
+        ->assertSee('New Leads')
+        ->assertSee('Active Leads')
+        ->assertSee('Overdue Actions')
+        ->assertSee('Pending actions past their due date');
 });
