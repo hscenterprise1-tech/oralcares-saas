@@ -129,4 +129,23 @@ class Lead extends Model
     {
         return $this->morphMany(Task::class, 'taskable');
     }
+
+    /**
+     * Get the centralized, canonical lead sources.
+     *
+     * @return array<string, string>
+     */
+    public static function sources(): array
+    {
+        return [
+            'website' => 'Website',
+            'instagram' => 'Instagram',
+            'whatsapp' => 'WhatsApp',
+            'referral' => 'Referral',
+            'cold_call' => 'Cold Call',
+            'exhibition' => 'Exhibition',
+            'partner' => 'Partner',
+            'manual_entry' => 'Manual Entry',
+        ];
+    }
 }

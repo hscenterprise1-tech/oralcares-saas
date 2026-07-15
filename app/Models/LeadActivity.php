@@ -36,6 +36,7 @@ class LeadActivity extends Model
         return [
             'type' => LeadActivityType::class,
             'properties' => 'array',
+            'created_at' => 'datetime',
         ];
     }
 
@@ -52,7 +53,9 @@ class LeadActivity extends Model
         parent::boot();
 
         static::creating(function (LeadActivity $activity) {
-            $activity->created_at = $activity->freshTimestamp();
+            if (empty($activity->created_at)) {
+                $activity->created_at = $activity->freshTimestamp();
+            }
         });
 
         static::updating(function (LeadActivity $activity) {

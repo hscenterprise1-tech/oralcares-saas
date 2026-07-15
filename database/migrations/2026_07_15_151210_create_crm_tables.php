@@ -37,7 +37,7 @@ return new class extends Migration
             $table->string('company_name');
             $table->string('slug')->unique();
             $table->string('contact_name');
-            $table->string('email');
+            $table->string('email')->nullable();
             $table->string('phone')->nullable();
             $table->string('status')->default('new');
             $table->string('source')->default('manual_entry');
