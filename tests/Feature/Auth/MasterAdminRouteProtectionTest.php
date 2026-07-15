@@ -45,7 +45,7 @@ test('master_admin login redirects to master area', function () {
     ]);
 
     $this->assertAuthenticated();
-    $response->assertRedirect('/master');
+    $response->assertRedirect('/master/dashboard');
 });
 
 test('master page displays master admin profile details', function () {
