@@ -75,7 +75,7 @@
                         <h2 class="text-lg font-bold text-gray-800 tracking-tight">{{ $header ?? 'OralCares Master Portal' }}</h2>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <span class="text-xs text-gray-500 font-medium">UTC: {{ now()->format('Y-m-d') }}</span>
+                        <span class="text-xs text-gray-500 font-medium">{{ now()->format('l, F j, Y') }}</span>
                     </div>
                 </header>
 

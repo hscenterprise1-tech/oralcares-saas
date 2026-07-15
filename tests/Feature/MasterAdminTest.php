@@ -2,7 +2,9 @@
 
 use App\ClinicStatus;
 use App\Data\ClinicOnboardingData;
+use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\ClinicMembership;
 use App\Models\User;
 use App\Services\OnboardClinicService;
 use Database\Seeders\SystemRoleTemplateSeeder;
@@ -220,11 +222,65 @@ test('empty states render safely', function () {
     $admin = User::factory()->masterAdmin()->create();
 
     $response = $this->actingAs($admin)->get('/master/dashboard');
-    $response->assertStatus(200)->assertSee('No Clinics Onboarded');
+    $response->assertStatus(200)->assertSee('No clinics onboarded yet');
 
     $response2 = $this->actingAs($admin)->get('/master/clinics');
     $response2->assertStatus(200)->assertSee('No Clinics Found');
 
     $response3 = $this->actingAs($admin)->get('/master/clinics/create');
     $response3->assertStatus(200)->assertSee('No Eligible Clinic Users Found');
+});
+
+test('Total Clinic Members is 0 when an unassigned clinic_user exists but no clinic membership exists', function () {
+    $admin = User::factory()->masterAdmin()->create();
+    User::factory()->create(); // default type is clinic_user, no membership
+
+    $response = $this->actingAs($admin)->get('/master/dashboard');
+
+    $response->assertStatus(200)
+        ->assertSee('Total Clinic Members')
+        ->assertSee('0'); // distinct users in memberships is 0
+});
+
+test('Total Clinic Members counts distinct users attached through clinic_memberships', function () {
+    $admin = User::factory()->masterAdmin()->create();
+
+    // Set up clinic, branch, and memberships
+    $clinic = Clinic::factory()->create();
+    $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
+    $user1 = User::factory()->create();
+    $user2 = User::factory()->create();
+
+    // Create memberships
+    ClinicMembership::factory()->create([
+        'clinic_id' => $clinic->id,
+        'user_id' => $user1->id,
+    ]);
+    ClinicMembership::factory()->create([
+        'clinic_id' => $clinic->id,
+        'user_id' => $user2->id,
+    ]);
+
+    // Create duplicate membership record to verify distinct counting
+    ClinicMembership::factory()->create([
+        'clinic_id' => Clinic::factory()->create()->id,
+        'user_id' => $user1->id,
+    ]);
+
+    $response = $this->actingAs($admin)->get('/master/dashboard');
+
+    $response->assertStatus(200)
+        ->assertSee('Total Clinic Members')
+        // Distinct count of members should be 2 ($user1 and $user2), not 3 membership records
+        ->assertSee('2');
+});
+
+test('Add New Clinic action points to the existing create-clinic route', function () {
+    $admin = User::factory()->masterAdmin()->create();
+
+    $response = $this->actingAs($admin)->get('/master/dashboard');
+
+    $response->assertStatus(200)
+        ->assertSee('Add New Clinic')
+        ->assertSee(route('master.clinics.create'));
 });
