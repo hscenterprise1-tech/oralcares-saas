@@ -51,7 +51,7 @@ test('clinical database relationship integrity', function () {
         'branch_id' => $branch->id,
         'doctor_id' => $doctor->id,
         'encounter_number' => 'ENC-HOUSE-1',
-        'status' => 'in_progress',
+        'status' => 'checked_in',
     ]);
 
     expect($patient->encounters)->toHaveCount(1)
@@ -136,8 +136,8 @@ test('domain validation service validates lifecycle transitions', function () {
     expect($valService->validatePatientStatusTransition('archived', 'inactive'))->toBeFalse();
 
     // Visit/Encounter
-    expect($valService->validateEncounterStatusTransition('scheduled', 'in_progress'))->toBeTrue();
-    expect($valService->validateEncounterStatusTransition('completed', 'in_progress'))->toBeFalse();
+    expect($valService->validateEncounterStatusTransition('checked_in', 'waiting'))->toBeTrue();
+    expect($valService->validateEncounterStatusTransition('completed', 'waiting'))->toBeFalse();
 
     // Treatment Record
     expect($valService->validateTreatmentStatusTransition('proposed', 'completed'))->toBeTrue();

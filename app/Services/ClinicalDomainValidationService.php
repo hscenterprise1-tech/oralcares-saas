@@ -24,8 +24,13 @@ class ClinicalDomainValidationService
     public function validateEncounterStatusTransition(string $old, string $new): bool
     {
         $allowed = [
-            'scheduled' => ['in_progress', 'cancelled'],
-            'in_progress' => ['completed', 'cancelled'],
+            'checked_in' => ['waiting', 'cancelled'],
+            'waiting' => ['called', 'cancelled'],
+            'called' => ['in_consultation', 'cancelled'],
+            'in_consultation' => ['completed', 'sent_to_xray', 'sent_to_lab', 'sent_to_billing', 'cancelled'],
+            'sent_to_xray' => ['completed', 'in_consultation', 'cancelled'],
+            'sent_to_lab' => ['completed', 'in_consultation', 'cancelled'],
+            'sent_to_billing' => ['completed', 'cancelled'],
             'completed' => [],
             'cancelled' => [],
         ];

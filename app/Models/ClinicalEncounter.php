@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\ClinicScoped;
+use App\VisitStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,6 +27,7 @@ class ClinicalEncounter extends Model
     protected function casts(): array
     {
         return [
+            'status' => VisitStatus::class,
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
         ];
