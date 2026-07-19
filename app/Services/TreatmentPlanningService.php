@@ -15,6 +15,7 @@ use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Models\XrayRecord;
+use App\XrayStatus;
 use Illuminate\Support\Facades\DB;
 
 class TreatmentPlanningService
@@ -111,7 +112,7 @@ class TreatmentPlanningService
                 'encounter_id' => $encounter->id,
                 'xray_number' => $xrNumber,
                 'notes' => $notes,
-                'status' => 'ordered',
+                'status' => XrayStatus::Requested,
             ]);
 
             event(new XrayRequested($xr));
