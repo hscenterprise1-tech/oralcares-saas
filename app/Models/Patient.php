@@ -6,6 +6,7 @@ use App\Traits\ClinicScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Patient extends Model
 {
@@ -55,5 +56,15 @@ class Patient extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(AttachedDocument::class);
+    }
+
+    public function profile(): HasOne
+    {
+        return $this->hasOne(PatientProfile::class);
+    }
+
+    public function medicalHistory(): HasOne
+    {
+        return $this->hasOne(PatientMedicalHistory::class);
     }
 }
