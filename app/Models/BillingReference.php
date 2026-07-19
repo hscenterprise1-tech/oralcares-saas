@@ -10,6 +10,7 @@ class BillingReference extends Model
     protected $fillable = [
         'patient_id',
         'encounter_id',
+        'treatment_record_id',
         'billing_reference_number',
         'amount',
         'status',
@@ -23,5 +24,10 @@ class BillingReference extends Model
     public function encounter(): BelongsTo
     {
         return $this->belongsTo(ClinicalEncounter::class, 'encounter_id');
+    }
+
+    public function treatmentRecord(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentRecord::class, 'treatment_record_id');
     }
 }
