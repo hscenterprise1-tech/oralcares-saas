@@ -2,15 +2,22 @@
 
 namespace App\Services;
 
+use App\Events\TenantProvisioningCompleted;
+use App\Events\TenantProvisioningFailed;
+use App\Events\TenantProvisioningStarted;
 use App\Jobs\TenantProvisioningJob;
+use App\Models\Clinic;
+use App\Models\ClinicEmployee;
 use App\Models\CompanyOpportunity;
 use App\Models\CompanyProvisioningProcess;
 use App\Models\CompanySubscription;
 use App\Models\Role;
+use App\Models\User;
 use App\OpportunityStage;
 use App\ProvisioningState;
 use App\SubscriptionStatus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use LogicException;
 use Throwable;
@@ -221,6 +228,92 @@ class TenantProvisioningService
             case 'initialize_settings':
                 $this->activityService->log($process, 'Settings Seeded', 'Default clinic settings initialized.');
                 break;
+        }
+    }
+
+    /**
+     * Orchestrate tenant onboarding and provision workspace within a secure transaction block.
+     */
+    public function provision(
+        string $clinicName,
+        string $ownerName,
+        string $ownerEmail,
+        string $profileType = 'solo_dentist'
+    ): Clinic {
+        $auditService = app(ProvisioningAuditService::class);
+        $audit = $auditService->startAudit($profileType);
+        event(new TenantProvisioningStarted($audit));
+
+        $start = microtime(true);
+        $entities = [];
+
+        try {
+            // Prevent duplicate tenants
+            if (Clinic::where('name', $clinicName)->exists()) {
+                throw new \InvalidArgumentException("Clinic with name '{$clinicName}' is already registered.");
+            }
+
+            if (User::where('email', $ownerEmail)->exists()) {
+                throw new \InvalidArgumentException("User email '{$ownerEmail}' is already registered.");
+            }
+
+            $clinic = DB::transaction(function () use ($clinicName, $ownerName, $ownerEmail, $profileType, &$entities) {
+                // 2. Create Clinic using clinicService to populate slug
+                $clinic = $this->clinicService->initializeClinic($clinicName, Str::slug($clinicName));
+                $entities['clinics'][] = $clinic->id;
+
+                // 3. Create initial Administrator Employee and User record
+                $user = User::create([
+                    'name' => $ownerName,
+                    'email' => $ownerEmail,
+                    'password' => Hash::make(Str::random(32)), // Secure random setup flow
+                ]);
+                $entities['users'][] = $user->id;
+
+                $employee = ClinicEmployee::create([
+                    'clinic_id' => $clinic->id,
+                    'name' => $ownerName,
+                    'email' => $ownerEmail,
+                    'is_active' => true,
+                ]);
+                $entities['employees'][] = $employee->id;
+
+                // 4. Resolve profile parameters
+                $profileService = app(ProvisioningProfileService::class);
+                $config = $profileService->getProfileConfig($profileType);
+
+                // 5. Seed default packages
+                $seedService = app(SeedPackageService::class);
+                $entities = array_merge_recursive($entities, $seedService->seedProcedures($clinic));
+                $entities = array_merge_recursive($entities, $seedService->seedNotificationTemplates($clinic));
+                $entities = array_merge_recursive($entities, $seedService->seedCommunicationPreferences($clinic));
+                $entities = array_merge_recursive($entities, $seedService->seedDefaultWorkflow($clinic));
+
+                // 6. Branch provisioning
+                $branchService = app(BranchProvisioningService::class);
+                for ($b = 1; $b <= $config['branches_count']; $b++) {
+                    $branchName = $b === 1 ? "{$clinicName} Primary Branch" : "{$clinicName} Branch {$b}";
+                    $entities = array_merge_recursive($entities, $branchService->provisionBranch(
+                        $clinic,
+                        $branchName,
+                        $config['chairs_count'],
+                        $config['rooms_count']
+                    ));
+                }
+
+                return $clinic;
+            });
+
+            $durationMs = (int) ((microtime(true) - $start) * 1000);
+            $auditService->completeAudit($audit, $clinic->id, $entities, $durationMs);
+
+            event(new TenantProvisioningCompleted($clinic));
+
+            return $clinic;
+        } catch (\Exception $e) {
+            $auditService->failAudit($audit, $e->getMessage());
+            event(new TenantProvisioningFailed($e->getMessage()));
+            throw $e;
         }
     }
 }
