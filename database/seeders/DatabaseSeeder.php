@@ -27,6 +27,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             MasterAdminSeeder::class,
             SystemRoleTemplateSeeder::class,
+            CompanyOrganizationSeeder::class,
+            CompanyRBACSeeder::class,
         ]);
     }
 }

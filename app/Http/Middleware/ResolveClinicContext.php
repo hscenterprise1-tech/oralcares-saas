@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\BranchStatus;
 use App\ClinicMembershipStatus;
+use App\Scopes\TenantScope;
 use App\Services\ClinicContext;
 use App\UserType;
 use Closure;
@@ -28,6 +29,7 @@ class ResolveClinicContext
 
         if ($user && $user->user_type === UserType::ClinicUser) {
             $activeMemberships = $user->clinicMemberships()
+                ->withoutGlobalScope(TenantScope::class)
                 ->where('status', ClinicMembershipStatus::Active)
                 ->with(['clinic', 'user'])
                 ->get();

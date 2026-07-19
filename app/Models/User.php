@@ -8,6 +8,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -108,5 +109,15 @@ class User extends Authenticatable
     public function teams(): BelongsToMany
     {
         return $this->belongsToMany(Team::class, 'team_users');
+    }
+
+    /**
+     * Get the company employee profile for this user.
+     *
+     * @return HasOne<CompanyEmployee, $this>
+     */
+    public function companyEmployee(): HasOne
+    {
+        return $this->hasOne(CompanyEmployee::class, 'user_id');
     }
 }

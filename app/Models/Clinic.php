@@ -94,4 +94,14 @@ class Clinic extends Model
     {
         return $this->hasOne(Branch::class)->where('is_main', true);
     }
+
+    /**
+     * Get the subscriptions for the clinic.
+     *
+     * @return HasMany<CompanySubscription, $this>
+     */
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(CompanySubscription::class);
+    }
 }

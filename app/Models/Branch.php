@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\BranchStatus;
+use App\Traits\ClinicScoped;
 use Database\Factories\BranchFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Branch extends Model
 {
     /** @use HasFactory<BranchFactory> */
-    use HasFactory;
+    use ClinicScoped, HasFactory;
 
     /**
      * The attributes that are mass assignable.

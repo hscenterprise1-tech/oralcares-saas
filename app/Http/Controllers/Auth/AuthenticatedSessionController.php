@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\EmploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\CompanyEmployeeInvitationService;
+use App\UserType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
@@ -26,9 +30,35 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        $user = $request->user();
+
+        // Enforce login restrictions for Company Employees
+        if ($user->user_type === UserType::CompanyUser) {
+            $employee = $user->companyEmployee;
+            if (! $employee || $employee->employment_status !== EmploymentStatus::Active) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                throw ValidationException::withMessages([
+                    'email' => 'Your employee account is not active.',
+                ]);
+            }
+
+            // Log First Login if not already logged
+            $hasLoggedIn = $employee->activities()->where('event', 'First Login')->exists();
+            if (! $hasLoggedIn) {
+                app(CompanyEmployeeInvitationService::class)->logActivity(
+                    $employee,
+                    'First Login',
+                    'Employee performed their first login.'
+                );
+            }
+        }
+
         $request->session()->regenerate();
 
-        if ($request->user()->isMasterAdmin()) {
+        if ($user->isMasterAdmin()) {
             return redirect()->intended('/master/dashboard');
         }
 

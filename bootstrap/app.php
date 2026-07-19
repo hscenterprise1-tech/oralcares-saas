@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsMasterAdmin;
+use App\Http\Middleware\RequireClinicContext;
+use App\Http\Middleware\RequireFeatureEntitlement;
 use App\Http\Middleware\ResolveClinicContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -18,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->alias([
             'master_admin' => EnsureUserIsMasterAdmin::class,
+            'clinic_context' => RequireClinicContext::class,
+            'entitlement' => RequireFeatureEntitlement::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

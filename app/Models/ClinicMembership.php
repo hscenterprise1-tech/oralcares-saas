@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\ClinicMembershipStatus;
+use App\Traits\ClinicScoped;
 use Database\Factories\ClinicMembershipFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ClinicMembership extends Model
 {
     /** @use HasFactory<ClinicMembershipFactory> */
-    use HasFactory;
+    use ClinicScoped, HasFactory;
 
     /**
      * The attributes that are mass assignable.
