@@ -82,4 +82,9 @@ class ClinicalEncounter extends Model
     {
         return $this->hasOne(BillingReference::class, 'encounter_id');
     }
+
+    public function diagnoses(): HasMany
+    {
+        return $this->hasMany(ClinicalDiagnosis::class, 'encounter_id');
+    }
 }

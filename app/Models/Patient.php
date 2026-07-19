@@ -67,4 +67,9 @@ class Patient extends Model
     {
         return $this->hasOne(PatientMedicalHistory::class);
     }
+
+    public function dentalChart(): HasMany
+    {
+        return $this->hasMany(PatientDentalChart::class);
+    }
 }
