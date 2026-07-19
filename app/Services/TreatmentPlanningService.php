@@ -6,6 +6,7 @@ use App\Events\LabRequested;
 use App\Events\PrescriptionDrafted;
 use App\Events\TreatmentPlanCreated;
 use App\Events\XrayRequested;
+use App\LabCaseStatus;
 use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
@@ -137,7 +138,7 @@ class TreatmentPlanningService
                 'encounter_id' => $encounter->id,
                 'lab_order_number' => $lbNumber,
                 'notes' => $notes,
-                'status' => 'ordered',
+                'status' => LabCaseStatus::Requested,
             ]);
 
             event(new LabRequested($lb));
