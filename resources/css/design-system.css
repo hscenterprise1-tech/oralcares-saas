@@ -1,65 +1,155 @@
-/* OralCares Enterprise Design System Tokens (Phase U-1R) */
+/* OralCares Enterprise Design System Tokens (OEDS v1.0 - Phase DS-1) */
 :root {
-  /* Brand Colors Extracted from Logo */
+  /* ==========================================================================
+     1. Color Tokens (Extracted from Logo & Harmonized)
+     ========================================================================== */
+  /* Brand Navy Spectrum */
   --brand-navy-950: #061A2E;
   --brand-navy-900: #0A2540;
+  --brand-navy-800: #0E3054;
   --brand-navy-700: #123A5E;
   --brand-navy-500: #1E4E7A;
+  --brand-navy-300: #3873A7;
   
-  --brand-teal-600: #00A8B5;
+  /* Brand Teal/Cyan Spectrum */
   --brand-teal-700: #0E7490;
+  --brand-teal-600: #00A8B5;
+  --brand-teal-500: #06B6D4;
   --brand-teal-400: #14B8A6;
   --brand-cyan-300: #5EEAD4;
+  --brand-cyan-100: #E0F2FE;
 
+  /* Gradients & Special Effects */
   --brand-gradient: linear-gradient(135deg, #0A2540 0%, #00A8B5 100%);
+  --brand-gradient-hover: linear-gradient(135deg, #0E3054 0%, #06B6D4 100%);
   --brand-teal-glow: rgba(0, 168, 181, 0.25);
+  --brand-navy-glow: rgba(10, 37, 64, 0.15);
 
-  /* Semantic Colors (Desaturated & Harmonized) */
+  /* Semantic Hues */
   --color-success: #0F9D6E;
+  --color-success-bg: #ECFDF5;
   --color-warning: #B8862E;
+  --color-warning-bg: #FFFBEB;
   --color-danger: #C1414A;
+  --color-danger-bg: #FEF2F2;
+  --color-info: #00A8B5;
+  --color-info-bg: #F0FDFA;
 
-  /* Neutral Scale (Blue-Tinted Cool Neutrals) */
+  /* Cool Neutral Scale (Blue-tinted for Enterprise restraint) */
   --neutral-0: #FFFFFF;
   --neutral-25: #F8FAFC;
   --neutral-50: #F1F5F9;
   --neutral-100: #E2E8F0;
   --neutral-200: #CBD5E1;
-  --neutral-400: #94A3B8;
+  --neutral-300: #94A3B8;
   --neutral-500: #64748B;
   --neutral-700: #334155;
+  --neutral-800: #1E293B;
   --neutral-900: #0F172A;
   --neutral-950: #020617;
 
-  /* Surface & Component Mapping */
+  /* Surface Mappings */
   --color-bg-app: var(--neutral-25);
   --color-bg-card: var(--neutral-0);
+  --color-bg-sidebar: var(--brand-navy-950);
+  --color-bg-header: var(--neutral-0);
+  --color-bg-overlay: var(--neutral-0);
   --color-border: var(--neutral-100);
   --color-border-hover: var(--neutral-200);
   --color-text-main: var(--neutral-900);
   --color-text-muted: var(--neutral-500);
 
-  /* Typography */
+  /* ==========================================================================
+     2. Typography Tokens
+     ========================================================================== */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-md: 1rem;        /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+  --font-size-4xl: 2.25rem;    /* 36px */
 
-  /* Border Radii */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* ==========================================================================
+     3. Border Radii & Border Tokens
+     ========================================================================== */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-2xl: 24px;
   --radius-full: 9999px;
 
-  /* Elevation & Navy Shadows */
-  --shadow-subtle: 0 1px 3px rgba(10, 37, 64, 0.04);
-  --shadow-card: 0 4px 16px -2px rgba(10, 37, 64, 0.06), 0 2px 6px -1px rgba(10, 37, 64, 0.03);
+  --border-width-hairline: 1px;
+  --border-width-thick: 2px;
+  --border-width-accent: 3px;
+
+  /* ==========================================================================
+     4. Elevation & Shadow Tokens
+     ========================================================================== */
+  --shadow-subtle: 0 1px 2px rgba(10, 37, 64, 0.04);
+  --shadow-card: 0 4px 12px -2px rgba(10, 37, 64, 0.06), 0 2px 4px -1px rgba(10, 37, 64, 0.03);
   --shadow-elevated: 0 12px 32px -4px rgba(10, 37, 64, 0.12), 0 4px 12px -2px rgba(10, 37, 64, 0.06);
+  --shadow-overlay: 0 20px 48px -6px rgba(10, 37, 64, 0.18), 0 8px 16px -4px rgba(10, 37, 64, 0.08);
   --shadow-teal-focus: 0 0 0 3px rgba(0, 168, 181, 0.25);
+
+  /* ==========================================================================
+     5. Spacing System (8px Base Scale)
+     ========================================================================== */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ==========================================================================
+     6. Motion & Duration Tokens
+     ========================================================================== */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ==========================================================================
+     7. Z-Index Scale Tokens
+     ========================================================================== */
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-drawer: 1200;
+  --z-modal: 1300;
+  --z-popover: 1400;
+  --z-toast: 1500;
+
+  /* ==========================================================================
+     8. Icon Sizing Tokens
+     ========================================================================== */
+  --icon-sm: 1rem;      /* 16px */
+  --icon-md: 1.25rem;   /* 20px */
+  --icon-lg: 1.5rem;    /* 24px */
+  --icon-xl: 2rem;      /* 32px */
 }
 
-/* Dark Mode Overrides */
+/* Dark Theme Overrides */
 [data-theme="dark"] {
   --color-bg-app: var(--brand-navy-950);
   --color-bg-card: #0D2137;
+  --color-bg-sidebar: #04101D;
+  --color-bg-header: #0D2137;
+  --color-bg-overlay: #0F2742;
   --color-border: #1B344E;
   --color-border-hover: #2A4968;
   --color-text-main: var(--neutral-50);
@@ -70,11 +160,11 @@ body {
   font-family: var(--font-sans);
   background-color: var(--color-bg-app);
   color: var(--color-text-main);
-  transition: background-color 200ms ease, color 200ms ease;
+  transition: background-color var(--duration-normal) var(--ease-standard), color var(--duration-normal) var(--ease-standard);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Custom Input Focus Ring Echoing the 'O' Ring Motif */
+/* Custom OralCares Focus Ring */
 .focus-ring-oralcares:focus-within,
 .focus-ring-oralcares:focus {
   outline: none !important;
@@ -82,10 +172,10 @@ body {
   box-shadow: var(--shadow-teal-focus) !important;
 }
 
-/* Primary Button Hover Sheen Animation */
+/* Signature Primary Button Styling */
 .btn-primary-oralcares {
   background-color: var(--brand-navy-900);
-  transition: all 180ms ease-out;
+  transition: all var(--duration-fast) var(--ease-standard);
 }
 .btn-primary-oralcares:hover:not(:disabled) {
   background-image: var(--brand-gradient);
