@@ -1,76 +1,97 @@
-/* OralCares Enterprise UI Architecture - Phase U-1 Tokens */
+/* OralCares Enterprise Design System Tokens (Phase U-1R) */
 :root {
-  /* Brand Colors */
+  /* Brand Colors Extracted from Logo */
+  --brand-navy-950: #061A2E;
   --brand-navy-900: #0A2540;
   --brand-navy-700: #123A5E;
   --brand-navy-500: #1E4E7A;
-  --brand-teal-600: #0E7490;
+  
+  --brand-teal-600: #00A8B5;
+  --brand-teal-700: #0E7490;
   --brand-teal-400: #14B8A6;
   --brand-cyan-300: #5EEAD4;
 
-  /* Semantic Colors (Desaturated) */
+  --brand-gradient: linear-gradient(135deg, #0A2540 0%, #00A8B5 100%);
+  --brand-teal-glow: rgba(0, 168, 181, 0.25);
+
+  /* Semantic Colors (Desaturated & Harmonized) */
   --color-success: #0F9D6E;
   --color-warning: #B8862E;
   --color-danger: #C1414A;
 
-  /* Neutral Scale */
+  /* Neutral Scale (Blue-Tinted Cool Neutrals) */
   --neutral-0: #FFFFFF;
-  --neutral-25: #F7FAFC;
-  --neutral-50: #EEF2F6;
+  --neutral-25: #F8FAFC;
+  --neutral-50: #F1F5F9;
   --neutral-100: #E2E8F0;
-  --neutral-300: #B8C4D0;
+  --neutral-200: #CBD5E1;
   --neutral-400: #94A3B8;
-  --neutral-555: #475569;
+  --neutral-500: #64748B;
   --neutral-700: #334155;
-  --neutral-900: #0F1B2B;
-  --neutral-950: #08111C;
+  --neutral-900: #0F172A;
+  --neutral-950: #020617;
 
-  /* Theme-aware Backgrounds and Surfaces */
+  /* Surface & Component Mapping */
   --color-bg-app: var(--neutral-25);
   --color-bg-card: var(--neutral-0);
   --color-border: var(--neutral-100);
+  --color-border-hover: var(--neutral-200);
   --color-text-main: var(--neutral-900);
-  --color-text-muted: var(--neutral-555);
+  --color-text-muted: var(--neutral-500);
 
   /* Typography */
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  
-  /* Border Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* Elevation / Shadows */
-  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(10, 37, 64, 0.08), 0 2px 4px -1px rgba(10, 37, 64, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(10, 37, 64, 0.1), 0 4px 6px -2px rgba(10, 37, 64, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(10, 37, 64, 0.1), 0 10px 10px -5px rgba(10, 37, 64, 0.04);
+  /* Border Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
 
-  /* Transitions */
-  --transition-normal: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Elevation & Navy Shadows */
+  --shadow-subtle: 0 1px 3px rgba(10, 37, 64, 0.04);
+  --shadow-card: 0 4px 16px -2px rgba(10, 37, 64, 0.06), 0 2px 6px -1px rgba(10, 37, 64, 0.03);
+  --shadow-elevated: 0 12px 32px -4px rgba(10, 37, 64, 0.12), 0 4px 12px -2px rgba(10, 37, 64, 0.06);
+  --shadow-teal-focus: 0 0 0 3px rgba(0, 168, 181, 0.25);
 }
 
-/* Dark Theme Overrides */
+/* Dark Mode Overrides */
 [data-theme="dark"] {
-  --color-bg-app: var(--neutral-950);
-  --color-bg-card: var(--neutral-900);
-  --color-border: #1E293B;
+  --color-bg-app: var(--brand-navy-950);
+  --color-bg-card: #0D2137;
+  --color-border: #1B344E;
+  --color-border-hover: #2A4968;
   --color-text-main: var(--neutral-50);
-  --color-text-muted: var(--neutral-400);
+  --color-text-muted: #8AA4C0;
 }
 
 body {
-  font-family: var(--font-family);
+  font-family: var(--font-sans);
   background-color: var(--color-bg-app);
   color: var(--color-text-main);
-  transition: background-color var(--transition-normal), color var(--transition-normal);
+  transition: background-color 200ms ease, color 200ms ease;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom focus classes to achieve clean Stripe/Linear rings */
-.focus-ring:focus-within,
-.focus-ring:focus {
-  outline: none;
+/* Custom Input Focus Ring Echoing the 'O' Ring Motif */
+.focus-ring-oralcares:focus-within,
+.focus-ring-oralcares:focus {
+  outline: none !important;
   border-color: var(--brand-teal-600) !important;
-  box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.2) !important;
+  box-shadow: var(--shadow-teal-focus) !important;
+}
+
+/* Primary Button Hover Sheen Animation */
+.btn-primary-oralcares {
+  background-color: var(--brand-navy-900);
+  transition: all 180ms ease-out;
+}
+.btn-primary-oralcares:hover:not(:disabled) {
+  background-image: var(--brand-gradient);
+  box-shadow: 0 4px 14px rgba(0, 168, 181, 0.3);
+  transform: translateY(-1px);
+}
+.btn-primary-oralcares:active:not(:disabled) {
+  transform: translateY(0);
 }
