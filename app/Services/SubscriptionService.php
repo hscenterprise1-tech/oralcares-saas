@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Events\SubscriptionActivated;
+use App\Events\SubscriptionExpired;
+use App\Events\SubscriptionRenewed;
 use App\Models\CompanyPlan;
 use App\Models\CompanySubscription;
 use App\Models\CompanySubscriptionAddon;
@@ -44,6 +47,12 @@ class SubscriptionService
             $subscription->canceled_at = now();
         }
         $subscription->save();
+
+        if ($statusEnum === SubscriptionStatus::Active && $subscription->clinic) {
+            event(new SubscriptionActivated($subscription->clinic, $subscription));
+        } elseif ($statusEnum === SubscriptionStatus::Expired && $subscription->clinic) {
+            event(new SubscriptionExpired($subscription->clinic, $subscription));
+        }
     }
 
     /**
@@ -62,5 +71,66 @@ class SubscriptionService
             'is_active' => true,
             'activated_at' => now(),
         ]);
+    }
+
+    /**
+     * Activate subscription.
+     */
+    public function activateSubscription(CompanySubscription $subscription): void
+    {
+        $this->transitionStatus($subscription, SubscriptionStatus::Active);
+    }
+
+    /**
+     * Renew subscription.
+     */
+    public function renewSubscription(CompanySubscription $subscription, int $monthsToAdd = 12): void
+    {
+        DB::transaction(function () use ($subscription, $monthsToAdd) {
+            $currentEndsAt = $subscription->ends_at ?? now();
+            $subscription->ends_at = $currentEndsAt->addMonths($monthsToAdd);
+            $subscription->status = SubscriptionStatus::Active;
+            $subscription->save();
+
+            if ($subscription->clinic) {
+                event(new SubscriptionRenewed($subscription->clinic, $subscription));
+            }
+        });
+    }
+
+    /**
+     * Cancel subscription.
+     */
+    public function cancelSubscription(CompanySubscription $subscription): void
+    {
+        $this->transitionStatus($subscription, SubscriptionStatus::Cancelled);
+    }
+
+    /**
+     * Suspend subscription.
+     */
+    public function suspendSubscription(CompanySubscription $subscription): void
+    {
+        $this->transitionStatus($subscription, SubscriptionStatus::Suspended);
+    }
+
+    /**
+     * Check if a subscription is under a grace period (e.g. within 14 days after ends_at).
+     */
+    public function isUnderGracePeriod(CompanySubscription $subscription): bool
+    {
+        if ($subscription->status !== SubscriptionStatus::Expired) {
+            return false;
+        }
+
+        $endsAt = $subscription->ends_at;
+        if (! $endsAt) {
+            return false;
+        }
+
+        // Default grace period of 14 days
+        $graceEnd = $endsAt->copy()->addDays(14);
+
+        return now()->between($endsAt, $graceEnd);
     }
 }

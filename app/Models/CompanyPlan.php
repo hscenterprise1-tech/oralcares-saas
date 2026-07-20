@@ -24,6 +24,7 @@ class CompanyPlan extends Model
         'description',
         'price',
         'billing_period',
+        'version',
         'max_users',
         'max_doctors',
         'max_branches',
