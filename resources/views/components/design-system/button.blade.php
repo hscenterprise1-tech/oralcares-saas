@@ -12,8 +12,9 @@
         'primary' => 'bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] text-white shadow-sm',
         'secondary' => 'bg-white hover:bg-gray-50 text-[var(--color-neutral-700)] border border-[var(--color-border)] shadow-sm dark:bg-[var(--color-neutral-800)] dark:hover:bg-[var(--color-neutral-700)] dark:text-[var(--color-neutral-100)]',
         'danger' => 'bg-[var(--color-danger-500)] hover:bg-[var(--color-danger-700)] text-white shadow-sm',
-        'warning' => 'bg-[var(--color-warning-500)] hover:bg-[var(--color-warning-700)] text-white shadow-sm',
+        'warning' => 'bg-[var(--color-warning-50)] hover:bg-[var(--color-warning-700)] text-white shadow-sm',
         'success' => 'bg-[var(--color-success-500)] hover:bg-[var(--color-success-700)] text-white shadow-sm',
+        'ghost' => 'text-[var(--brand-teal-600)] hover:bg-slate-100 dark:hover:bg-slate-800',
     ];
 
     $sizes = [
