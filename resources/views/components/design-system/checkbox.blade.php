@@ -1,25 +1,12 @@
 @props([
-    'label' => null,
+    'label',
     'id' => null,
-    'name' => null,
-    'checked' => false
+    'name' => null
 ])
-
 @php
-    $id = $id ?? 'ds-checkbox-' . \Illuminate\Support\Str::random(8);
+$id = $id ?? 'checkbox-' . \Illuminate\Support\Str::random(8);
 @endphp
-
-<div class="flex items-center space-x-2">
-    <input 
-        type="checkbox" 
-        id="{{ $id }}" 
-        name="{{ $name }}" 
-        {{ $checked ? 'checked' : '' }}
-        {{ $attributes->merge(['class' => 'h-4 w-4 text-[var(--color-primary-500)] focus:ring-[var(--color-primary-500)] border-[var(--color-border)] rounded transition-colors duration-150']) }}
-    />
-    @if($label)
-        <label for="{{ $id }}" class="text-sm font-medium text-[var(--color-text-main)] select-none">
-            {{ $label }}
-        </label>
-    @endif
-</div>
+<label for="{{ $id }}" class="inline-flex items-center cursor-pointer select-none">
+    <input id="{{ $id }}" name="{{ $name }}" type="checkbox" {{ $attributes->merge(['class' => 'rounded border-[var(--color-border)] text-[var(--brand-teal-600)] focus:ring-[var(--brand-teal-600)] h-4 w-4 transition duration-150']) }}>
+    <span class="ms-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-main)]">{{ $label }}</span>
+</label>

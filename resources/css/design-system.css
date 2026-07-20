@@ -1,4 +1,4 @@
-/* OralCares Enterprise Design System Tokens */
+/* OralCares Enterprise UI Architecture - Phase U-1 Tokens */
 :root {
   /* Brand Colors */
   --brand-navy-900: #0A2540;
@@ -7,13 +7,11 @@
   --brand-teal-600: #0E7490;
   --brand-teal-400: #14B8A6;
   --brand-cyan-300: #5EEAD4;
-  --brand-gradient: linear-gradient(135deg, #0E7490 0%, #14B8A6 60%, #5EEAD4 100%);
 
   /* Semantic Colors (Desaturated) */
   --color-success: #0F9D6E;
   --color-warning: #B8862E;
   --color-danger: #C1414A;
-  --color-info: #0E7490;
 
   /* Neutral Scale */
   --neutral-0: #FFFFFF;
@@ -21,7 +19,8 @@
   --neutral-50: #EEF2F6;
   --neutral-100: #E2E8F0;
   --neutral-300: #B8C4D0;
-  --neutral-500: #64748b;
+  --neutral-400: #94A3B8;
+  --neutral-555: #475569;
   --neutral-700: #334155;
   --neutral-900: #0F1B2B;
   --neutral-950: #08111C;
@@ -29,52 +28,36 @@
   /* Theme-aware Backgrounds and Surfaces */
   --color-bg-app: var(--neutral-25);
   --color-bg-card: var(--neutral-0);
-  --color-bg-sidebar: var(--brand-navy-900);
-  --color-bg-header: var(--neutral-0);
-  --color-bg-overlay: var(--neutral-0);
   --color-border: var(--neutral-100);
   --color-text-main: var(--neutral-900);
-  --color-text-muted: var(--neutral-500);
+  --color-text-muted: var(--neutral-555);
 
   /* Typography */
-  --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   
   /* Border Radius */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 999px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  /* Shadows / Elevation */
-  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.04);
-  --shadow-md: 0 4px 12px rgba(10, 37, 64, 0.08);
-  --shadow-lg: 0 8px 24px rgba(10, 37, 64, 0.12);
-  --shadow-xl: 0 16px 48px rgba(10, 37, 64, 0.18);
-  --shadow-focus: 0 0 0 3px rgba(20, 184, 166, 0.3);
+  /* Elevation / Shadows */
+  --shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(10, 37, 64, 0.08), 0 2px 4px -1px rgba(10, 37, 64, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(10, 37, 64, 0.1), 0 4px 6px -2px rgba(10, 37, 64, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(10, 37, 64, 0.1), 0 10px 10px -5px rgba(10, 37, 64, 0.04);
 
-  /* Motion */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Transitions */
+  --transition-normal: 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Dark Theme Overrides */
 [data-theme="dark"] {
   --color-bg-app: var(--neutral-950);
-  --color-bg-card: #0F1E30;
-  --color-bg-sidebar: var(--neutral-950);
-  --color-bg-header: #0F1E30;
-  --color-bg-overlay: #122238;
-  --color-border: #1B2E45;
-  --color-text-main: var(--neutral-25);
-  --color-text-muted: var(--neutral-500);
-}
-
-/* Global focus styling for WCAG 2.1 AA Compliance */
-.focus-ring:focus-visible {
-  outline: 2px solid var(--brand-teal-400);
-  outline-offset: 2px;
-  box-shadow: var(--shadow-focus);
+  --color-bg-card: var(--neutral-900);
+  --color-border: #1E293B;
+  --color-text-main: var(--neutral-50);
+  --color-text-muted: var(--neutral-400);
 }
 
 body {
@@ -82,4 +65,12 @@ body {
   background-color: var(--color-bg-app);
   color: var(--color-text-main);
   transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* Custom focus classes to achieve clean Stripe/Linear rings */
+.focus-ring:focus-within,
+.focus-ring:focus {
+  outline: none;
+  border-color: var(--brand-teal-600) !important;
+  box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.2) !important;
 }
