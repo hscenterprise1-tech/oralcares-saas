@@ -31,22 +31,27 @@
             this.$refs.loginForm.submit();
         }
     }">
-        <!-- Brand Header Section -->
-        <div class="flex flex-col items-center text-center mb-10 select-none">
-            <x-design-system.enterprise-logo size="lg" class="mb-4" />
-            
-            <h1 class="text-3xl font-extrabold text-[#0F172A] tracking-tight leading-tight">OralCares</h1>
-            
-            <h2 class="text-sm font-semibold text-[#475569] mt-1.5 tracking-tight uppercase">Enterprise Portal</h2>
-            
-            <p class="text-xs text-[#64748B] mt-1.5 font-normal">Secure access for OralCares employees.</p>
+        <!-- Top Center Official Brand Logo & Subtitle Stack -->
+        <div class="flex flex-col items-center text-center mb-12 select-none">
+            <!-- Official OralCares Logo Image (Desktop 220px, Tablet 200px, Mobile 180px) -->
+            <x-design-system.enterprise-logo class="mb-8" />
+
+            <!-- Subtitle Line 1: ENTERPRISE PORTAL -->
+            <h1 class="text-xs font-semibold uppercase tracking-wider text-[#475569] leading-none mb-[10px]">
+                ENTERPRISE PORTAL
+            </h1>
+
+            <!-- Subtitle Line 2: Secure access for OralCares employees. -->
+            <p class="text-[12px] font-normal text-[#64748B] leading-none">
+                Secure access for OralCares employees.
+            </p>
         </div>
 
         <!-- Login Card (460px Desktop Width, 20px Radius, 40px Padding) -->
         <x-design-system.auth-card>
             <!-- Card Header -->
             <div class="mb-8">
-                <h3 class="text-xl font-bold text-[#0F172A] tracking-tight">Welcome Back</h3>
+                <h2 class="text-xl font-bold text-[#0F172A] tracking-tight">Welcome Back</h2>
                 <p class="text-xs text-[#64748B] mt-1.5">Sign in to continue</p>
             </div>
 
