@@ -7,7 +7,7 @@
 ])
 <div class="space-y-2 w-full" x-data="{ show: false }">
     <div class="flex items-center justify-between">
-        <label for="{{ $id }}" class="block text-sm font-semibold text-[#0F172A]">
+        <label for="{{ $id }}" class="block text-xs font-semibold uppercase tracking-wider text-[#475569]">
             {{ $label }}
             @if($required)
                 <span class="text-[#EF4444]" aria-hidden="true">*</span>
@@ -21,9 +21,9 @@
             name="{{ $name }}" 
             placeholder="••••••••"
             {{ $required ? 'required' : '' }}
-            {{ $attributes->merge(['class' => 'w-full pl-4 pr-11 py-3 bg-white border border-[#E5E7EB] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus-ring-enterprise transition-all duration-150']) }}
+            {{ $attributes->merge(['class' => 'w-full h-[50px] pl-4 pr-11 bg-white border border-[var(--color-border)] hover:border-[var(--color-border-hover)] rounded-xl text-sm font-normal text-[#0F172A] placeholder-[#94A3B8] focus-ring-enterprise transition-all duration-150']) }}
         />
-        <button type="button" @click="show = !show" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] cursor-pointer p-1 transition-colors" :aria-pressed="show.toString()" aria-label="Toggle password visibility">
+        <button type="button" @click="show = !show" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#0F172A] cursor-pointer p-1 transition-colors duration-150" :aria-pressed="show.toString()" aria-label="Toggle password visibility">
             <svg x-show="!show" class="h-5 w-5 stroke-current fill-none stroke-[1.5]" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                 <circle cx="12" cy="12" r="3" />

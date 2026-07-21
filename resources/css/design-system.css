@@ -1,20 +1,24 @@
-/* OralCares Enterprise Portal Design System Tokens */
+/* OralCares Enterprise Portal Design Tokens (Final Polish Pass) */
 :root {
-  /* Brand & Surface Palette */
+  /* Brand Palette */
   --color-primary: #0F5FFF;
   --color-primary-hover: #0B4ED6;
-  --color-bg-app: #F7F9FC;
+  --color-primary-active: #083FB1;
+  --color-bg-app: #F8FAFC;
   --color-bg-surface: #FFFFFF;
-  --color-border: #E5E7EB;
+  --color-border: #E2E8F0;
+  --color-border-hover: #CBD5E1;
   --color-heading: #0F172A;
   --color-body-text: #475569;
+  --color-muted-text: #64748B;
+  --color-placeholder: #94A3B8;
   --color-success: #22C55E;
   --color-error: #EF4444;
 
   /* Typography */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* Border Radii */
+  /* Radii */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -22,47 +26,45 @@
   --radius-card: 20px;
   --radius-full: 9999px;
 
-  /* Shadows & Elevations */
-  --shadow-subtle: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-card: 0 10px 25px -5px rgba(15, 23, 42, 0.06), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
-  --shadow-button-hover: 0 4px 12px rgba(15, 95, 255, 0.25);
-  --shadow-blue-focus: 0 0 0 3px rgba(15, 95, 255, 0.2);
+  /* Enterprise Shadows */
+  --shadow-subtle: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-card-soft: 0 12px 32px -4px rgba(15, 23, 42, 0.05), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+  --shadow-button-hover: 0 6px 20px -2px rgba(15, 95, 255, 0.28);
+  --shadow-blue-focus: 0 0 0 3.5px rgba(15, 95, 255, 0.16);
 
-  /* Spacing Scale (8px Grid) */
+  /* Spacing Scale (8px Grid System) */
   --space-1: 0.25rem;   /* 4px */
   --space-2: 0.5rem;    /* 8px */
   --space-3: 0.75rem;   /* 12px */
   --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
   --space-6: 1.5rem;    /* 24px */
   --space-8: 2rem;      /* 32px */
   --space-10: 2.5rem;   /* 40px */
   --space-12: 3rem;     /* 48px */
-  --space-16: 4rem;     /* 64px */
 
   /* Motion */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-card: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
   font-family: var(--font-sans);
-  background: linear-gradient(180deg, #F7F9FC 0%, #EFF3F9 100%);
-  background-attachment: fixed;
+  background-color: var(--color-bg-app);
   color: var(--color-body-text);
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle Card Animation */
-.login-card-animate {
-  animation: cardFadeScale 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Minimal Card Scale-Fade Animation */
+.login-card-polish {
+  animation: cardScaleFade 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes cardFadeScale {
+@keyframes cardScaleFade {
   0% {
     opacity: 0;
-    transform: scale(0.98) translateY(8px);
+    transform: scale(0.985) translateY(6px);
   }
   100% {
     opacity: 1;
@@ -70,7 +72,7 @@ body {
   }
 }
 
-/* Accessible Soft Blue Focus Ring */
+/* Accessible Focus Ring */
 .focus-ring-enterprise:focus,
 .focus-ring-enterprise:focus-within {
   outline: none !important;
@@ -78,11 +80,11 @@ body {
   box-shadow: var(--shadow-blue-focus) !important;
 }
 
-/* Enterprise Primary Button Styles */
+/* Primary Button Styling */
 .btn-primary-enterprise {
   background-color: var(--color-primary);
   color: #FFFFFF;
-  transition: all 180ms ease-out;
+  transition: all var(--transition-normal);
 }
 .btn-primary-enterprise:hover:not(:disabled) {
   background-color: var(--color-primary-hover);
@@ -90,6 +92,7 @@ body {
   box-shadow: var(--shadow-button-hover);
 }
 .btn-primary-enterprise:active:not(:disabled) {
+  background-color: var(--color-primary-active);
   transform: translateY(0);
   box-shadow: none;
 }

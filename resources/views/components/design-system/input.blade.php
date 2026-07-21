@@ -13,7 +13,7 @@ $id = $id ?? 'input-' . \Illuminate\Support\Str::random(8);
 @endphp
 <div class="space-y-2 w-full">
     @if($label)
-        <label for="{{ $id }}" class="block text-sm font-semibold text-[#0F172A]">
+        <label for="{{ $id }}" class="block text-xs font-semibold uppercase tracking-wider text-[#475569]">
             {{ $label }}
             @if($required)
                 <span class="text-[#EF4444]" aria-hidden="true">*</span>
@@ -22,7 +22,7 @@ $id = $id ?? 'input-' . \Illuminate\Support\Str::random(8);
     @endif
     <div class="relative w-full">
         @if($icon)
-            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+            <div class="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-[#94A3B8]">
                 {{ $icon }}
             </div>
         @endif
@@ -32,7 +32,7 @@ $id = $id ?? 'input-' . \Illuminate\Support\Str::random(8);
             name="{{ $name }}" 
             placeholder="{{ $placeholder }}"
             {{ $required ? 'required' : '' }}
-            {{ $attributes->merge(['class' => 'w-full ' . ($icon ? 'pl-10' : 'px-4') . ' py-3 bg-white border border-[#E5E7EB] rounded-xl text-sm text-[#0F172A] placeholder-[#94A3B8] focus-ring-enterprise transition-all duration-150']) }}
+            {{ $attributes->merge(['class' => 'w-full h-[50px] ' . ($icon ? 'pl-11' : 'px-4') . ' pr-4 bg-white border border-[var(--color-border)] hover:border-[var(--color-border-hover)] rounded-xl text-sm font-normal text-[#0F172A] placeholder-[#94A3B8] focus-ring-enterprise transition-all duration-150']) }}
         />
     </div>
     @if($error)
