@@ -1,3 +1,3 @@
-<div {{ $attributes->merge(['class' => 'w-full max-w-[520px] bg-[var(--color-bg-card)] border border-[var(--color-border)] p-10 shadow-[var(--shadow-elevated)] rounded-[var(--radius-xl)] transition-colors duration-200 hover:border-[var(--color-border-hover)]']) }}>
+<div {{ $attributes->merge(['class' => 'w-[92%] sm:w-[420px] md:w-[460px] max-w-[460px] bg-white border border-[#E5E7EB] p-10 shadow-[var(--shadow-card)] rounded-[20px] login-card-animate']) }}>
     {{ $slot }}
 </div>
