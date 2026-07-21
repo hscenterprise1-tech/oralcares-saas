@@ -35,3 +35,26 @@ Route::prefix('master')->name('master.')->middleware(['auth', 'master_admin'])->
 });
 
 require __DIR__.'/auth.php';
+
+use App\Shared\Notification\Controllers\NotificationController;
+use App\Shared\Notification\Controllers\NotificationPreferenceController;
+use App\Http\Controllers\NotificationViewController;
+
+Route::middleware(['auth'])->group(function () {
+    // Web Views
+    Route::get('/notifications', [NotificationViewController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/preferences', [NotificationViewController::class, 'preferences'])->name('notifications.preferences.show');
+
+    // API endpoints (AJAX)
+    Route::prefix('api/notifications')->name('api.notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unreadCount');
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
+        Route::post('/bulk', [NotificationController::class, 'bulkAction'])->name('bulk');
+        Route::patch('/{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
+        Route::patch('/{id}/archive', [NotificationController::class, 'archive'])->name('archive');
+        
+        Route::get('/preferences', [NotificationPreferenceController::class, 'show'])->name('preferences.show');
+        Route::post('/preferences', [NotificationPreferenceController::class, 'update'])->name('preferences.update');
+    });
+});
