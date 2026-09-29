@@ -4,6 +4,7 @@ namespace App\Shared\Notification\Models;
 
 use App\Models\Clinic;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -48,15 +49,15 @@ class NotificationPreference extends Model
 
     public function isInQuietHours(): bool
     {
-        if (!$this->quiet_hours_start || !$this->quiet_hours_end) {
+        if (! $this->quiet_hours_start || ! $this->quiet_hours_end) {
             return false;
         }
 
         // Implementation of quiet hours logic based on user timezone
         // This will be fleshed out in the core engine
         $now = now()->setTimezone($this->timezone);
-        $start = \Carbon\Carbon::createFromFormat('H:i:s', $this->quiet_hours_start, $this->timezone);
-        $end = \Carbon\Carbon::createFromFormat('H:i:s', $this->quiet_hours_end, $this->timezone);
+        $start = Carbon::createFromFormat('H:i:s', $this->quiet_hours_start, $this->timezone);
+        $end = Carbon::createFromFormat('H:i:s', $this->quiet_hours_end, $this->timezone);
 
         if ($start->greaterThan($end)) {
             // e.g. 22:00 to 06:00

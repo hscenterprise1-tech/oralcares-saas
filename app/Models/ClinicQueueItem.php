@@ -13,9 +13,16 @@ class ClinicQueueItem extends Model
     protected $fillable = [
         'clinic_queue_id',
         'encounter_id',
+        'patient_visit_id',
+        'doctor_id',
+        'appointment_id',
+        'case_number',
         'position',
         'priority',
+        'checked_in_at',
         'called_at',
+        'started_at',
+        'completed_at',
         'status',
         'current_floor',
         'current_department',
@@ -26,7 +33,10 @@ class ClinicQueueItem extends Model
         return [
             'priority' => VisitPriority::class,
             'status' => QueueItemStatus::class,
+            'checked_in_at' => 'datetime',
             'called_at' => 'datetime',
+            'started_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
     }
 
@@ -38,6 +48,24 @@ class ClinicQueueItem extends Model
     public function encounter(): BelongsTo
     {
         return $this->belongsTo(ClinicalEncounter::class, 'encounter_id');
+    }
+
+    public function patientVisit(): BelongsTo
+    {
+        return $this->belongsTo(PatientVisit::class, 'patient_visit_id');
+    }
+
+    /**
+     * The doctor the patient is waiting for; null while "any doctor".
+     */
+    public function doctor(): BelongsTo
+    {
+        return $this->belongsTo(ClinicEmployee::class, 'doctor_id');
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
     }
 
     public function histories(): HasMany

@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+use App\Traits\OrganizationScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PatientProfile extends Model
 {
+    use Auditable, OrganizationScoped;
+
     protected $fillable = [
+        'organization_id',
         'patient_id',
         'preferred_name',
         'secondary_phone',
@@ -16,6 +21,7 @@ class PatientProfile extends Model
         'state',
         'country',
         'postal_code',
+        'pincode',
         'occupation',
         'nationality',
         'emergency_contact_name',

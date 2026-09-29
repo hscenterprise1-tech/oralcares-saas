@@ -29,15 +29,15 @@ class InAppChannel implements NotificationChannelInterface
 
             return true;
         } catch (\Exception $e) {
-            Log::error('InAppChannel Error: ' . $e->getMessage());
-            
+            Log::error('InAppChannel Error: '.$e->getMessage());
+
             NotificationLog::create([
                 'notification_id' => $notification->id,
                 'channel' => NotificationChannel::IN_APP,
                 'status' => NotificationStatus::FAILED,
                 'error_message' => $e->getMessage(),
             ]);
-            
+
             return false;
         }
     }

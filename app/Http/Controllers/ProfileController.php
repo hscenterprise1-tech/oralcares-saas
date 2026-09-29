@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\UserType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -42,11 +43,29 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        /*
+         * Company and HQ accounts are not closed by the person holding them.
+         *
+         * A company account carries assignments, approvals and an audit trail
+         * that other people's records point at, so removing one is an
+         * administrative act rather than a setting. Refused before the password
+         * is even checked, so nothing about the account is confirmed or denied
+         * along the way.
+         *
+         * The route and the form are shared with the clinic portal and are
+         * unchanged for it; only who may use them differs.
+         */
+        $user = $request->user();
+
+        abort_if(
+            $user->isMasterAdmin() || $user->user_type === UserType::CompanyUser,
+            403,
+            'A company account cannot be deleted from the profile page.'
+        );
+
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
         ]);
-
-        $user = $request->user();
 
         Auth::logout();
 

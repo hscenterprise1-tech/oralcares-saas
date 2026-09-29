@@ -2,11 +2,12 @@
 
 namespace App\Shared\Notification\Listeners;
 
+use App\Models\User;
 use App\Shared\Notification\DTO\SendNotificationDTO;
 use App\Shared\Notification\Enums\NotificationCategory;
 use App\Shared\Notification\Enums\NotificationPriority;
 use App\Shared\Notification\Jobs\ProcessNotificationJob;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 
 class CentralNotificationListener
 {
@@ -19,7 +20,7 @@ class CentralNotificationListener
         // We determine the type of event and create the appropriate DTO
         $dto = $this->mapEventToDTO($event);
 
-        if (!$dto) {
+        if (! $dto) {
             return; // Event not configured for notifications or mapping failed
         }
 
@@ -63,18 +64,18 @@ class CentralNotificationListener
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, \App\Models\User>|array
+     * @return Collection<int, User>|array
      */
     protected function determineRecipients(object $event)
     {
         // Mock implementation. Real implementation would inspect the $event
         // to find specific assigned users, or query the clinic for users with specific roles.
         // E.g. $event->clinic->users()->whereHasRole('admin')->get();
-        
+
         if (isset($event->targetUserId)) {
-            return \App\Models\User::where('id', $event->targetUserId)->get();
+            return User::where('id', $event->targetUserId)->get();
         }
 
-        return collect(); 
+        return collect();
     }
 }

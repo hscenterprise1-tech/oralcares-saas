@@ -3,6 +3,7 @@
 namespace App\Shared\Notification\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Shared\Notification\Models\EnterpriseNotification;
 use App\Shared\Notification\Repositories\NotificationRepository;
 use App\Shared\Notification\Requests\BulkNotificationRequest;
 use Illuminate\Http\JsonResponse;
@@ -34,7 +35,7 @@ class NotificationController extends Controller
 
     public function markAsRead(string $id, Request $request): JsonResponse
     {
-        $notification = \App\Shared\Notification\Models\EnterpriseNotification::findOrFail($id);
+        $notification = EnterpriseNotification::findOrFail($id);
         Gate::authorize('update', $notification);
 
         $success = $this->repository->markAsRead($id, $request->user());
@@ -51,7 +52,7 @@ class NotificationController extends Controller
 
     public function archive(string $id, Request $request): JsonResponse
     {
-        $notification = \App\Shared\Notification\Models\EnterpriseNotification::findOrFail($id);
+        $notification = EnterpriseNotification::findOrFail($id);
         Gate::authorize('update', $notification);
 
         $success = $this->repository->archive($id, $request->user());
@@ -66,7 +67,7 @@ class NotificationController extends Controller
         $user = $request->user();
 
         // Normally we'd use a repository method for this bulk operation
-        $query = \App\Shared\Notification\Models\EnterpriseNotification::whereIn('id', $ids)
+        $query = EnterpriseNotification::whereIn('id', $ids)
             ->where('notifiable_type', $user->getMorphClass())
             ->where('notifiable_id', $user->getKey());
 

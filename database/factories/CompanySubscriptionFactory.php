@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\Clinic;
-use App\Models\CompanyOpportunity;
 use App\Models\CompanyPlan;
 use App\Models\CompanySubscription;
 use App\SubscriptionStatus;
@@ -20,7 +19,9 @@ class CompanySubscriptionFactory extends Factory
     {
         return [
             'clinic_id' => Clinic::factory(),
-            'opportunity_id' => CompanyOpportunity::factory(),
+            // CompanyOpportunity was retired and `opportunity_id` dropped
+            // with it (see 2026_09_14_152709_drop_orphan_crm_tables_and_dead_columns) —
+            // setting it here throws "no such column" on every fresh build.
             'company_plan_id' => CompanyPlan::factory(),
             'status' => SubscriptionStatus::Active,
             'starts_at' => now(),

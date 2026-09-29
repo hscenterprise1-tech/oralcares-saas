@@ -2,16 +2,22 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+use App\Traits\ClinicScoped;
 use App\XrayCategory;
 use App\XrayRegion;
 use App\XrayStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class XrayRecord extends Model
 {
+    use Auditable, ClinicScoped, HasFactory;
+
     protected $fillable = [
+        'clinic_id',
         'patient_id',
         'encounter_id',
         'xray_number',
@@ -27,6 +33,7 @@ class XrayRecord extends Model
         'findings',
         'impression',
         'reviewed_at',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -38,6 +45,20 @@ class XrayRecord extends Model
             'requested_teeth' => 'array',
             'reviewed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (XrayRecord $record) {
+            if (empty($record->xray_number)) {
+                $record->xray_number = 'XR-'.strtoupper(uniqid());
+            }
+        });
+    }
+
+    public function clinic(): BelongsTo
+    {
+        return $this->belongsTo(Clinic::class);
     }
 
     public function patient(): BelongsTo

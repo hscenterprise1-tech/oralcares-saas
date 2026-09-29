@@ -2,69 +2,38 @@
 
 namespace Database\Seeders;
 
-use App\Models\Role;
-use App\PermissionKey;
+use App\ClinicRole;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class SystemRoleTemplateSeeder extends Seeder
 {
     /**
      * Run the database seeds.
+     *
+     * Clinic role templates are global (`branch_id = null`) so any branch's
+     * team scope can find and assign them — Spatie resolves a role by
+     * `branch_id IS NULL OR branch_id = current team`, but the *assignment*
+     * (the `spatie_model_has_roles` pivot row) is still stamped with
+     * whichever team is active when `assignRole()`/`syncRoles()` runs. See
+     * `ClinicRoleAssignmentService`, which sets that team explicitly per
+     * branch rather than relying on the acting admin's own session branch.
      */
     public function run(): void
     {
-        $templates = [
-            'clinic_admin' => [
-                'name' => 'Clinic Admin',
-                'description' => 'Clinic administrator with full permissions.',
-                'permissions' => [
-                    PermissionKey::ClinicManage->value,
-                    PermissionKey::ClinicSettingsManage->value,
-                    PermissionKey::BranchManage->value,
-                    PermissionKey::StaffManage->value,
-                    PermissionKey::RolesManage->value,
-                    PermissionKey::ReportsView->value,
-                ],
-            ],
-            'doctor' => [
-                'name' => 'Doctor',
-                'description' => 'Clinical doctor role.',
-                'permissions' => [
-                    PermissionKey::ReportsView->value,
-                ],
-            ],
-            'receptionist' => [
-                'name' => 'Receptionist',
-                'description' => 'Clinic receptionist role.',
-                'permissions' => [
-                    PermissionKey::ReportsView->value,
-                ],
-            ],
-            'billing_staff' => [
-                'name' => 'Billing Staff',
-                'description' => 'Billing and finance staff role.',
-                'permissions' => [
-                    PermissionKey::ReportsView->value,
-                ],
-            ],
-        ];
+        setPermissionsTeamId(null);
 
-        foreach ($templates as $key => $data) {
-            $role = Role::updateOrCreate(
-                ['clinic_id' => null, 'key' => $key],
-                [
-                    'name' => $data['name'],
-                    'description' => $data['description'],
-                    'is_system' => true,
-                    'is_active' => true,
-                ]
+        foreach (ClinicRole::cases() as $clinicRole) {
+            $role = Role::firstOrCreate(
+                ['name' => $clinicRole->value, 'guard_name' => 'web', 'branch_id' => null]
             );
 
-            // Sync permissions pivot table
-            $role->permissions()->delete();
-            foreach ($data['permissions'] as $perm) {
-                $role->permissions()->create(['permission' => $perm]);
-            }
+            $permissions = collect($clinicRole->permissions())
+                ->map(fn (string $perm) => Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']))
+                ->all();
+
+            $role->syncPermissions($permissions);
         }
     }
 }

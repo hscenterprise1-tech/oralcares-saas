@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\BranchStatus;
 use App\ClinicMembershipStatus;
+use App\ClinicStatus;
 use App\Scopes\TenantScope;
 use App\Services\ClinicContext;
 use App\UserType;
@@ -28,9 +29,28 @@ class ResolveClinicContext
         $user = $request->user();
 
         if ($user && $user->user_type === UserType::ClinicUser) {
+            $requestedSlug = $this->clinicContext->requestedClinicSlug($request);
+            $isDomainMode = config('app.routing_mode') === 'domain';
+
             $activeMemberships = $user->clinicMemberships()
                 ->withoutGlobalScope(TenantScope::class)
                 ->where('status', ClinicMembershipStatus::Active)
+                // A membership in an inactive or suspended clinic opens
+                // nothing, including in a session that was signed in before
+                // the clinic was suspended.
+                ->whereHas('clinic', fn ($query) => $query->where('status', ClinicStatus::Active))
+                ->when(
+                    $requestedSlug !== null,
+                    // A clinic was explicitly named (always true in domain
+                    // mode; opt-in in path mode) — never resolve into a
+                    // *different* clinic than the one addressed.
+                    fn ($query) => $query->whereHas('clinic', fn ($q) => $q->where('slug', $requestedSlug)),
+                    // No slug to bind to. In domain mode that means an
+                    // unrecognised host — fail closed. In path mode it means
+                    // local dev without a `clinic` param — fall back to
+                    // whichever active membership the session already holds.
+                    fn ($query) => $isDomainMode ? $query->whereRaw('1 = 0') : $query
+                )
                 ->with(['clinic', 'user'])
                 ->get();
 

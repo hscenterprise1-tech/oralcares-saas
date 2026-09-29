@@ -113,12 +113,12 @@ return new class extends Migration
         Schema::dropIfExists('lab_case_trials');
 
         Schema::table('lab_orders', function (Blueprint $table) {
-            $table->dropForeign('lo_shade_fk');
-            $table->dropForeign('lo_material_fk');
-            $table->dropForeign('lo_prosthetic_fk');
-            $table->dropForeign('lo_branch_fk');
-            $table->dropForeign('lo_doc_fk');
-            $table->dropForeign('lo_tx_rec_fk');
+            $table->dropForeign(['lab_shade_id']);
+            $table->dropForeign(['lab_material_id']);
+            $table->dropForeign(['lab_prosthetic_id']);
+            $table->dropForeign(['branch_id']);
+            $table->dropForeign(['requesting_doctor_id']);
+            $table->dropForeign(['treatment_record_id']);
 
             $table->dropColumn([
                 'treatment_record_id',

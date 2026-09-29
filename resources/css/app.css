@@ -1,6 +1,396 @@
-@import "./design-system.css";
+@import './ovs-tokens.generated.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+
+@layer utilities {
+  .font-display {
+    font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif !important;
+  }
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Geist Mono', monospace !important;
+  }
+  .ovs-page-mesh {
+    background:
+      radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.07), transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(15, 23, 42, 0.04), transparent 45%),
+      var(--ovs-background, #F8FAFC);
+  }
+  .bg-ovs-glass-light {
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .bg-ovs-glass-dark {
+    background-color: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .ovs-linear-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+    border-radius: 0.75rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .ovs-linear-card:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 0 20px -3px rgba(99, 102, 241, 0.15);
+  }
+  .ovs-hairline-border {
+    border: 1px solid rgba(226, 232, 240, 0.8);
+  }
+  .ovs-focus-ring {
+    outline: none;
+    transition: all 0.15s ease-in-out;
+  }
+  .ovs-focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #6366F1, 0 0 16px -2px rgba(99, 102, 241, 0.3);
+  }
+}
+
+@layer components {
+  .signature-card {
+    background: #FFFFFF;
+    border: 1px solid rgba(15, 23, 42, 0.04);
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02);
+    border-radius: 1.25rem;
+    transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .signature-card:not(.no-hover):hover {
+    transform: scale(1.005) translateY(-2px);
+    box-shadow: 0 20px 40px -15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.02);
+  }
+  .micro-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #64748B; /* slate-500 for WCAG contrast */
+  }
+  
+  .seq-1 { animation: slideUpFade 1s cubic-bezier(0.16, 1, 0.3, 1) 0.0s both; }
+  .seq-2 { animation: slideUpFade 1s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
+  .seq-3 { animation: slideUpFade 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+  .seq-4 { animation: slideUpFade 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both; }
+  .seq-5 { animation: slideUpFade 1s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both; }
+
+  @keyframes slideUpFade {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  .pipeline-track {
+    width: 100%;
+    height: 12px;
+    background: #F1F5F9;
+    border-radius: 9999px;
+    display: flex;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .pipeline-segment {
+    height: 100%;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+  .pipeline-segment:not(:last-child) {
+    border-right: 2px solid #FFFFFF;
+  }
+
+  .ovs-display-title {
+    @apply font-sans text-3xl sm:text-[32px] font-bold tracking-tight text-slate-900 leading-tight;
+  }
+  .ovs-page-title {
+    @apply font-sans text-xl sm:text-[20px] font-bold text-slate-900 tracking-tight leading-snug;
+  }
+  .ovs-page-subtitle {
+    @apply font-sans text-xs text-slate-500 font-normal leading-normal;
+  }
+  .ovs-section-title {
+    @apply font-sans text-base sm:text-[16px] font-bold tracking-tight text-slate-900 leading-snug;
+  }
+  .ovs-card-title {
+    @apply font-sans text-sm font-semibold text-slate-900 tracking-tight leading-snug;
+  }
+  .ovs-entity-title,
+  .ovs-primary-entity {
+    @apply font-sans text-sm font-bold text-slate-900 leading-snug tracking-tight block truncate;
+  }
+  .ovs-entity-subtitle,
+  .ovs-secondary-entity {
+    @apply font-sans text-xs font-normal text-slate-600 leading-tight block truncate;
+  }
+  .ovs-metadata-text,
+  .ovs-tertiary-meta {
+    @apply font-sans text-xs text-slate-500 font-normal leading-tight block truncate;
+  }
+  .ovs-body {
+    @apply font-sans text-[13px] text-slate-600 font-normal leading-relaxed;
+  }
+  .ovs-body-large {
+    @apply font-sans text-sm text-slate-700 font-normal leading-relaxed;
+  }
+  .ovs-caption {
+    @apply font-sans text-[11px] text-slate-500 font-normal leading-tight;
+  }
+  .ovs-micro-label {
+    @apply font-sans text-2xs font-bold uppercase tracking-wider text-slate-500 select-none;
+  }
+  .ovs-financial-value {
+    @apply font-sans text-xs sm:text-sm font-bold text-slate-900 tabular-nums tracking-tight;
+  }
+  .ovs-date-normal {
+    @apply font-sans text-[11px] text-slate-600 font-normal;
+  }
+  .ovs-date-overdue {
+    @apply font-sans text-[11px] text-rose-600 font-semibold;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold tracking-tight text-slate-900;
+  }
+
+  .command-button {
+    @apply w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus:outline-none;
+  }
+
+  .status-chip {
+    @apply px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1;
+  }
+  
+  .status-chip-success {
+    @apply text-emerald-600 bg-emerald-50;
+  }
+  
+  .status-chip-neutral {
+    @apply text-slate-700 bg-slate-100;
+  }
+  
+  .status-chip-info {
+    @apply text-blue-600 bg-blue-50;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .signature-card, .pipeline-segment, .command-button, .seq-1, .seq-2, .seq-3, .seq-4, .seq-5 {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-ovs-border-subtle;
+  }
+  body {
+    @apply bg-ovs-background text-ovs-primary;
+  }
+}
+
+@layer utilities {
+  @keyframes float {
+      0% {
+          transform: translateY(0px);
+      }
+
+      50% {
+          transform: translateY(25px);
+      }
+
+      100% {
+          transform: translateY(0px);
+      }
+  }
+
+  /* Premium Sidebar Scrollbar */
+  .sidebar-scroll {
+      overflow-y: auto;
+      /* Firefox */
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+      transition: scrollbar-color 0.3s ease;
+  }
+
+  .sidebar-scroll:hover {
+      scrollbar-color: #CBD5E1 transparent;
+  }
+
+  /* Chrome, Edge, Safari */
+  .sidebar-scroll::-webkit-scrollbar {
+      width: 4px;
+      background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+      background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+      background: transparent;
+      border-radius: 999px;
+      transition: background-color 0.3s ease;
+  }
+
+  .sidebar-scroll:hover::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+  }
+
+  /* Search Dropdown — fully invisible scrollbar, scrolling fully functional */
+  .search-scroll {
+      overflow-y: auto;
+      scrollbar-width: none;       /* Firefox */
+      -ms-overflow-style: none;    /* IE / Edge legacy */
+  }
+
+  .search-scroll::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;               /* Chrome, Edge, Safari */
+  }
+
+  /* Pill strips — scrollable on a narrow screen, but never showing a bar.
+   *
+   * The tab and segment strips have to scroll sideways on a phone or their
+   * last pill is unreachable. On a desktop they fit easily, and a chunky
+   * horizontal scrollbar parked under a row of rounded pills reads as a
+   * rendering fault rather than an affordance. The overflow stays, the bar
+   * goes. */
+  .rail-scroll {
+      scrollbar-width: none;       /* Firefox */
+      -ms-overflow-style: none;    /* IE / Edge legacy */
+  }
+
+  .rail-scroll::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;               /* Chrome, Edge, Safari */
+  }
+}
+
+/* ─────────────────────────────────────────────────────────── CRM motion ──
+ *
+ * Entrance choreography for the CRM surfaces.
+ *
+ * One idea: everything on a page arrives from slightly below, in reading
+ * order, over a short window. The stagger is what makes a dense dashboard
+ * feel assembled rather than dumped — but it has to finish quickly, so the
+ * whole sequence lands inside ~600ms no matter how many cards there are.
+ *
+ * `crm-rise` is applied per element with an inline `animationDelay`, which is
+ * why there is no ladder of `.seq-*` classes here.
+ */
+@layer utilities {
+  @keyframes crmRise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes crmFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes crmPop {
+    0%   { opacity: 0; transform: scale(0.9); }
+    60%  { opacity: 1; transform: scale(1.02); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  /* Draws a ring or bar on from zero. Pairs with a CSS custom property. */
+  @keyframes crmDraw {
+    from { stroke-dasharray: 0 var(--crm-circumference); }
+  }
+
+  /*
+   * `backwards`, not `both`.
+   *
+   * `both` retains the final keyframe, and the final keyframe of every one of
+   * these sets a transform. A non-`none` transform creates a stacking context,
+   * so each animated card became one — permanently, long after the animation
+   * had finished — and anything painted from outside it could not appear on
+   * top. That is why the top navigation's dropdown menu slid *behind* the deal
+   * header card, and why a popover inside a card had to lift its own parent to
+   * escape.
+   *
+   * `backwards` still applies the opening keyframe during the stagger delay,
+   * which is the only reason the fill was needed — elements must not flash
+   * into view before their turn. After the animation the element simply
+   * returns to its own styles, which are already `opacity: 1` and
+   * `transform: none`. Same appearance, no lingering stacking context.
+   */
+  .crm-rise { animation: crmRise 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+  .crm-fade { animation: crmFade 0.4s ease-out backwards; }
+  .crm-pop  { animation: crmPop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) backwards; }
+
+  /* Lift on hover, shared by every interactive surface in the CRM. */
+  .crm-lift {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.22s ease;
+  }
+  .crm-lift:hover { transform: translateY(-2px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .crm-rise, .crm-fade, .crm-pop, .crm-lift {
+      animation: none !important;
+      transition: none !important;
+      transform: none !important;
+    }
+  }
+}
+
+/* ──────────────────────────────────────────────────────── CRM tool rail ──
+ *
+ * Dock magnification, in CSS rather than React state.
+ *
+ * The pointed-at tool swells hardest and slides out of the rail; its immediate
+ * neighbours swell about half as much and the next ones barely at all, so the
+ * gesture reads as "this one" rather than as the whole rail breathing. Falling
+ * off that fast is the whole effect.
+ *
+ * Sibling selectors do the neighbour work: `+` reaches the tool below the
+ * hovered one, and `:has(+ …:hover)` reaches the one above. Keeping this out of
+ * React means no re-render as the cursor crosses eight items, and it keeps
+ * working with JavaScript still loading.
+ *
+ * The divider deliberately breaks adjacency — Settings sits in its own group,
+ * so it should not magnify with Teams.
+ */
+@layer utilities {
+  .crm-rail-well {
+    transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1),
+                background-color 0.2s ease,
+                box-shadow 0.3s ease;
+  }
+
+  .crm-rail-item:hover .crm-rail-well { transform: translateX(10px) scale(1.42); }
+
+  .crm-rail-item:hover + .crm-rail-item .crm-rail-well,
+  .crm-rail-item:has(+ .crm-rail-item:hover) .crm-rail-well { transform: translateX(4px) scale(1.18); }
+
+  .crm-rail-item:hover + .crm-rail-item + .crm-rail-item .crm-rail-well,
+  .crm-rail-item:has(+ .crm-rail-item + .crm-rail-item:hover) .crm-rail-well { transform: translateX(1px) scale(1.06); }
+
+  /* The label capsule springs out beside the tool it names. */
+  .crm-rail-capsule {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-8px) scale(0.9);
+    transition: opacity 0.24s ease, transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  .crm-rail-item:hover .crm-rail-capsule {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0) scale(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .crm-rail-well, .crm-rail-capsule { transition: none !important; transform: translateY(0) !important; }
+    .crm-rail-item:hover .crm-rail-capsule { opacity: 1; transform: translateY(-50%) !important; }
+  }
+}

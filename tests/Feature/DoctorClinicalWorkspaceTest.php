@@ -11,6 +11,7 @@ use App\Models\ClinicalNote;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
 use App\Models\PatientMedicalHistory;
+use App\Models\User;
 use App\Services\ConsultationService;
 use App\Services\DentalChartService;
 use App\Services\DiagnosisService;
@@ -75,8 +76,9 @@ test('clinical SOAP notes and diagnoses can be recorded', function () {
 
     $clinic = Clinic::factory()->create();
     $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
+    $user = User::factory()->create(['organization_id' => $clinic->organization_id]);
     $patient = Patient::create(['clinic_id' => $clinic->id, 'patient_number' => 'PT-1', 'name' => 'John Doe']);
-    $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
+    $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'user_id' => $user->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
 
     $encounter = ClinicalEncounter::create([
         'clinic_id' => $clinic->id,
@@ -91,7 +93,7 @@ test('clinical SOAP notes and diagnoses can be recorded', function () {
     $note = ClinicalNote::create([
         'encounter_id' => $encounter->id,
         'patient_id' => $patient->id,
-        'author_id' => $doctor->id,
+        'author_id' => $user->id,
         'note_type' => 'SOAP',
         'content' => 'Subjective: Patient has tooth sensitivity.',
     ]);

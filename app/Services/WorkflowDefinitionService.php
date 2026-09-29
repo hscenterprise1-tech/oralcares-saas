@@ -19,10 +19,25 @@ class WorkflowDefinitionService
         string $name,
         ?string $description = null
     ): WorkflowDefinition {
+        /*
+         * The branch has to belong to the clinic.
+         *
+         * Nothing checked it, so a definition could be filed under one tenant
+         * while pointing at another tenant's branch — and the deactivation
+         * sweep below would then switch off that other tenant's active
+         * workflow as a side effect of creating this one.
+         */
+        if ($branch && (int) $branch->clinic_id !== (int) $clinic->id) {
+            throw new \InvalidArgumentException(
+                "Branch {$branch->id} does not belong to clinic {$clinic->id}."
+            );
+        }
+
         return DB::transaction(function () use ($clinic, $branch, $name, $description) {
             // Deactivate existing definitions in this branch context
             if ($branch) {
-                WorkflowDefinition::where('branch_id', $branch->id)
+                WorkflowDefinition::where('clinic_id', $clinic->id)
+                    ->where('branch_id', $branch->id)
                     ->update(['is_active' => false]);
             } else {
                 WorkflowDefinition::where('clinic_id', $clinic->id)

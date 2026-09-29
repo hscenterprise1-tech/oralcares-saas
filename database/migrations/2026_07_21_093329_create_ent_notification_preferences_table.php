@@ -14,19 +14,19 @@ return new class extends Migration
         Schema::create('ent_notification_preferences', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            
+
             // Context Scoping (preferences can be set globally or per tenant)
             $table->foreignId('clinic_id')->nullable()->constrained()->cascadeOnDelete();
-            
+
             // JSON fields for fine-grained preferences
             $table->json('disabled_channels')->nullable(); // e.g., ["email", "sms"]
             $table->json('disabled_categories')->nullable(); // e.g., ["crm", "billing"]
-            
+
             // Quiet Hours
             $table->time('quiet_hours_start')->nullable();
             $table->time('quiet_hours_end')->nullable();
             $table->string('timezone')->default('UTC');
-            
+
             $table->timestamps();
 
             // A user should have unique preferences per context combination

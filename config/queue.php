@@ -40,7 +40,15 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            /*
+             * Above the longest job timeout in the app (ProcessLeadImportJob,
+             * 600s) with margin — Laravel's own guidance is to set this to
+             * the maximum time a job should reasonably take. At the previous
+             * default (90s) a large import still mid-transaction was treated
+             * as abandoned and handed to a second worker, which then
+             * imported the same file again.
+             */
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 900),
             'after_commit' => false,
         ],
 

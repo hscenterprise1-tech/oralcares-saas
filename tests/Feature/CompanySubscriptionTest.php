@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Clinic;
-use App\Models\CompanyOpportunity;
 use App\Models\CompanyPlan;
 use App\Models\CompanySubscription;
 use App\Services\EntitlementService;
@@ -46,12 +45,10 @@ test('subscription inherits limits from plan and transitions status correctly', 
     ]);
 
     $clinic = Clinic::factory()->create();
-    $opportunity = CompanyOpportunity::factory()->create();
 
     $subService = app(SubscriptionService::class);
     $sub = $subService->createSubscription([
         'clinic_id' => $clinic->id,
-        'opportunity_id' => $opportunity->id,
         'status' => SubscriptionStatus::Draft,
         'starts_at' => now(),
         'ends_at' => now()->addYear(),

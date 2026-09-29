@@ -8,6 +8,7 @@ use App\Events\SubscriptionRenewed;
 use App\Models\CompanyPlan;
 use App\Models\CompanySubscription;
 use App\Models\CompanySubscriptionAddon;
+use App\Services\Finance\MrrService;
 use App\SubscriptionStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -19,8 +20,17 @@ class SubscriptionService
     public function createSubscription(array $subData, ?CompanyPlan $plan = null): CompanySubscription
     {
         return DB::transaction(function () use ($subData, $plan) {
+            /*
+             * MRR is stamped here, once, from the price in force today.
+             *
+             * Recording it on the subscription is what lets a plan price change
+             * later leave historical revenue alone. An explicit `mrr` in
+             * $subData wins, so a negotiated rate is not overwritten by the
+             * list price.
+             */
             $limits = $plan ? [
                 'company_plan_id' => $plan->id,
+                'mrr' => $subData['mrr'] ?? app(MrrService::class)->snapshotValueFor($plan),
                 'max_users' => $plan->max_users ?? 5,
                 'max_doctors' => $plan->max_doctors ?? 3,
                 'max_branches' => $plan->max_branches ?? 1,

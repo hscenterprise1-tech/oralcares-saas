@@ -2,10 +2,9 @@
 
 namespace Database\Seeders;
 
-use App\CompanyRoleStatus;
-use App\Models\CompanyPermission;
-use App\Models\CompanyRole;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class CompanyRBACSeeder extends Seeder
 {
@@ -69,38 +68,42 @@ class CompanyRBACSeeder extends Seeder
             ['name' => 'View Finance', 'key' => 'finance.view', 'module' => 'Finance', 'description' => 'Ability to view invoicing and accounts.'],
             ['name' => 'Manage Finance', 'key' => 'finance.manage', 'module' => 'Finance', 'description' => 'Ability to process payouts and edit invoices.'],
 
+            // Sidebar UI Permissions
+            ['name' => 'View Onboarding Section', 'key' => 'view-onboarding', 'module' => 'Onboarding', 'description' => 'Ability to view onboarding sidebar section.'],
+            ['name' => 'View Pending Onboarding', 'key' => 'view-pending-onboarding', 'module' => 'Onboarding', 'description' => 'Ability to view pending onboarding.'],
+            ['name' => 'View Quotations', 'key' => 'view-quotations', 'module' => 'CRM', 'description' => 'Ability to view quotations.'],
+            ['name' => 'View Marketing Contacts', 'key' => 'view-contacts', 'module' => 'Marketing', 'description' => 'Ability to view marketing contacts.'],
+            ['name' => 'View AI Content Studio', 'key' => 'view-ai-content', 'module' => 'Marketing', 'description' => 'Ability to view AI content studio.'],
+            ['name' => 'View Expenses', 'key' => 'view-expenses', 'module' => 'Finance', 'description' => 'Ability to view expenses.'],
+            ['name' => 'View Payroll', 'key' => 'view-payroll', 'module' => 'Finance', 'description' => 'Ability to view payroll.'],
+            ['name' => 'View Incentives', 'key' => 'view-incentives', 'module' => 'Finance', 'description' => 'Ability to view incentives.'],
+
             // Settings
             ['name' => 'Manage Settings', 'key' => 'settings.manage', 'module' => 'Settings', 'description' => 'Ability to change company-wide platform settings.'],
         ];
 
-        $createdPermissions = [];
-        foreach ($permissions as $permData) {
-            $createdPermissions[$permData['key']] = CompanyPermission::updateOrCreate(
-                ['key' => $permData['key']],
-                [
-                    'name' => $permData['name'],
-                    'module' => $permData['module'],
-                    'description' => $permData['description'],
-                ]
-            );
-        }
+        setPermissionsTeamId(null);
 
-        // Helper to retrieve permission IDs by keys
-        $getIds = fn (array $keys) => array_map(fn ($k) => $createdPermissions[$k]->id, $keys);
+        foreach ($permissions as $permData) {
+            Permission::firstOrCreate(['name' => $permData['key'], 'guard_name' => 'web']);
+        }
 
         // 2. Seed Roles and assign permissions
         $roles = [
             'ceo' => [
                 'name' => 'CEO',
                 'description' => 'Chief Executive Officer with full corporate privileges.',
-                'permissions' => array_keys($createdPermissions),
+                'permissions' => array_column($permissions, 'key'),
             ],
             'operations-manager' => [
                 'name' => 'Operations Manager',
                 'description' => 'Manages day-to-day business operations, clinic trial onboarding, and subscriptions.',
                 'permissions' => [
-                    'dashboard.view', 'clinics.view', 'clinics.manage', 'trials.manage', 'onboarding.manage',
-                    'subscriptions.view', 'subscriptions.manage', 'renewals.manage', 'employees.view', 'reports.view',
+                    'dashboard.view', 'crm.view', 'leads.view', 'tasks.view', 'tasks.manage',
+                    'trials.manage', 'onboarding.manage', 'clinics.view', 'clinics.manage',
+                    'subscriptions.view', 'subscriptions.manage', 'renewals.manage',
+                    'support.view', 'employees.view', 'departments.manage', 'teams.manage',
+                    'reports.view', 'analytics.view', 'finance.view',
                 ],
             ],
             'sales-manager' => [
@@ -139,49 +142,31 @@ class CompanyRBACSeeder extends Seeder
                 'name' => 'Finance Manager',
                 'description' => 'Oversees corporate accounts, invoices, billing reconciliations, and finances.',
                 'permissions' => [
-                    'dashboard.view', 'finance.view', 'finance.manage', 'reports.view',
-                ],
-            ],
-            'finance-executive' => [
-                'name' => 'Finance Executive',
-                'description' => 'Generates client invoices, monitors payouts, and processes financial ledgers.',
-                'permissions' => [
-                    'dashboard.view', 'finance.view',
+                    'dashboard.view', 'finance.view', 'finance.manage', 'subscriptions.view',
+                    'subscriptions.manage', 'renewals.manage', 'reports.view',
                 ],
             ],
             'hr-manager' => [
                 'name' => 'HR Manager',
-                'description' => 'Manages employee onboarding, updates employee catalog, and configures teams.',
+                'description' => 'Manages internal company employees, access roles, and teams.',
                 'permissions' => [
-                    'dashboard.view', 'employees.view', 'employees.manage', 'departments.manage', 'teams.manage',
+                    'dashboard.view', 'employees.view', 'employees.manage',
+                    'departments.manage', 'teams.manage', 'reports.view',
                 ],
             ],
-            'developer' => [
-                'name' => 'Developer',
-                'description' => 'Engineering staff with developer accesses.',
-                'permissions' => array_keys($createdPermissions), // Full access
-            ],
-            'marketing-executive' => [
-                'name' => 'Marketing Executive',
-                'description' => 'Manages public relations, campaigns, social leads, and corporate analytics.',
+            'system-administrator' => [
+                'name' => 'System Administrator',
+                'description' => 'Handles global platform settings, integrations, and high-level audits.',
                 'permissions' => [
-                    'dashboard.view', 'crm.view', 'leads.view', 'leads.create', 'leads.update', 'analytics.view',
+                    'dashboard.view', 'settings.manage', 'analytics.view',
+                    'employees.view', 'clinics.view', 'clinics.manage',
                 ],
             ],
         ];
 
-        foreach ($roles as $key => $roleData) {
-            $role = CompanyRole::updateOrCreate(
-                ['key' => $key],
-                [
-                    'name' => $roleData['name'],
-                    'description' => $roleData['description'],
-                    'status' => CompanyRoleStatus::Active,
-                ]
-            );
-
-            // Sync permissions
-            $role->permissions()->sync($getIds($roleData['permissions']));
+        foreach ($roles as $roleKey => $roleData) {
+            $role = Role::firstOrCreate(['name' => $roleData['name'], 'guard_name' => 'web', 'branch_id' => null]);
+            $role->syncPermissions($roleData['permissions']);
         }
     }
 }

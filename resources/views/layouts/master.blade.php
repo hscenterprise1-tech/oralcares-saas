@@ -64,7 +64,7 @@
       <div>
         <!-- Brand Indicator area -->
         <div class="h-16 px-5 flex items-center justify-between bg-[#08111C] border-b border-[#1B2E45] overflow-hidden">
-          <a href="{{ route('master.dashboard') }}" class="flex items-center space-x-2.5 min-w-0">
+          <a href="{{ route('company.dashboard') }}" class="flex items-center space-x-2.5 min-w-0">
             <svg class="h-7 w-7 text-cyan-400 fill-none stroke-current stroke-[1.5] shrink-0" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
             </svg>
@@ -80,11 +80,11 @@
         <!-- Navigation items list -->
         <nav class="p-4 space-y-2">
           <!-- Dashboard link -->
-          <a href="{{ route('master.dashboard') }}"
+          <a href="{{ route('company.dashboard') }}"
              class="flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition duration-150 ease-in-out"
              :class="sidebarExpanded ? '' : 'justify-center'"
              class-active="bg-cyan-500/10 text-cyan-400 font-bold border-l-2 border-cyan-500"
-             :class="request()->routeIs('master.dashboard') ? 'bg-cyan-500/10 text-cyan-400 font-bold border-l-2 border-cyan-500 pl-2.5' : 'hover:bg-slate-800/50 hover:text-white'">
+             :class="request()->routeIs('company.dashboard') ? 'bg-cyan-500/10 text-cyan-400 font-bold border-l-2 border-cyan-500 pl-2.5' : 'hover:bg-slate-800/50 hover:text-white'">
             <svg class="w-5 h-5 opacity-85 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
             </svg>
@@ -103,10 +103,10 @@
           </a>
 
           <!-- Leads link -->
-          <a href="{{ route('master.leads.index') }}"
+          <a href="{{ route('company.crm.leads.index') }}"
              class="flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition duration-150 ease-in-out"
              :class="sidebarExpanded ? '' : 'justify-center'"
-             :class="request()->routeIs('master.leads.*') ? 'bg-cyan-500/10 text-cyan-400 font-bold border-l-2 border-cyan-500 pl-2.5' : 'hover:bg-slate-800/50 hover:text-white'">
+             :class="request()->routeIs('company.crm.leads.*') ? 'bg-cyan-500/10 text-cyan-400 font-bold border-l-2 border-cyan-500 pl-2.5' : 'hover:bg-slate-800/50 hover:text-white'">
             <svg class="w-5 h-5 opacity-85 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
@@ -156,7 +156,7 @@
           <nav class="flex text-sm font-medium text-[var(--color-text-muted)]" aria-label="Breadcrumb">
             <ol class="inline-flex items-center space-x-1 md:space-x-2">
               <li class="inline-flex items-center">
-                <a href="{{ route('master.dashboard') }}" class="hover:text-[var(--color-text-main)] transition-colors duration-150">OralCares Admin</a>
+                <a href="{{ route('company.dashboard') }}" class="hover:text-[var(--color-text-main)] transition-colors duration-150">OralCares Admin</a>
               </li>
               <li>
                 <div class="flex items-center">
@@ -172,15 +172,7 @@
 
         <!-- Center area: global search trigger -->
         <div class="hidden md:flex flex-1 max-w-md mx-8">
-          <button @click="commandPaletteOpen = true" class="w-full flex items-center justify-between px-3 py-1.5 bg-[var(--color-bg-app)] border border-[var(--color-border)] rounded-md text-sm text-[var(--color-text-muted)] hover:bg-[var(--neutral-100)] transition duration-150 cursor-pointer text-left">
-            <div class="flex items-center space-x-2">
-              <svg class="h-4 w-4 stroke-current" fill="none" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <span>Search command palette...</span>
-            </div>
-            <kbd class="text-[10px] font-bold bg-[var(--color-bg-card)] border border-[var(--color-border)] px-1.5 py-0.5 rounded">Ctrl+K</kbd>
-          </button>
+            <x-search-bar />
         </div>
 
         <!-- Right actions -->
@@ -265,31 +257,7 @@
     </div>
   </div>
 
-  <!-- Command Palette Modal (Ctrl+K) -->
-  <div x-show="commandPaletteOpen" class="fixed inset-0 z-50 overflow-y-auto p-4 pt-[15vh] bg-slate-900/40 backdrop-blur-sm" style="display: none;" x-transition>
-    <div class="mx-auto max-w-xl transform rounded-[var(--radius-lg)] bg-[var(--color-bg-overlay)] shadow-[var(--shadow-lg)] border border-[var(--color-border)] overflow-hidden" @click.away="commandPaletteOpen = false">
-      <div class="relative">
-        <input type="text" x-model="searchQuery" class="w-full border-0 bg-transparent pl-4 pr-12 py-4 text-sm text-[var(--color-text-main)] placeholder-[var(--neutral-300)] focus:ring-0 focus:outline-none" placeholder="Search menus, clinics, invoices..." />
-        <kbd class="absolute right-4 top-4 text-[10px] font-bold bg-[var(--neutral-100)] border border-[var(--color-border)] px-1.5 py-0.5 rounded">Esc</kbd>
-      </div>
-      <!-- Results list -->
-      <div class="max-h-80 overflow-y-auto border-t border-[var(--color-border)] p-2 space-y-1">
-        <div class="px-3 py-1.5 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">Navigation Jumps</div>
-        <a href="{{ route('master.dashboard') }}" class="flex items-center space-x-3 px-3 py-2 rounded-md text-sm text-[var(--color-text-main)] hover:bg-[var(--neutral-50)]">
-          <svg class="h-4 w-4 text-[var(--brand-teal-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          <span>Go to Dashboard</span>
-        </a>
-        <a href="{{ route('master.clinics.index') }}" class="flex items-center space-x-3 px-3 py-2 rounded-md text-sm text-[var(--color-text-main)] hover:bg-[var(--neutral-50)]">
-          <svg class="h-4 w-4 text-[var(--brand-teal-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-          <span>Go to Clinics</span>
-        </a>
-      </div>
-    </div>
-  </div>
+  <!-- Search Modal has been moved into the x-search-bar component -->
 
   <!-- Reusable Drawer Drawer/Record Preview template -->
   <div x-show="drawerOpen" class="fixed inset-0 z-40 overflow-hidden" style="display: none;" x-transition>

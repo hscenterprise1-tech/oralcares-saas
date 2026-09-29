@@ -1,0 +1,166 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * OVS FullCalendar Canonical Token & Theme Styling
+ * Candidate D — Flagship OralCares
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+.fc {
+  --fc-border-color: #E2E8F0;
+  --fc-daygrid-event-dot-color: #0D9488;
+  --fc-button-bg-color: #0F172A;
+  --fc-button-border-color: #0F172A;
+  --fc-button-hover-bg-color: #1E293B;
+  --fc-button-hover-border-color: #1E293B;
+  --fc-button-active-bg-color: #0D9488;
+  --fc-button-active-border-color: #0D9488;
+  --fc-event-bg-color: #FFFFFF;
+  --fc-event-border-color: #CBD5E1;
+  --fc-event-text-color: #0F172A;
+  --fc-today-bg-color: rgba(13, 148, 136, 0.04);
+  --fc-page-bg-color: #FFFFFF;
+  --fc-neutral-bg-color: #F8FAFC;
+  --fc-list-event-hover-bg-color: #F8FAFC;
+  --fc-highlight-color: rgba(13, 148, 136, 0.08);
+  font-family: inherit;
+  font-size: 0.8125rem;
+}
+
+/* ── TOOLBAR TITLE & HEADER ────────────────────────────────────────────────── */
+.fc .fc-toolbar {
+  margin-bottom: 1rem !important;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 0.9375rem !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  letter-spacing: -0.015em !important;
+}
+
+.fc .fc-button {
+  padding: 0.35rem 0.75rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  border-radius: 0.5rem !important;
+  text-transform: capitalize !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background-color: #0D9488 !important;
+  border-color: #0D9488 !important;
+  color: #FFFFFF !important;
+}
+
+/* ── COLUMN HEADERS ────────────────────────────────────────────────────────── */
+.fc .fc-col-header-cell {
+  background-color: #F8FAFC !important;
+  padding: 0.5rem 0 !important;
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  color: #64748B !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.035em !important;
+  font-family: inherit !important;
+  border-color: #E2E8F0 !important;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: #E2E8F0 !important;
+}
+
+/* ── TIME SLOTS ────────────────────────────────────────────────────────────── */
+.fc .fc-timegrid-slot {
+  height: 2.5rem !important;
+}
+
+.fc .fc-timegrid-slot-label {
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  color: #94A3B8 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+.fc .fc-timegrid-now-indicator-line {
+  border-color: #0D9488 !important;
+  border-width: 2px !important;
+}
+
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: #0D9488 !important;
+}
+
+/* ── EVENT PILLS & CARDS ───────────────────────────────────────────────────── */
+.fc .fc-event {
+  border-radius: 0.375rem !important;
+  padding: 3px 6px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+  border: 1px solid #CBD5E1 !important;
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+}
+
+.fc .fc-event:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.fc .fc-timeline-event {
+  border-radius: 0.375rem !important;
+  padding: 3px 8px !important;
+}
+
+/* ── RESOURCE TIMELINE HEADERS ─────────────────────────────────────────────── */
+.fc .fc-resource-timeline-divider {
+  background-color: #E2E8F0 !important;
+  width: 2px !important;
+}
+
+.fc .fc-datagrid-cell-main {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+}
+
+/* ── LIST / AGENDA VIEW ────────────────────────────────────────────────────── */
+.fc .fc-list-day-cushion {
+  background-color: #F8FAFC !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+.fc .fc-list-event:hover td {
+  background-color: #F1F5F9 !important;
+}
+
+.fc .fc-list-event-dot {
+  border-color: #0D9488 !important;
+}
+
+/* ── CONTAINER ISOLATED SCROLLING ─────────────────────────────────────────── */
+.ovs-scheduler-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-width: 100%;
+  scrollbar-width: thin;
+}
+
+.ovs-scheduler-container::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.ovs-scheduler-container::-webkit-scrollbar-thumb {
+  background-color: #CBD5E1;
+  border-radius: 9999px;
+}

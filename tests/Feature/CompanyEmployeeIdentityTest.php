@@ -120,7 +120,7 @@ test('active employee can log in and logs first login activity', function () {
         'password' => 'password',
     ]);
 
-    $response->assertRedirect('/dashboard');
+    $response->assertRedirect(route('company.dashboard'));
     $this->assertAuthenticatedAs($user);
 
     expect($employee->activities()->where('event', 'First Login')->exists())->toBeTrue();
@@ -141,6 +141,6 @@ test('master admin is unaffected by employee login restrictions', function () {
         'password' => 'password',
     ]);
 
-    $response->assertRedirect('/master/dashboard');
+    $response->assertRedirect(route('company.dashboard'));
     $this->assertAuthenticatedAs($admin);
 });

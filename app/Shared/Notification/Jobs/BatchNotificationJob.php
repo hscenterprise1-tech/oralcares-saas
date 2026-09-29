@@ -2,6 +2,7 @@
 
 namespace App\Shared\Notification\Jobs;
 
+use App\Models\User;
 use App\Shared\Notification\DTO\SendNotificationDTO;
 use App\Shared\Notification\Services\NotificationEngineService;
 use Illuminate\Bus\Queueable;
@@ -16,7 +17,7 @@ class BatchNotificationJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * @param Collection<int, \App\Models\User> $users
+     * @param  Collection<int, User>  $users
      */
     public function __construct(
         public Collection $users,

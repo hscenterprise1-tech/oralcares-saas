@@ -6,10 +6,11 @@ use App\Models\Branch;
 use App\Models\Clinic;
 use App\Shared\Notification\Enums\NotificationCategory;
 use App\Shared\Notification\Enums\NotificationPriority;
+use Database\Factories\Shared\Notification\Models\EnterpriseNotificationFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Notifications\DatabaseNotification;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class EnterpriseNotification extends DatabaseNotification
 {
@@ -19,6 +20,7 @@ class EnterpriseNotification extends DatabaseNotification
 
     // Disable incrementing since we use UUIDs
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -49,7 +51,7 @@ class EnterpriseNotification extends DatabaseNotification
 
     protected static function newFactory()
     {
-        return \Database\Factories\Shared\Notification\Models\EnterpriseNotificationFactory::new();
+        return EnterpriseNotificationFactory::new();
     }
 
     public function clinic(): BelongsTo

@@ -2,16 +2,21 @@
 
 namespace App\Shared\Notification\Services;
 
-use App\Shared\Notification\DTO\SendNotificationDTO;
-use App\Shared\Notification\Repositories\PreferenceRepository;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
+use App\Shared\Notification\Contracts\NotificationChannelInterface;
+use App\Shared\Notification\DTO\SendNotificationDTO;
+use App\Shared\Notification\Enums\NotificationChannel;
+use App\Shared\Notification\Enums\NotificationPriority;
+use App\Shared\Notification\Models\EnterpriseNotification;
+use App\Shared\Notification\Repositories\PreferenceRepository;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class NotificationEngineService
 {
     /**
-     * @var array<string, \App\Shared\Notification\Contracts\NotificationChannelInterface>
+     * @var array<string, NotificationChannelInterface>
      */
     protected array $channels = [];
 
@@ -19,13 +24,13 @@ class NotificationEngineService
         protected PreferenceRepository $preferenceRepository
     ) {}
 
-    public function registerChannel(\App\Shared\Notification\Contracts\NotificationChannelInterface $channel): void
+    public function registerChannel(NotificationChannelInterface $channel): void
     {
         $this->channels[$channel->getName()] = $channel;
     }
 
     /**
-     * @param User|Collection<int, User> $recipients
+     * @param  User|Collection<int, User>  $recipients
      */
     public function send($recipients, SendNotificationDTO $dto): void
     {
@@ -42,23 +47,24 @@ class NotificationEngineService
 
         // Check if the entire category is disabled by the user
         if ($preferences->isCategoryDisabled($dto->category->value)) {
-            Log::info("Notification disabled by user preference category", [
+            Log::info('Notification disabled by user preference category', [
                 'user_id' => $user->id,
                 'category' => $dto->category->value,
             ]);
+
             return;
         }
 
         // Determine which channels to send to
-        $channelsToSend = empty($dto->channels) 
-            ? [\App\Shared\Notification\Enums\NotificationChannel::IN_APP] 
+        $channelsToSend = empty($dto->channels)
+            ? [NotificationChannel::IN_APP]
             : $dto->channels;
 
         // Persist the Notification to the database (In-App is always created if it's in the channels)
         // Laravel's native Database channel handles the creation, but we will create it manually here
         // to have the exact model and ID ready for the Omni-channel logs.
-        $notificationModel = \App\Shared\Notification\Models\EnterpriseNotification::create([
-            'id' => \Illuminate\Support\Str::uuid()->toString(),
+        $notificationModel = EnterpriseNotification::create([
+            'id' => Str::uuid()->toString(),
             'type' => 'App\Shared\Notification\Notifications\EnterpriseNotificationMessage',
             'notifiable_type' => $user->getMorphClass(),
             'notifiable_id' => $user->getKey(),
@@ -72,7 +78,7 @@ class NotificationEngineService
             'category' => $dto->category,
             'priority' => $dto->priority,
             'title' => $dto->title,
-            'actions' => collect($dto->actions)->map(fn($action) => (array) $action)->toArray(),
+            'actions' => collect($dto->actions)->map(fn ($action) => (array) $action)->toArray(),
         ]);
 
         foreach ($channelsToSend as $channelEnum) {
@@ -84,13 +90,14 @@ class NotificationEngineService
             }
 
             // Check quiet hours (except for IN_APP or CRITICAL priority)
-            if ($preferences->isInQuietHours() 
-                && $channelName !== \App\Shared\Notification\Enums\NotificationChannel::IN_APP->value
-                && $dto->priority !== \App\Shared\Notification\Enums\NotificationPriority::CRITICAL
-                && $dto->priority !== \App\Shared\Notification\Enums\NotificationPriority::EMERGENCY
+            if ($preferences->isInQuietHours()
+                && $channelName !== NotificationChannel::IN_APP->value
+                && $dto->priority !== NotificationPriority::CRITICAL
+                && $dto->priority !== NotificationPriority::EMERGENCY
             ) {
                 // Future enhancement: Queue it for after quiet hours
-                Log::info("Notification suppressed by quiet hours", ['user_id' => $user->id, 'channel' => $channelName]);
+                Log::info('Notification suppressed by quiet hours', ['user_id' => $user->id, 'channel' => $channelName]);
+
                 continue;
             }
 

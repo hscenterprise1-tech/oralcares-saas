@@ -10,6 +10,7 @@ enum PermissionKey: string
     case StaffManage = 'staff.manage';
     case RolesManage = 'roles.manage';
     case ReportsView = 'reports.view';
+    case ClinicalMasterManage = 'clinical.master.manage';
 
     /**
      * Get all permission values.

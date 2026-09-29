@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\Scope;
 
 class TenantScope implements Scope
 {
+    /** Bound in the container while a queued job is being processed (see AppServiceProvider). */
+    public const IN_QUEUE_JOB = 'tenancy.in_queue_job';
+
     /**
      * Apply the scope to a given Eloquent query builder.
      *
@@ -19,8 +22,30 @@ class TenantScope implements Scope
      */
     public function apply(Builder $builder, Model $model): void
     {
-        // 1. Skip if running in console unless explicitly enforced for testing
+        // 1. Console processes (artisan, scheduler, queue workers, tests).
         if (app()->runningInConsole() && ! app()->bound('enforce_tenant_scope_in_tests')) {
+            $context = app()->bound(ClinicContext::class) ? app(ClinicContext::class) : null;
+
+            // Work started through `ClinicContext::runForClinic()` is filtered
+            // to that clinic, exactly as a web request would be.
+            if ($context?->isSystemScoped() && $context->hasClinic()) {
+                $builder->where($model->getTable().'.clinic_id', $context->clinic()->id);
+
+                return;
+            }
+
+            // A queued job that reads clinic data with no tenant context would
+            // otherwise read every clinic's data. It must either run for a
+            // clinic (`RunsForClinic`) or declare cross-clinic intent with
+            // `ClinicContext::withoutTenancy()`.
+            if (app()->bound(self::IN_QUEUE_JOB) && ! $context?->tenancyBypassed()) {
+                throw new TenantContextMissingException(
+                    'Clinic-scoped data ('.class_basename($model).') was queried in a queued job with no tenant context.'
+                );
+            }
+
+            // Artisan commands, migrations, seeders and test fixtures keep
+            // their unscoped access.
             return;
         }
 

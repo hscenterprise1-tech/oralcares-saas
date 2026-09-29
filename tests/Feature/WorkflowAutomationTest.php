@@ -24,7 +24,7 @@ beforeEach(function () {
 
 test('can configure custom stages and enforce single active flow definition per branch', function () {
     $clinic = Clinic::factory()->create();
-    $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
+    $branch = Branch::factory()->create(['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id]);
 
     $defService = app(WorkflowDefinitionService::class);
 
@@ -48,7 +48,7 @@ test('can configure custom stages and enforce single active flow definition per 
 
 test('transition verification and rules evaluation engine', function () {
     $clinic = Clinic::factory()->create();
-    $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
+    $branch = Branch::factory()->create(['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id]);
 
     $defService = app(WorkflowDefinitionService::class);
     $transService = app(WorkflowTransitionService::class);
@@ -65,13 +65,12 @@ test('transition verification and rules evaluation engine', function () {
     $trans2 = $transService->createTransition($flow, $doctor, $xray, ['requires_xray' => true]);
 
     // Setup run
-    $patient = Patient::create(['clinic_id' => $clinic->id, 'patient_number' => 'PT-1', 'name' => 'John Doe']);
+    $patient = Patient::factory()->create(['clinic_id' => $clinic->id]);
     $employee = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
     $encounter = ClinicalEncounter::create([
-        'clinic_id' => $clinic->id,
+        'organization_id' => $clinic->organization_id,
         'patient_id' => $patient->id,
         'branch_id' => $branch->id,
-        'doctor_id' => $employee->id,
         'encounter_number' => 'ENC-1',
         'status' => 'checked_in',
     ]);
@@ -98,14 +97,13 @@ test('orchestration run lifecycle transitions completes and cancels flows with h
     ]);
 
     $clinic = Clinic::factory()->create();
-    $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
-    $patient = Patient::create(['clinic_id' => $clinic->id, 'patient_number' => 'PT-1', 'name' => 'John Doe']);
+    $branch = Branch::factory()->create(['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id]);
+    $patient = Patient::factory()->create(['clinic_id' => $clinic->id]);
     $employee = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
     $encounter = ClinicalEncounter::create([
-        'clinic_id' => $clinic->id,
+        'organization_id' => $clinic->organization_id,
         'patient_id' => $patient->id,
         'branch_id' => $branch->id,
-        'doctor_id' => $employee->id,
         'encounter_number' => 'ENC-1',
         'status' => 'checked_in',
     ]);
@@ -141,10 +139,9 @@ test('orchestration run lifecycle transitions completes and cancels flows with h
 
     // Setup another run for cancellation test
     $encounter2 = ClinicalEncounter::create([
-        'clinic_id' => $clinic->id,
+        'organization_id' => $clinic->organization_id,
         'patient_id' => $patient->id,
         'branch_id' => $branch->id,
-        'doctor_id' => $employee->id,
         'encounter_number' => 'ENC-2',
         'status' => 'checked_in',
     ]);

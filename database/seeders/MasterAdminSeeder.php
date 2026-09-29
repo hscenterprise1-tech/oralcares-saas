@@ -35,6 +35,7 @@ class MasterAdminSeeder extends Seeder
         } else {
             $user->update([
                 'name' => $name,
+                'password' => Hash::make($password),
                 'user_type' => UserType::MasterAdmin,
             ]);
         }

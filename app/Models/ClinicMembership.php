@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use App\ClinicMembershipStatus;
+use App\Services\Security\SecurityAudit;
 use App\Traits\ClinicScoped;
 use Database\Factories\ClinicMembershipFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClinicMembership extends Model
 {
@@ -96,16 +96,13 @@ class ClinicMembership extends Model
             throw new \InvalidArgumentException('Cannot assign a branch belonging to another clinic.');
         }
 
-        $this->assignedBranches()->syncWithoutDetaching([$branch->id]);
-    }
+        $changes = $this->assignedBranches()->syncWithoutDetaching([$branch->id]);
 
-    /**
-     * Get the role assignments for the membership.
-     *
-     * @return HasMany<ClinicMembershipRole, $this>
-     */
-    public function roleAssignments(): HasMany
-    {
-        return $this->hasMany(ClinicMembershipRole::class);
+        if ($changes['attached'] !== []) {
+            app(SecurityAudit::class)->record('access.branches_changed', $this, [
+                'member_user_id' => $this->user_id,
+                'granted' => [$branch->id],
+            ], ['clinic_id' => $this->clinic_id]);
+        }
     }
 }

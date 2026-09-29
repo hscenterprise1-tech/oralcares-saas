@@ -9,8 +9,11 @@
     "nightwatch": false,
     "sail": false,
     "skills": [
+        "infer-conventions",
         "laravel-best-practices",
-        "pest-testing",
-        "tailwindcss-development"
+        "testing-best-practices",
+        "pennant-development",
+        "tailwindcss-development",
+        "inertia-react-development"
     ]
 }

@@ -5,22 +5,16 @@ use App\Shared\Notification\DTO\SendNotificationDTO;
 use App\Shared\Notification\Enums\NotificationCategory;
 use App\Shared\Notification\Enums\NotificationChannel;
 use App\Shared\Notification\Enums\NotificationPriority;
-use App\Shared\Notification\Models\EnterpriseNotification;
+use App\Shared\Notification\Mail\EnterpriseNotificationMail;
 use App\Shared\Notification\Models\NotificationPreference;
 use App\Shared\Notification\Services\NotificationEngineService;
-use App\Shared\Notification\Channels\InAppChannel;
-use App\Shared\Notification\Channels\OmniMailChannel;
-use App\Shared\Notification\Repositories\PreferenceRepository;
 use Illuminate\Support\Facades\Mail;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
-    $this->preferenceRepository = new PreferenceRepository();
-    
-    // Bind actual service for tests
-    $this->engine = new NotificationEngineService($this->preferenceRepository);
-    $this->engine->registerChannel(new InAppChannel());
-    $this->engine->registerChannel(new OmniMailChannel());
+
+    // Pull from the container to ensure the Service Provider wired it up correctly
+    $this->engine = app(NotificationEngineService::class);
 });
 
 it('sends an in-app notification by default and saves to database', function () {
@@ -82,5 +76,32 @@ it('sends email when requested and user has not disabled it', function () {
     ]);
 
     // Verify Email was sent
-    Mail::assertSent(\App\Shared\Notification\Mail\EnterpriseNotificationMail::class);
+    Mail::assertSent(EnterpriseNotificationMail::class);
+});
+
+it('dispatches SMS through integration engine when requested', function () {
+    $this->user->phone = '+1234567890';
+    $this->user->save();
+
+    $dto = new SendNotificationDTO(
+        title: 'SMS Alert',
+        message: 'This goes to SMS',
+        category: NotificationCategory::SYSTEM,
+        priority: NotificationPriority::NORMAL,
+        channels: [NotificationChannel::IN_APP, NotificationChannel::SMS]
+    );
+
+    $this->engine->send($this->user, $dto);
+
+    // Verify it was logged in the DB (In-App)
+    $this->assertDatabaseHas('ent_notifications', [
+        'notifiable_id' => $this->user->id,
+        'title' => 'SMS Alert',
+    ]);
+
+    // Verify the SMS log was created via the channel
+    $this->assertDatabaseHas('ent_notification_logs', [
+        'channel' => 'sms',
+        'status' => 'sent',
+    ]);
 });

@@ -23,6 +23,22 @@ class WorkflowTransitionService
         ?array $rules = null,
         ?array $validationRules = null
     ): WorkflowTransition {
+        /*
+         * Both stages have to be this definition's own.
+         *
+         * Unchecked, a transition could name a stage from another definition —
+         * another tenant's included — producing a wiring that reads valid and
+         * can never fire, because `canTransition` only ever looks for rows
+         * matching the run's own definition.
+         */
+        foreach (['from' => $from, 'to' => $to] as $side => $stage) {
+            if ((int) $stage->workflow_definition_id !== (int) $def->id) {
+                throw new \InvalidArgumentException(
+                    "The {$side} stage {$stage->id} belongs to another workflow definition."
+                );
+            }
+        }
+
         return WorkflowTransition::create([
             'workflow_definition_id' => $def->id,
             'from_stage_id' => $from->id,

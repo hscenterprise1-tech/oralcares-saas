@@ -3,14 +3,14 @@
 namespace App\Shared\Notification\DTO;
 
 use App\Shared\Notification\Enums\NotificationCategory;
-use App\Shared\Notification\Enums\NotificationPriority;
 use App\Shared\Notification\Enums\NotificationChannel;
+use App\Shared\Notification\Enums\NotificationPriority;
 
 readonly class SendNotificationDTO
 {
     /**
-     * @param array<int, NotificationChannel> $channels
-     * @param array<int, NotificationActionDTO> $actions
+     * @param  array<int, NotificationChannel>  $channels
+     * @param  array<int, NotificationActionDTO>  $actions
      */
     public function __construct(
         public string $title,

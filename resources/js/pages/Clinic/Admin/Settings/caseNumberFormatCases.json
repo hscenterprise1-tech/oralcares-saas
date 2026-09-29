@@ -1,0 +1,65 @@
+[
+    {
+        "name": "defaults",
+        "config": { "prefix": "OPD", "show_year": true, "year_style": "YYYY", "separator": "-", "digits": 6, "reset_yearly": true },
+        "date": "2026-06-01",
+        "sequence": 123,
+        "expected": { "number": "OPD-2026-000123", "period_key": "CY2026", "search_key": "OPD2026000123", "short_label": "0123" }
+    },
+    {
+        "name": "short financial year with slashes",
+        "config": { "prefix": "DC", "show_year": true, "year_style": "FY_SHORT", "separator": "/", "digits": 6, "reset_yearly": true },
+        "date": "2026-06-01",
+        "sequence": 124,
+        "expected": { "number": "DC/26-27/000124", "period_key": "FY2026", "search_key": "DC2627000124", "short_label": "0124" }
+    },
+    {
+        "name": "31 March is the last day of the financial year",
+        "config": { "prefix": "DC", "show_year": true, "year_style": "FY_SHORT", "separator": "/", "digits": 6, "reset_yearly": true },
+        "date": "2027-03-31",
+        "sequence": 5,
+        "expected": { "number": "DC/26-27/000005", "period_key": "FY2026", "search_key": "DC2627000005", "short_label": "0005" }
+    },
+    {
+        "name": "1 April starts the next financial year",
+        "config": { "prefix": "DC", "show_year": true, "year_style": "FY_SHORT", "separator": "/", "digits": 6, "reset_yearly": true },
+        "date": "2027-04-01",
+        "sequence": 5,
+        "expected": { "number": "DC/27-28/000005", "period_key": "FY2027", "search_key": "DC2728000005", "short_label": "0005" }
+    },
+    {
+        "name": "long financial year",
+        "config": { "prefix": "OPD", "show_year": true, "year_style": "FY", "separator": "-", "digits": 6, "reset_yearly": true },
+        "date": "2026-12-15",
+        "sequence": 7,
+        "expected": { "number": "OPD-2026-27-000007", "period_key": "FY2026", "search_key": "OPD202627000007", "short_label": "0007" }
+    },
+    {
+        "name": "two-digit calendar year with dots",
+        "config": { "prefix": "OPD", "show_year": true, "year_style": "YY", "separator": ".", "digits": 4, "reset_yearly": true },
+        "date": "2026-01-01",
+        "sequence": 42,
+        "expected": { "number": "OPD.26.0042", "period_key": "CY2026", "search_key": "OPD260042", "short_label": "0042" }
+    },
+    {
+        "name": "no year, no separator",
+        "config": { "prefix": "CASE", "show_year": false, "year_style": "YYYY", "separator": "", "digits": 8, "reset_yearly": false },
+        "date": "2026-09-28",
+        "sequence": 99,
+        "expected": { "number": "CASE00000099", "period_key": "CY2026", "search_key": "CASE00000099", "short_label": "0099" }
+    },
+    {
+        "name": "century rollover in a short financial year",
+        "config": { "prefix": "DC", "show_year": true, "year_style": "FY_SHORT", "separator": "-", "digits": 6, "reset_yearly": true },
+        "date": "2099-05-01",
+        "sequence": 1,
+        "expected": { "number": "DC-99-00-000001", "period_key": "FY2099", "search_key": "DC9900000001", "short_label": "0001" }
+    },
+    {
+        "name": "a sequence longer than the digit count is never cut",
+        "config": { "prefix": "OPD", "show_year": true, "year_style": "YYYY", "separator": "-", "digits": 4, "reset_yearly": false },
+        "date": "2026-06-01",
+        "sequence": 12345,
+        "expected": { "number": "OPD-2026-12345", "period_key": "CY2026", "search_key": "OPD202612345", "short_label": "2345" }
+    }
+]

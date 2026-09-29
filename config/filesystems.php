@@ -47,6 +47,59 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Patient documents, X-rays and anything else clinical. Never public:
+         * files leave this disk only through an authorized, audited
+         * controller. Production sets PRIVATE_FILESYSTEM_DRIVER=s3, with a
+         * bucket that blocks public access, has server-side encryption and
+         * versioning. Uploads were already written here, but the disk was
+         * never defined, so a real (non-faked) upload failed with "Disk
+         * [private] does not have a configured driver".
+         */
+        'private' => [
+            'driver' => env('PRIVATE_FILESYSTEM_DRIVER', 'local'),
+            'root' => storage_path('app/private-documents'),
+            'key' => env('PRIVATE_AWS_ACCESS_KEY_ID', env('AWS_ACCESS_KEY_ID')),
+            'secret' => env('PRIVATE_AWS_SECRET_ACCESS_KEY', env('AWS_SECRET_ACCESS_KEY')),
+            'region' => env('PRIVATE_AWS_DEFAULT_REGION', env('AWS_DEFAULT_REGION')),
+            'bucket' => env('PRIVATE_AWS_BUCKET'),
+            'endpoint' => env('PRIVATE_AWS_ENDPOINT'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => true,
+        ],
+
+        /*
+         * Where an upload waits while it is scanned for malware. It sits on the
+         * app server, is never served, and is emptied as each scan finishes:
+         * a clean file moves to `private`, anything else is deleted.
+         */
+        'quarantine' => [
+            'driver' => 'local',
+            'root' => storage_path('app/quarantine'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => true,
+        ],
+
+        /*
+         * Encrypted database backups. Production points this at a bucket in a
+         * separate account (BACKUP_AWS_*) with versioning and object lock, so
+         * a compromise of the app's own credentials cannot delete backups.
+         */
+        'backups' => [
+            'driver' => env('BACKUP_FILESYSTEM_DRIVER', 'local'),
+            'root' => storage_path('app/backups'),
+            'key' => env('BACKUP_AWS_ACCESS_KEY_ID'),
+            'secret' => env('BACKUP_AWS_SECRET_ACCESS_KEY'),
+            'region' => env('BACKUP_AWS_DEFAULT_REGION', env('AWS_DEFAULT_REGION')),
+            'bucket' => env('BACKUP_AWS_BUCKET'),
+            'endpoint' => env('BACKUP_AWS_ENDPOINT'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => true,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

@@ -24,7 +24,7 @@ test('user correctly identifies Master Super Admin status', function () {
 
 test('MasterAdminSeeder creates the Super Admin user securely from environment configuration', function () {
     // Delete any existing user with master email to test from clean state
-    $email = config('auth.master_admin.email', 'master@oralcares.com');
+    $email = config('auth.master_admin.email', 'master@oralcares.in');
     User::where('email', $email)->delete();
 
     $this->seed(MasterAdminSeeder::class);
@@ -37,7 +37,7 @@ test('MasterAdminSeeder creates the Super Admin user securely from environment c
 });
 
 test('MasterAdminSeeder is idempotent and does not create duplicate users', function () {
-    $email = config('auth.master_admin.email', 'master@oralcares.com');
+    $email = config('auth.master_admin.email', 'master@oralcares.in');
     User::where('email', $email)->delete();
 
     // Run first time
@@ -53,7 +53,7 @@ test('MasterAdminSeeder is idempotent and does not create duplicate users', func
 });
 
 test('MasterAdminSeeder does not overwrite existing password', function () {
-    $email = config('auth.master_admin.email', 'master@oralcares.com');
+    $email = config('auth.master_admin.email', 'master@oralcares.in');
     User::where('email', $email)->delete();
 
     // Run first time to create user
