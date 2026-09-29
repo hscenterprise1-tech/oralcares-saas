@@ -9,11 +9,29 @@ use App\Models\CompanyPayroll;
 use App\Models\CompanyTeam;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use RuntimeException;
 
+/**
+ * Demo data for a local HQ workspace: fictional leadership staff with login
+ * accounts, expenses and payroll. Not production seed data, and not called by
+ * DatabaseSeeder.
+ *
+ * It refuses to run outside a local or testing environment, and even there
+ * only when SEED_DEMO_DATA is switched on. The demo accounts get a random
+ * password that is never stored anywhere readable or logged: use "Forgot
+ * password" to sign in as one. An account that already exists is left as it
+ * is, password included.
+ */
 class CompanyPeopleFinanceSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing']) || ! config('security.demo_seeding')) {
+            throw new RuntimeException('CompanyPeopleFinanceSeeder is local demo data. It runs only in a local or testing environment with SEED_DEMO_DATA=true.');
+        }
+
         // 1. Fetch/Create Departments
         $salesDept = CompanyDepartment::firstOrCreate(['code' => 'SALES'], [
             'name' => 'Sales & Business Development',
@@ -131,7 +149,7 @@ class CompanyPeopleFinanceSeeder extends Seeder
         foreach ($staffProfiles as $prof) {
             $user = User::firstOrCreate(['email' => $prof['email']], [
                 'name' => $prof['name'],
-                'password' => bcrypt('password'),
+                'password' => Hash::make(Str::password(32)),
                 'user_type' => 'company_user',
             ]);
 

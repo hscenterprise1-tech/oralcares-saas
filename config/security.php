@@ -102,4 +102,11 @@ return [
         'geo' => (int) env('RATE_LIMIT_GEO', 120),
     ],
 
+    /*
+    | Demo data seeders (fictional HQ staff, expenses, payroll) create login
+    | accounts, so they run only in a local or testing environment AND only
+    | when this is switched on. Never set it on a server.
+    */
+    'demo_seeding' => (bool) env('SEED_DEMO_DATA', false),
+
 ];

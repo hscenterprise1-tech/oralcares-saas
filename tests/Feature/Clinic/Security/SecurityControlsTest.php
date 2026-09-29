@@ -219,6 +219,7 @@ it('fails the production check when production infrastructure is missing', funct
     'debug on' => [fn () => config(['app.debug' => true])],
     'plain http' => [fn () => config(['app.url' => 'http://clinic.example.test'])],
     'legacy clinic without subscription' => [fn () => Clinic::factory()->create()],
+    'demo seeding switched on' => [fn () => config(['security.demo_seeding' => true])],
 ]);
 
 it('treats production-only checks as warnings for a staging target', function () {

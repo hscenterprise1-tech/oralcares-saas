@@ -81,6 +81,7 @@ class SecurityProductionCheck extends Command
 
         // Accounts and tenants
         $masterPassword = (string) config('auth.master_admin.password');
+        $this->check('both', ! config('security.demo_seeding'), 'Demo data seeding is off', 'SEED_DEMO_DATA is on: demo seeders that create login accounts are enabled');
         $this->check('both', $masterPassword === '' || (strlen($masterPassword) >= 16 && ! in_array(Str::lower($masterPassword), ['password', 'admin', 'changeme', 'secret'], true)), 'Master admin seed password is not weak', 'MASTER_ADMIN_PASSWORD is shorter than 16 characters or a known default');
         [$allSubscribed, $subscribedDetail] = $this->everyActiveClinicHasASubscription();
         $this->check('production', $allSubscribed, 'Every active clinic has a subscription', $subscribedDetail);
