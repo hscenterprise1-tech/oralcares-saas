@@ -6,8 +6,8 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\Core\FileEngine;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
@@ -61,12 +61,9 @@ it('deletes a file', function () {
     Storage::disk('local')->assertMissing($path);
 });
 
-it('generates a signed URL for local disks', function () {
-    $url = $this->engine->getUrl('test/path.jpg', 'local');
-
-    expect(Str::contains($url, '/files/download'))->toBeTrue();
-    expect(Str::contains($url, 'signature='))->toBeTrue();
-});
+it('refuses to mint a shareable link for a file on a local disk', function () {
+    $this->engine->getUrl('test/path.jpg', 'local');
+})->throws(FileEngineException::class, 'no shareable link');
 
 it('generates a temporary URL for s3 disks', function () {
     Storage::shouldReceive('disk')->with('s3')->andReturn($disk = Mockery::mock());
@@ -77,26 +74,13 @@ it('generates a temporary URL for s3 disks', function () {
     expect($url)->toBe('https://s3.aws.com/temp-url');
 });
 
-it('secure download controller returns file for valid signature', function () {
+it('has no generic file download route: a signed path on any disk is not served', function () {
     $path = 'test/secure.txt';
     Storage::disk('local')->put($path, 'secret content');
 
-    $url = URL::temporarySignedRoute('core.files.download', now()->addMinutes(5), ['path' => base64_encode($path), 'disk' => 'local']);
+    expect(Route::has('core.files.download'))->toBeFalse();
 
-    $user = User::factory()->create();
-    $this->actingAs($user)->get($url)
-        ->assertStatus(200)
-        ->assertStreamedContent('secret content');
-});
-
-it('secure download controller aborts 403 for invalid signature', function () {
-    $path = 'test/secure.txt';
-    Storage::disk('local')->put($path, 'secret content');
-
-    // Generate a valid URL, then change something
-    $url = URL::temporarySignedRoute('core.files.download', now()->addMinutes(5), ['path' => base64_encode($path), 'disk' => 'local']);
-    $url .= 'xyz'; // Invalid signature
-
-    $user = User::factory()->create();
-    $this->actingAs($user)->get($url)->assertStatus(403);
+    $this->actingAs(User::factory()->create())
+        ->get('/files/download?path='.base64_encode($path).'&disk=local')
+        ->assertNotFound();
 });

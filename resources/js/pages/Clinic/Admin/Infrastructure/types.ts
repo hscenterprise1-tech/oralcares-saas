@@ -55,3 +55,29 @@ export interface BranchesPageProps {
   branchStatuses: BranchStatus[];
   branchLimit: BranchLimit;
 }
+
+export interface Department {
+  id: number;
+  name: string;
+  key: string | null;
+  is_active: boolean;
+}
+
+export interface DepartmentsPageProps {
+  departments: Department[];
+}
+
+export interface Room {
+  id: number;
+  branch_id: number;
+  branch_name: string | null;
+  name: string;
+  key: string | null;
+  type: string | null;
+  is_active: boolean;
+}
+
+export interface RoomsPageProps {
+  rooms: Room[];
+  branches: { id: number; name: string }[];
+}

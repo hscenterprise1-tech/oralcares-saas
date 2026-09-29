@@ -139,10 +139,4 @@ return [
 
     ],
 
-    'testing' => [
-
-        'ensure_pages_exist' => (bool) env('INERTIA_TESTING_ENSURE_PAGES_EXIST', false),
-
-    ],
-
 ];

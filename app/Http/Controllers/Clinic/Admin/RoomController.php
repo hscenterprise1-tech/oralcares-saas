@@ -21,10 +21,21 @@ class RoomController extends Controller
     {
         $clinicId = $context->clinic()->id;
 
-        $branches = Branch::where('clinic_id', $clinicId)->get();
-        $branchIds = $branches->pluck('id')->toArray();
+        $branches = Branch::where('clinic_id', $clinicId)->orderBy('name')->get(['id', 'name']);
 
-        $rooms = ClinicRoom::whereIn('branch_id', $branchIds)->with('branch')->latest()->get();
+        $rooms = ClinicRoom::whereIn('branch_id', $branches->pluck('id'))
+            ->with('branch:id,name')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ClinicRoom $room) => [
+                'id' => $room->id,
+                'branch_id' => $room->branch_id,
+                'branch_name' => $room->branch?->name,
+                'name' => $room->name,
+                'key' => $room->key,
+                'type' => $room->type,
+                'is_active' => $room->is_active,
+            ]);
 
         return Inertia::render('Clinic/Admin/Infrastructure/Rooms', [
             'rooms' => $rooms,
@@ -44,14 +55,14 @@ class RoomController extends Controller
             'branch_id' => ['required', Rule::in($branchIds)],
             'name' => ['required', 'string', 'max:255'],
             'key' => [
-                'nullable',
+                'required',
                 'string',
                 'max:50',
                 Rule::unique('clinic_rooms')->where(function ($query) use ($request) {
                     return $query->where('branch_id', $request->input('branch_id'));
                 }),
             ],
-            'type' => ['nullable', 'string', 'max:50'],
+            'type' => ['required', 'string', 'max:50'],
             'is_active' => ['boolean'],
         ]);
 
@@ -77,14 +88,14 @@ class RoomController extends Controller
             'branch_id' => ['required', Rule::in($branchIds)],
             'name' => ['required', 'string', 'max:255'],
             'key' => [
-                'nullable',
+                'required',
                 'string',
                 'max:50',
                 Rule::unique('clinic_rooms')->ignore($room->id)->where(function ($query) use ($request) {
                     return $query->where('branch_id', $request->input('branch_id'));
                 }),
             ],
-            'type' => ['nullable', 'string', 'max:50'],
+            'type' => ['required', 'string', 'max:50'],
             'is_active' => ['boolean'],
         ]);
 

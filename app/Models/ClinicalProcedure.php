@@ -3,60 +3,54 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
-use App\Traits\OrganizationScoped;
+use App\Traits\ClinicScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * An entry in a clinic's procedure catalogue: what can be done and billed
+ * (code, name, category, typical duration). Prices live in
+ * `ClinicalProcedurePrice`, clinic-wide or per branch.
+ *
+ * Billing lines and treatment records point here through
+ * `clinical_procedure_id`. A procedure actually recorded against a patient is
+ * a `PatientProcedure`, a separate record.
+ */
 class ClinicalProcedure extends Model
 {
-    use Auditable, OrganizationScoped;
+    use Auditable, ClinicScoped;
 
-    protected $table = 'patient_procedures';
+    protected $table = 'clinical_procedures';
 
     protected $fillable = [
-        'organization_id',
-        'encounter_id',
-        'patient_id',
-        'procedure_master_id',
+        'clinic_id',
         'code',
         'name',
         'description',
-        'details',
-        'status',
-        'performed_by',
-        'performed_at',
+        'category',
+        'default_duration_minutes',
+        'clinical_complexity',
+        'requires_tooth',
+        'is_active',
     ];
 
     protected function casts(): array
     {
         return [
-            'details' => 'array',
-            'performed_at' => 'datetime',
+            'default_duration_minutes' => 'integer',
+            'requires_tooth' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 
-    public function organization(): BelongsTo
+    public function clinic(): BelongsTo
     {
-        return $this->belongsTo(Organization::class);
+        return $this->belongsTo(Clinic::class);
     }
 
-    public function encounter(): BelongsTo
+    public function prices(): HasMany
     {
-        return $this->belongsTo(ClinicalEncounter::class, 'encounter_id');
-    }
-
-    public function patient(): BelongsTo
-    {
-        return $this->belongsTo(Patient::class);
-    }
-
-    public function master(): BelongsTo
-    {
-        return $this->belongsTo(ProcedureMaster::class, 'procedure_master_id');
-    }
-
-    public function performer(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'performed_by');
+        return $this->hasMany(ClinicalProcedurePrice::class, 'clinical_procedure_id');
     }
 }

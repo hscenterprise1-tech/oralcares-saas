@@ -8,7 +8,6 @@ use App\Models\Organization;
 use Carbon\CarbonInterface;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 class FileEngine
@@ -68,13 +67,19 @@ class FileEngine
     }
 
     /**
-     * Get a secure URL for the file.
-     * For S3, it generates a temporary expiring URL.
-     * For local storage, it generates a signed URL to a secure download route.
+     * Get a temporary URL for a file on S3.
+     *
+     * Files on local disks get no link at all. They used to be served by a
+     * generic signed-URL route that handed any file on any disk to whoever
+     * held the link, with no tenant or patient check. That route is gone:
+     * a file from a clinic record is served by that record's own authorized
+     * route (for example `clinic.patients.documents.download`).
      *
      * @param  string  $path  The file path
-     * @param  string|null  $disk  The disk ('local' or 's3')
+     * @param  string|null  $disk  The disk
      * @param  CarbonInterface|int  $expiration  Expiration time for the URL
+     *
+     * @throws FileEngineException for any disk other than S3
      */
     public function getUrl(string $path, ?string $disk = null, $expiration = null): string
     {
@@ -85,11 +90,6 @@ class FileEngine
             return Storage::disk('s3')->temporaryUrl($path, $expiration);
         }
 
-        // For local storage, route through our secure controller using a signed URL
-        return URL::temporarySignedRoute(
-            'core.files.download',
-            $expiration,
-            ['path' => base64_encode($path), 'disk' => $disk]
-        );
+        throw new FileEngineException("Files on the [{$disk}] disk have no shareable link; serve them through the owning record's authorized route.");
     }
 }

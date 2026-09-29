@@ -190,8 +190,27 @@ it('syncs operating hours to clinic_operating_hours on branch create and update'
 });
 
 it('can list departments', function () {
+    [$user, $clinic] = setupInfrastructureTest();
+    ClinicDepartment::create(['clinic_id' => $clinic->id, 'name' => 'Radiology', 'key' => 'radiology', 'is_active' => true]);
+
+    $this->actingAs($user)->get(route('admin.departments.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Clinic/Admin/Infrastructure/Departments')
+            ->has('departments', 1)
+            ->where('departments.0.name', 'Radiology')
+            ->missing('departments.0.clinic_id'));
+});
+
+it('refuses to edit or remove another clinic\'s department', function () {
     [$user] = setupInfrastructureTest();
-    $this->actingAs($user)->get(route('admin.departments.index'))->assertStatus(200);
+    $otherClinic = Clinic::factory()->create();
+    $foreign = ClinicDepartment::withoutGlobalScopes()->create(['clinic_id' => $otherClinic->id, 'name' => 'Theirs', 'key' => 'theirs', 'is_active' => true]);
+
+    $this->actingAs($user)->put(route('admin.departments.update', $foreign->id), ['name' => 'Taken', 'key' => 'taken', 'is_active' => true])->assertNotFound();
+    $this->actingAs($user)->delete(route('admin.departments.destroy', $foreign->id))->assertNotFound();
+
+    expect(ClinicDepartment::withoutGlobalScopes()->find($foreign->id)?->name)->toBe('Theirs');
 });
 
 it('can create a department', function () {
@@ -206,8 +225,20 @@ it('can create a department', function () {
 });
 
 it('can list rooms', function () {
-    [$user] = setupInfrastructureTest();
-    $this->actingAs($user)->get(route('admin.rooms.index'))->assertStatus(200);
+    [$user, $clinic, $branch] = setupInfrastructureTest();
+    ClinicRoom::create(['branch_id' => $branch->id, 'name' => 'Consultation Room 1', 'key' => 'consult-1', 'type' => 'consultation', 'is_active' => true]);
+
+    $otherBranch = Branch::factory()->create();
+    ClinicRoom::create(['branch_id' => $otherBranch->id, 'name' => 'Another clinic room', 'key' => 'other-1', 'type' => 'consultation', 'is_active' => true]);
+
+    $this->actingAs($user)->get(route('admin.rooms.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Clinic/Admin/Infrastructure/Rooms')
+            ->has('rooms', 1)
+            ->where('rooms.0.name', 'Consultation Room 1')
+            ->where('rooms.0.branch_name', $branch->name)
+            ->has('branches', 1));
 });
 
 it('can create a room', function () {
@@ -221,4 +252,13 @@ it('can create a room', function () {
     ]);
     $response->assertRedirect(route('admin.rooms.index'));
     expect(ClinicRoom::where('name', 'Room 101')->exists())->toBeTrue();
+});
+
+it('asks for a short code instead of failing when a department or room has none', function () {
+    [$user, , $branch] = setupInfrastructureTest();
+
+    $this->actingAs($user)->post(route('admin.departments.store'), ['name' => 'Physiotherapy', 'is_active' => true])
+        ->assertSessionHasErrors('key');
+    $this->actingAs($user)->post(route('admin.rooms.store'), ['branch_id' => $branch->id, 'name' => 'Gym', 'type' => 'procedure', 'is_active' => true])
+        ->assertSessionHasErrors('key');
 });

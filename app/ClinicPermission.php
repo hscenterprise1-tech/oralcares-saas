@@ -14,12 +14,14 @@ enum ClinicPermission: string
     case PatientCreate = 'patient.create';
     case PatientEdit = 'patient.edit';
     case PatientDelete = 'patient.delete';
+    case PatientSearch = 'patient.search';
 
     // Appointment & Queue Capabilities
     case AppointmentView = 'appointment.view';
     case AppointmentCreate = 'appointment.create';
     case AppointmentManage = 'appointment.manage';
     case QueueManage = 'queue.manage';
+    case VisitView = 'visit.view';
     case VisitCreate = 'visit.create';
 
     // Clinical Capabilities (Generic for all specialties)
@@ -65,12 +67,14 @@ enum ClinicPermission: string
             'Admin' => self::values(),
             'Reception' => [
                 self::PatientView->value,
+                self::PatientSearch->value,
                 self::PatientCreate->value,
                 self::PatientEdit->value,
                 self::AppointmentView->value,
                 self::AppointmentCreate->value,
                 self::AppointmentManage->value,
                 self::QueueManage->value,
+                self::VisitView->value,
                 self::VisitCreate->value,
                 self::BillingView->value,
                 self::BillingCreate->value,
@@ -79,8 +83,10 @@ enum ClinicPermission: string
             ],
             'Practitioner' => [
                 self::PatientView->value,
+                self::PatientSearch->value,
                 self::AppointmentView->value,
                 self::QueueManage->value,
+                self::VisitView->value,
                 self::ClinicalView->value,
                 self::ClinicalEdit->value,
                 self::PrescriptionManage->value,
@@ -89,6 +95,7 @@ enum ClinicPermission: string
             ],
             'Billing' => [
                 self::PatientView->value,
+                self::PatientSearch->value,
                 self::BillingView->value,
                 self::BillingCreate->value,
                 self::PaymentCollect->value,

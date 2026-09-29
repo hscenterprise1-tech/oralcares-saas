@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useClinicPermission } from '@/hooks/useClinicPermission';
 import { ClinicShell } from '../../components/ClinicShell';
 import { BranchFormModal } from './components/BranchFormModal';
+import { InfrastructureTabs } from './components/InfrastructureTabs';
 import { Branch, BranchesPageProps } from './types';
 
 /*
@@ -107,6 +108,8 @@ export default function Branches({ branches, branchStatuses, branchLimit }: Bran
           ) : undefined
         }
       />
+
+      <InfrastructureTabs current="Branches" />
 
       <div className="space-y-6 pb-12">
         {branches.length === 0 ? (

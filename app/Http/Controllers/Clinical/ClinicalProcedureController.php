@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Clinical;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClinicalEncounter;
-use App\Models\ClinicalProcedure;
+use App\Models\PatientProcedure;
 use App\Models\ProcedureMaster;
 use App\Services\ClinicalProcedureService;
 use Illuminate\Http\Request;
@@ -43,7 +43,7 @@ class ClinicalProcedureController extends Controller
         return redirect()->back()->with('success', 'Procedure recorded.');
     }
 
-    public function updateStatus(Request $request, ClinicalEncounter $encounter, ClinicalProcedure $procedure, ClinicalProcedureService $service)
+    public function updateStatus(Request $request, ClinicalEncounter $encounter, PatientProcedure $procedure, ClinicalProcedureService $service)
     {
         abort_if($encounter->organization_id !== auth()->user()->organization_id, 403);
         abort_if($procedure->encounter_id !== $encounter->id, 403);

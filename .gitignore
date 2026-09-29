@@ -40,3 +40,7 @@ Thumbs.db
 /generate_*.cjs
 /refactor.ps1
 /.gemini/
+
+# Local-only developer scripts: browser checks with dev logins, data seeders.
+# Never committed or deployed.
+/.local/

@@ -7,6 +7,7 @@ use App\EmploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ClinicEmployee;
+use App\Models\ClinicMembership;
 use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
 use Illuminate\Http\RedirectResponse;
@@ -65,7 +66,7 @@ class EmployeeController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'status' => ['required', Rule::enum(EmploymentStatus::class)],
             'branches' => ['array'],
-            'branches.*' => ['exists:branches,id'],
+            'branches.*' => [Rule::exists('branches', 'id')->where('clinic_id', $context->clinic()->id)],
             'roles' => ['array'],
             'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')],
         ]);
@@ -73,8 +74,8 @@ class EmployeeController extends Controller
         $employee = ClinicEmployee::create([
             'clinic_id' => $context->clinic()->id,
             'name' => $validated['name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'],
+            'email' => $validated['email'] ?? null,
+            'phone' => $validated['phone'] ?? null,
             'status' => $validated['status'],
         ]);
 
@@ -132,20 +133,32 @@ class EmployeeController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'status' => ['required', Rule::enum(EmploymentStatus::class)],
             'branches' => ['array'],
-            'branches.*' => ['exists:branches,id'],
+            'branches.*' => [Rule::exists('branches', 'id')->where('clinic_id', $context->clinic()->id)],
             'roles' => ['array'],
             'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')],
         ]);
 
         $employee->update([
             'name' => $validated['name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'],
+            'email' => $validated['email'] ?? null,
+            'phone' => $validated['phone'] ?? null,
             'status' => $validated['status'],
         ]);
 
         if (isset($validated['branches'])) {
             $employee->branches()->sync($validated['branches']);
+
+            // The employee's branches are also where their login may work.
+            // Invitation acceptance copies them onto the membership once;
+            // keep that copy in step with every later change, so an admin
+            // who moves someone between branches actually moves their access.
+            $membership = $employee->user_id
+                ? ClinicMembership::query()->where('clinic_id', $employee->clinic_id)->where('user_id', $employee->user_id)->first()
+                : null;
+
+            if ($membership && ! $membership->has_all_branches_access) {
+                $membership->syncAssignedBranches($employee->branches()->get(), $request->user()?->id);
+            }
         }
 
         if (isset($validated['roles'])) {

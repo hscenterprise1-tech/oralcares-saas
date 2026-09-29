@@ -20,6 +20,23 @@ class OnboardingProgress extends Model
         'completed_steps' => 'array',
     ];
 
+    /**
+     * The onboarding record a clinic user is working through: the active
+     * clinic's organisation, or the user's own when the clinic has none.
+     * Both the onboarding gate and the onboarding page read it through here,
+     * so they always agree about which record applies.
+     */
+    public static function forClinicUser(User $user, ?Clinic $clinic): ?self
+    {
+        $organizationId = $clinic?->organization_id ?? $user->organization_id;
+
+        if (! $organizationId) {
+            return null;
+        }
+
+        return static::query()->where('organization_id', $organizationId)->orderBy('id')->first();
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

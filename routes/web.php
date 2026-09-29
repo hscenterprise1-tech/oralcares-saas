@@ -78,7 +78,6 @@ use App\Http\Controllers\Company\People\StructureController;
 use App\Http\Controllers\Company\People\WorkingCalendarController;
 use App\Http\Controllers\Company\Security\SecurityController;
 use App\Http\Controllers\Company\Workflow\WorkflowController;
-use App\Http\Controllers\Core\FileDownloadController;
 use App\Http\Controllers\Dev\DesignLabController;
 use App\Http\Controllers\NotificationViewController;
 use App\Http\Controllers\ProfileController;
@@ -1149,8 +1148,10 @@ $clinicRoutes = function () {
         Route::prefix('patients')->name('clinic.patients.')->middleware('clinic_entitled:patients')->group(function () {
             Route::get('/', [ClinicPatientController::class, 'index'])->name('index');
             Route::get('/create', [ClinicPatientController::class, 'create'])->name('create');
+            // Duplicate-check is a step of registering a patient and returns
+            // matching patients, so it needs the permission to register one.
             Route::post('/check-duplicate', [ClinicPatientController::class, 'checkDuplicate'])
-                ->middleware('throttle:clinic-patient-lookup')
+                ->middleware(['clinic_permission:patient.create', 'throttle:clinic-patient-lookup'])
                 ->name('check-duplicate');
             Route::post('/', [ClinicPatientController::class, 'store'])->name('store');
             Route::get('/{patient}', [Patient360Controller::class, 'show'])->name('show');
@@ -1170,7 +1171,7 @@ $clinicRoutes = function () {
                 ->name('documents.download');
         });
         Route::get('/search/patients', [ClinicPatientController::class, 'search'])
-            ->middleware(['clinic_entitled:patients', 'throttle:clinic-patient-lookup'])
+            ->middleware(['clinic_entitled:patients', 'clinic_permission:patient.search', 'throttle:clinic-patient-lookup'])
             ->name('clinic.patients.search');
 
         // ==========================================
@@ -1198,7 +1199,7 @@ $clinicRoutes = function () {
         // ==========================================
         Route::prefix('visits')->name('clinic.visits.')->group(function () {
             Route::get('/', [ClinicVisitController::class, 'index'])
-                ->middleware('clinic_permission:patient.view')
+                ->middleware('clinic_permission:visit.view')
                 ->name('index');
             Route::post('/', [ClinicVisitController::class, 'store'])
                 ->middleware('clinic_permission:visit.create')
@@ -1209,9 +1210,15 @@ $clinicRoutes = function () {
         // ONBOARDING WIZARD
         // ==========================================
         Route::prefix('onboarding')->name('clinic.onboarding.')->group(function () {
+            // Anyone in the clinic can see where setup stands; only a clinic
+            // admin can tick steps off or finish it.
             Route::get('/', [ClinicOnboardingController::class, 'index'])->name('index');
-            Route::post('/', [ClinicOnboardingController::class, 'update'])->name('update');
-            Route::post('/complete', [ClinicOnboardingController::class, 'complete'])->name('complete');
+            Route::post('/', [ClinicOnboardingController::class, 'update'])
+                ->middleware('clinic_permission:settings.manage')
+                ->name('update');
+            Route::post('/complete', [ClinicOnboardingController::class, 'complete'])
+                ->middleware('clinic_permission:settings.manage')
+                ->name('complete');
         });
 
         // ==========================================
@@ -1306,7 +1313,4 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/search', [GeoLocationController::class, 'search'])->name('search');
         Route::post('/validate', [GeoLocationController::class, 'validateLocation'])->name('validate');
     });
-
-    Route::get('/files/download', FileDownloadController::class)
-        ->name('core.files.download');
 });

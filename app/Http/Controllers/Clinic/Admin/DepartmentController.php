@@ -18,7 +18,9 @@ class DepartmentController extends Controller
      */
     public function index(): Response
     {
-        $departments = ClinicDepartment::latest()->get();
+        $departments = ClinicDepartment::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'key', 'is_active']);
 
         return Inertia::render('Clinic/Admin/Infrastructure/Departments', [
             'departments' => $departments,
@@ -33,7 +35,7 @@ class DepartmentController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'key' => [
-                'nullable',
+                'required',
                 'string',
                 'max:50',
                 Rule::unique('clinic_departments')->where(function ($query) use ($context) {
@@ -55,10 +57,12 @@ class DepartmentController extends Controller
      */
     public function update(Request $request, ClinicDepartment $department, ClinicContext $context): RedirectResponse
     {
+        abort_unless($department->clinic_id === $context->clinic()->id, 404);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'key' => [
-                'nullable',
+                'required',
                 'string',
                 'max:50',
                 Rule::unique('clinic_departments')->ignore($department->id)->where(function ($query) use ($context) {
@@ -76,8 +80,10 @@ class DepartmentController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ClinicDepartment $department): RedirectResponse
+    public function destroy(ClinicDepartment $department, ClinicContext $context): RedirectResponse
     {
+        abort_unless($department->clinic_id === $context->clinic()->id, 404);
+
         $department->delete();
 
         return redirect()->route('admin.departments.index')->with('success', 'Department deleted successfully.');

@@ -72,3 +72,22 @@ test('MasterAdminSeeder does not overwrite existing password', function () {
     // Verify password is NOT reset to seed default
     expect(Hash::check($newPassword, $user->password))->toBeTrue();
 });
+
+test('MasterAdminSeeder keeps an existing account as it is apart from the Master Admin role', function () {
+    $email = config('auth.master_admin.email', 'master@oralcares.in');
+    User::where('email', $email)->delete();
+
+    $existing = User::factory()->create([
+        'email' => $email,
+        'name' => 'Renamed Admin',
+        'password' => Hash::make('chosen-by-the-admin'),
+    ]);
+
+    $this->seed(MasterAdminSeeder::class);
+    $existing->refresh();
+
+    expect($existing->user_type)->toBe(UserType::MasterAdmin)
+        ->and($existing->name)->toBe('Renamed Admin')
+        ->and(Hash::check('chosen-by-the-admin', $existing->password))->toBeTrue()
+        ->and(Hash::check(config('auth.master_admin.password'), $existing->password))->toBeFalse();
+});

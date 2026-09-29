@@ -1,11 +1,19 @@
 <?php
 
 use App\ClinicRole;
+use App\Models\Branch;
+use App\Models\Clinic;
+use App\Models\QueueHistory;
 use App\QueueItemStatus;
 use App\Services\QueueStateMachine;
 use App\Services\Reception\DoctorQueue;
+use App\Services\Reception\DoctorRoster;
+use App\Services\Reception\PatientFlowConfigService;
+use App\Services\Reception\QueueBoard;
 use App\Services\Reception\ReceptionCheckIn;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 use Tests\Support\ReceptionFixture;
 
 beforeEach(function () {
@@ -83,4 +91,58 @@ test('now and next shows who is with me, who is next, and how many wait after', 
         ->and($card['next']['patient']['short_name'])->toBe('Next P.')
         ->and($card['waiting_after'])->toBe(1)
         ->and($card['called'])->toBeNull();
+});
+
+/**
+ * A DoctorQueue whose board returns a snapshot taken earlier: what a doctor's
+ * request read just before another doctor's request committed its claim.
+ */
+function doctorQueueReadingStaleBoard(Collection $snapshot): DoctorQueue
+{
+    $board = new class(app(DoctorRoster::class), app(PatientFlowConfigService::class)) extends QueueBoard
+    {
+        public Collection $snapshot;
+
+        public function todaysItems(Clinic $clinic, Branch $branch, CarbonImmutable $now): Collection
+        {
+            return $this->snapshot->map(fn ($item) => $item->replicate()->forceFill(['id' => $item->id])->setRelations($item->getRelations()));
+        }
+    };
+    $board->snapshot = $snapshot;
+
+    return new DoctorQueue($board, app(QueueStateMachine::class));
+}
+
+test('two doctors calling at the same moment cannot both claim the same walk-in', function () {
+    $walkIn = ($this->checkIn)('Shared', null);
+    $walkIn->update(['doctor_id' => null]);
+
+    // Both requests read the board while the walk-in is still unassigned…
+    $snapshot = app(QueueBoard::class)->todaysItems($this->f->clinic, $this->f->branch, CarbonImmutable::now('Asia/Kolkata'));
+
+    // …then the other doctor's request commits first.
+    app(DoctorQueue::class)->callNext($this->f->clinic, $this->f->branch, $this->f->doctorA);
+
+    expect(fn () => doctorQueueReadingStaleBoard($snapshot)->callNext($this->f->clinic, $this->f->branch, $this->me))
+        ->toThrow(ValidationException::class, 'Another doctor has just called the patient who was next.');
+
+    $walkIn->refresh();
+    expect($walkIn->doctor_id)->toBe($this->f->doctorA->id)
+        ->and($walkIn->status)->toBe(QueueItemStatus::Called)
+        ->and(QueueHistory::where('clinic_queue_item_id', $walkIn->id)->where('action', 'call')->count())->toBe(1);
+});
+
+test('a doctor who loses the race for a walk-in calls their own next patient instead', function () {
+    $walkIn = ($this->checkIn)('Shared', null);
+    $walkIn->update(['doctor_id' => null]);
+    $this->travel(1)->minute();
+    $mine = ($this->checkIn)('Mine');
+
+    $snapshot = app(QueueBoard::class)->todaysItems($this->f->clinic, $this->f->branch, CarbonImmutable::now('Asia/Kolkata'));
+    app(DoctorQueue::class)->callNext($this->f->clinic, $this->f->branch, $this->f->doctorA);
+
+    $called = doctorQueueReadingStaleBoard($snapshot)->callNext($this->f->clinic, $this->f->branch, $this->me);
+
+    expect($called->id)->toBe($mine->id)
+        ->and($walkIn->fresh()->doctor_id)->toBe($this->f->doctorA->id);
 });

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Collection;
 
 class ClinicMembership extends Model
 {
@@ -83,6 +84,31 @@ class ClinicMembership extends Model
         }
 
         return $this->assignedBranches()->where('branch_id', $branch->id)->exists();
+    }
+
+    /**
+     * Make this membership's branch access exactly the given branches, and
+     * record what was granted and revoked in the security trail.
+     *
+     * @param  Collection<int, Branch>  $branches
+     *
+     * @throws \InvalidArgumentException when a branch belongs to another clinic
+     */
+    public function syncAssignedBranches(Collection $branches, ?int $actorUserId = null): void
+    {
+        if ($branches->contains(fn (Branch $branch) => $branch->clinic_id !== $this->clinic_id)) {
+            throw new \InvalidArgumentException('Cannot assign a branch belonging to another clinic.');
+        }
+
+        $changes = $this->assignedBranches()->sync($branches->pluck('id')->all());
+
+        if ($changes['attached'] !== [] || $changes['detached'] !== []) {
+            app(SecurityAudit::class)->record('access.branches_changed', $this, [
+                'member_user_id' => $this->user_id,
+                'granted' => array_values($changes['attached']),
+                'revoked' => array_values($changes['detached']),
+            ], array_filter(['actor_user_id' => $actorUserId, 'clinic_id' => $this->clinic_id], fn ($value) => $value !== null));
+        }
     }
 
     /**

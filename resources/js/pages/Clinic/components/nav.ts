@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, CalendarDays, ReceiptIndianRupee, UserCog } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, UserCog } from 'lucide-react';
 
 /**
  * The clinic portal's single navigation registry.
@@ -42,6 +42,11 @@ export const CLINIC_HUE = {
   settings: '#6B7488',
 } as const;
 
+/*
+ * Every item here must have a live route and page. Billing is left out until
+ * the clinic billing screens exist (canonical model: `patient_billings`); a
+ * link to a route that doesn't exist is a 404 for the user.
+ */
 export const CLINIC_NAV_ITEMS: ClinicNavItem[] = [
   {
     id: 'dashboard',
@@ -67,15 +72,6 @@ export const CLINIC_NAV_ITEMS: ClinicNavItem[] = [
     hue: CLINIC_HUE.appointments,
     module: 'appointments',
     permission: 'appointment.view',
-  },
-  {
-    id: 'billing',
-    label: 'Billing',
-    href: '/clinic/billing',
-    icon: ReceiptIndianRupee,
-    hue: CLINIC_HUE.billing,
-    module: 'billing',
-    permission: 'billing.view',
   },
   {
     id: 'staff',

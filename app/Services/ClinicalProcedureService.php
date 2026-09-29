@@ -3,14 +3,14 @@
 namespace App\Services;
 
 use App\Models\ClinicalEncounter;
-use App\Models\ClinicalProcedure;
+use App\Models\PatientProcedure;
 use App\Models\PatientTimelineEvent;
 use App\Models\ProcedureMaster;
 use Illuminate\Validation\ValidationException;
 
 class ClinicalProcedureService
 {
-    public function recordProcedure(ClinicalEncounter $encounter, array $data): ClinicalProcedure
+    public function recordProcedure(ClinicalEncounter $encounter, array $data): PatientProcedure
     {
         if ($encounter->status === 'completed') {
             throw ValidationException::withMessages([
@@ -31,7 +31,7 @@ class ClinicalProcedureService
 
         $status = $data['status'] ?? 'planned';
 
-        $procedure = ClinicalProcedure::create([
+        $procedure = PatientProcedure::create([
             'organization_id' => $encounter->organization_id,
             'encounter_id' => $encounter->id,
             'patient_id' => $encounter->patient_id,
@@ -61,7 +61,7 @@ class ClinicalProcedureService
         return $procedure;
     }
 
-    public function updateStatus(ClinicalProcedure $procedure, string $status): ClinicalProcedure
+    public function updateStatus(PatientProcedure $procedure, string $status): PatientProcedure
     {
         $updates = ['status' => $status];
 

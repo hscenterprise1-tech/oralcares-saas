@@ -3,41 +3,35 @@
 namespace App\Http\Middleware;
 
 use App\Models\OnboardingProgress;
+use App\Services\ClinicContext;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class EnsureOnboardingCompleted
 {
+    public function __construct(protected ClinicContext $clinicContext) {}
+
     /**
-     * Handle an incoming request.
-     *
-     * @return mixed
+     * Keep a clinic with unfinished onboarding on its onboarding page, and send
+     * everyone else away from it. Clinics with no onboarding record (provisioned
+     * before onboarding existed) pass straight through.
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
-        $user = Auth::user();
+        $user = $request->user();
 
         if (! $user) {
             return $next($request);
         }
 
-        if ($user->organization_id) {
-            $progress = OnboardingProgress::where('organization_id', $user->organization_id)->first();
+        $progress = OnboardingProgress::forClinicUser($user, $this->clinicContext->clinic());
+        $onOnboarding = $request->routeIs('clinic.onboarding.*');
 
-            if ($progress && $progress->status !== 'completed') {
-                if ($request->routeIs('clinic.onboarding.*')) {
-                    return $next($request);
-                }
-
-                return redirect()->route('clinic.onboarding.index');
-            } else {
-                if ($request->routeIs('clinic.onboarding.*')) {
-                    return redirect()->route('dashboard');
-                }
-            }
+        if ($progress && $progress->status !== 'completed') {
+            return $onOnboarding ? $next($request) : redirect()->route('clinic.onboarding.index');
         }
 
-        return $next($request);
+        return $onOnboarding ? redirect()->route('dashboard') : $next($request);
     }
 }

@@ -46,9 +46,24 @@ class DoctorQueue
         ];
     }
 
+    /**
+     * Call this doctor's next waiting patient.
+     *
+     * Walk-ins with no doctor are shared by every doctor at the branch, so two
+     * doctors can reach for the same one at once. The claim is therefore made
+     * on a locked row: the item is re-read under `lockForUpdate`, and a doctor
+     * only takes it if it is still waiting and still unassigned (or already
+     * theirs). A doctor who loses the race moves on to their next patient
+     * and never overwrites the winner's `doctor_id`.
+     *
+     * The doctor's own row is locked first, so two taps from the same doctor
+     * run one after the other and cannot call two patients.
+     */
     public function callNext(Clinic $clinic, Branch $branch, ClinicEmployee $doctor): ClinicQueueItem
     {
         return DB::transaction(function () use ($clinic, $branch, $doctor) {
+            ClinicEmployee::withoutGlobalScopes()->whereKey($doctor->id)->lockForUpdate()->first();
+
             $items = $this->mine($clinic, $branch, $doctor);
 
             if ($current = $items->firstWhere('status', QueueItemStatus::InConsultation)) {
@@ -59,15 +74,45 @@ class DoctorQueue
                 throw ValidationException::withMessages(['status' => "{$called->patientVisit?->patient?->short_name} has been called and not seen yet. Take them in, call again, or mark them not present."]);
             }
 
-            $next = $items->firstWhere('status', QueueItemStatus::Waiting)
-                ?? throw ValidationException::withMessages(['status' => 'No one is waiting for you.']);
+            $candidates = $items->where('status', QueueItemStatus::Waiting)->values();
 
-            if ($next->doctor_id === null) {
-                $next->update(['doctor_id' => $doctor->id]);
+            if ($candidates->isEmpty()) {
+                throw ValidationException::withMessages(['status' => 'No one is waiting for you.']);
             }
 
-            return $this->machine->call($next, $doctor);
+            foreach ($candidates as $candidate) {
+                $claimed = $this->claim($candidate, $doctor);
+
+                if ($claimed) {
+                    return $this->machine->call($claimed, $doctor);
+                }
+            }
+
+            throw ValidationException::withMessages(['status' => 'Another doctor has just called the patient who was next. No one else is waiting for you.']);
         });
+    }
+
+    /**
+     * Lock the item and take it for this doctor, or return null when it has
+     * been called, cancelled or taken by another doctor since it was read.
+     */
+    private function claim(ClinicQueueItem $candidate, ClinicEmployee $doctor): ?ClinicQueueItem
+    {
+        $item = ClinicQueueItem::query()->lockForUpdate()->find($candidate->id);
+
+        if (! $item || $item->status !== QueueItemStatus::Waiting) {
+            return null;
+        }
+
+        if ($item->doctor_id !== null && $item->doctor_id !== $doctor->id) {
+            return null;
+        }
+
+        if ($item->doctor_id === null) {
+            $item->update(['doctor_id' => $doctor->id]);
+        }
+
+        return $item;
     }
 
     public function completeAndCallNext(Clinic $clinic, Branch $branch, ClinicEmployee $doctor, ClinicQueueItem $item): ?ClinicQueueItem

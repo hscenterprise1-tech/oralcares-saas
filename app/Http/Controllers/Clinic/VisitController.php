@@ -38,7 +38,8 @@ class VisitController extends Controller
             ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
             ->when($date, fn ($q) => $q->whereDate('visit_date', $date))
             ->with(['patient', 'doctor', 'branch', 'caseNumber', 'queueItem'])
-            ->orderBy('visit_date', 'desc');
+            ->orderBy('visit_date', 'desc')
+            ->orderBy('id', 'desc');
 
         $visits = $query->paginate(20)->through(function (PatientVisit $visit) {
             return [

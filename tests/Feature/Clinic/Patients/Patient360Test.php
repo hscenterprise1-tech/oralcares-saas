@@ -16,7 +16,6 @@ use App\Services\ClinicContext;
 use App\UserType;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\URL;
 
 beforeEach(function () {
     $this->clinic = Clinic::factory()->create(['name' => 'Care Multispecialty', 'slug' => 'care-multi']);
@@ -241,7 +240,7 @@ test('patient 360 clinical endpoint enforces backend permission gate', function 
     $response->assertStatus(403);
 });
 
-test('patient 360 document download url is signed and streamable via file download controller', function () {
+test('a patient document downloads only through its authorized route, never a generic signed link', function () {
     Storage::fake('private');
     $filePath = "clinic_{$this->clinic->id}/patients/{$this->patient->id}/documents/diagnostic.pdf";
     Storage::disk('private')->put($filePath, 'fake pdf binary content');
@@ -254,14 +253,18 @@ test('patient 360 document download url is signed and streamable via file downlo
         'file_path' => $filePath,
         'file_size_bytes' => 1024,
         'document_type' => 'medical_report',
+        'scan_status' => AttachedDocument::SCAN_CLEAN,
     ]);
 
-    $downloadUrl = URL::temporarySignedRoute(
-        'core.files.download',
-        now()->addMinutes(15),
-        ['path' => base64_encode($doc->file_path), 'disk' => 'private']
-    );
+    $this->actingAs($this->user)
+        ->withSession([
+            ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $this->membership->id,
+            ClinicContext::SESSION_BRANCH_ID => $this->branch->id,
+        ])
+        ->get(route('clinic.patients.documents.download', [$this->patient->id, $doc->id]))
+        ->assertOk();
 
-    $response = $this->actingAs($this->user)->get($downloadUrl);
-    $response->assertStatus(200);
+    $this->actingAs($this->user)
+        ->get('/files/download?path='.base64_encode($doc->file_path).'&disk=private')
+        ->assertNotFound();
 });
