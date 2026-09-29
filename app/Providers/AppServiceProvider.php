@@ -33,6 +33,7 @@ use App\Observers\Marketing\MarketingWhatsAppConversationObserver;
 use App\Observers\OrganizationObserver;
 use App\Observers\PaymentObserver;
 use App\Observers\Security\ClinicalAuditObserver;
+use App\Observers\Security\StaffIdentityAuditObserver;
 use App\Observers\TaskObserver;
 use App\Policies\CompanyDepartmentPolicy;
 use App\Policies\CompanyTeamPolicy;
@@ -247,6 +248,10 @@ class AppServiceProvider extends ServiceProvider
         // Clinical and financial record changes into the security trail.
         foreach (array_keys(ClinicalAuditObserver::SUBJECTS) as $auditedModel) {
             $auditedModel::observe(ClinicalAuditObserver::class);
+        }
+
+        foreach (array_keys(StaffIdentityAuditObserver::SUBJECTS) as $staffModel) {
+            $staffModel::observe(StaffIdentityAuditObserver::class);
         }
 
         /*

@@ -2,16 +2,20 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
+use App\ClinicPermission;
 use App\ClinicRole;
 use App\EmploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicMembership;
+use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +34,8 @@ class EmployeeController extends Controller
             }])
             ->latest()
             ->get();
+
+        $this->showCanonicalRoles($employees, $context->clinic()->id);
 
         return Inertia::render('Clinic/Admin/Employees/Index', [
             'employees' => $employees,
@@ -62,13 +68,13 @@ class EmployeeController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'status' => ['required', Rule::enum(EmploymentStatus::class)],
             'branches' => ['array'],
             'branches.*' => [Rule::exists('branches', 'id')->where('clinic_id', $context->clinic()->id)],
             'roles' => ['array'],
-            'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')],
+            'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')->whereIn('name', ClinicRole::values())],
         ]);
 
         $employee = ClinicEmployee::create([
@@ -84,10 +90,70 @@ class EmployeeController extends Controller
         }
 
         if (! empty($validated['roles'])) {
+            abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not assign staff roles.');
+
+            // A new staff record has no login, so these are the roles to
+            // grant when their invitation is accepted.
             $employee->roles()->sync($validated['roles']);
         }
 
         return redirect()->route('admin.employees.index')->with('success', 'Employee created successfully.');
+    }
+
+    /**
+     * The role ids that count for this staff member now: their Spatie roles
+     * on this clinic's branches once they have a login, else the roles held
+     * for their invitation.
+     *
+     * @return Collection<int, int>
+     */
+    private function currentRoleIds(ClinicEmployee $employee): Collection
+    {
+        if (! $employee->user_id) {
+            return $employee->roles()->pluck(config('permission.table_names.roles').'.id')->map(fn ($id) => (int) $id);
+        }
+
+        return $this->spatieRoleIdsByUser([$employee->user_id], $employee->clinic_id)->get($employee->user_id, collect());
+    }
+
+    /**
+     * Replace the `roles` shown for staff who have a login with their real
+     * Spatie roles, so the page never shows the stale invitation copy.
+     *
+     * @param  Collection<int, ClinicEmployee>  $employees
+     */
+    private function showCanonicalRoles(Collection $employees, int $clinicId): void
+    {
+        $linked = $employees->filter(fn (ClinicEmployee $employee) => $employee->user_id !== null);
+
+        if ($linked->isEmpty()) {
+            return;
+        }
+
+        $roleIdsByUser = $this->spatieRoleIdsByUser($linked->pluck('user_id')->all(), $clinicId);
+        $roles = Role::whereIn('id', $roleIdsByUser->flatten()->unique())->get()->keyBy('id');
+
+        foreach ($linked as $employee) {
+            $employee->setRelation('roles', $roleIdsByUser->get($employee->user_id, collect())->map(fn (int $id) => $roles->get($id))->filter()->values());
+        }
+    }
+
+    /**
+     * One query for the Spatie role ids each user holds on any branch of the
+     * clinic.
+     *
+     * @param  array<int, int>  $userIds
+     * @return Collection<int, Collection<int, int>>
+     */
+    private function spatieRoleIdsByUser(array $userIds, int $clinicId): Collection
+    {
+        return DB::table(config('permission.table_names.model_has_roles'))
+            ->where('model_type', (new User)->getMorphClass())
+            ->whereIn('model_id', $userIds)
+            ->whereIn('branch_id', Branch::withoutGlobalScopes()->where('clinic_id', $clinicId)->select('id'))
+            ->get(['model_id', 'role_id'])
+            ->groupBy('model_id')
+            ->map(fn (Collection $rows) => $rows->pluck('role_id')->map(fn ($id) => (int) $id)->unique()->values());
     }
 
     /**
@@ -105,6 +171,8 @@ class EmployeeController extends Controller
         $employee->load(['branches', 'roles', 'invitations' => function ($query) {
             $query->whereNull('accepted_at')->whereNull('revoked_at')->where('expires_at', '>', now())->latest();
         }]);
+
+        $this->showCanonicalRoles(collect([$employee]), $context->clinic()->id);
 
         return Inertia::render('Clinic/Admin/Employees/Edit', [
             'employee' => $employee,
@@ -129,13 +197,13 @@ class EmployeeController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'status' => ['required', Rule::enum(EmploymentStatus::class)],
             'branches' => ['array'],
             'branches.*' => [Rule::exists('branches', 'id')->where('clinic_id', $context->clinic()->id)],
             'roles' => ['array'],
-            'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')],
+            'roles.*' => [Rule::exists(config('permission.table_names.roles'), 'id')->whereIn('name', ClinicRole::values())],
         ]);
 
         $employee->update([
@@ -162,14 +230,25 @@ class EmployeeController extends Controller
         }
 
         if (isset($validated['roles'])) {
-            $employee->roles()->sync($validated['roles']);
+            $requested = collect($validated['roles'])->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $current = $this->currentRoleIds($employee)->sort()->values()->all();
 
-            // If there's an associated User, sync their Spatie roles too —
-            // scoped to each branch the employee can access, not whichever
-            // branch happens to be active in the acting admin's own session.
+            // Changing what someone may do is its own permission; managing
+            // staff details is not enough to hand out roles.
+            if ($requested !== $current) {
+                abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not change staff roles.');
+            }
+
             if ($employee->user_id) {
-                $roleNames = Role::whereIn('id', $validated['roles'])->pluck('name')->toArray();
+                // Linked staff: Spatie roles, per branch, are the only roles
+                // that count. They are set on each branch the person works at,
+                // never on whichever branch the acting admin has open.
+                $roleNames = Role::whereIn('id', $requested)->pluck('name')->toArray();
                 $roleAssignments->syncRoles($employee->user, $roleNames, $employee->branches()->get());
+            } else {
+                // No login yet: keep the roles to grant when their invitation
+                // is accepted. Nothing reads these for access checks.
+                $employee->roles()->sync($requested);
             }
         }
 

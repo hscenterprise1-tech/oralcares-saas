@@ -8,16 +8,17 @@ use App\Models\Appointment;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicOperatingHour;
 use App\Models\ClinicRoom;
-use App\Models\DoctorAvailability;
 use App\Models\Leave;
 use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
 use App\Services\AppointmentConflictService;
 use App\Services\ClinicContext;
 use App\Services\Reception\PatientFlowConfigService;
+use App\Services\Staff\PractitionerScheduleService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,11 +39,12 @@ class AppointmentController extends Controller
     public function index(Request $request): Response
     {
         $clinic = $this->clinicContext->clinic();
-        $branch = $this->clinicContext->branch();
 
         if (! $clinic) {
             abort(403, 'No active clinic selected.');
         }
+
+        $branch = $this->clinicContext->branchScopeOrAbort();
 
         $date = $request->input('date', today()->format('Y-m-d'));
         $carbonDate = Carbon::parse($date);
@@ -137,37 +139,16 @@ class AppointmentController extends Controller
             ->pluck('employee_id')
             ->all();
 
-        // Recurring split-shift windows for the visible doctors, for this
-        // day of week. `DoctorAvailability` is keyed by `doctor_profiles.id`
-        // (via `practitionerProfile`), not `clinic_employees.id` — resolved
-        // per practitioner below, same FK direction `ClinicalEncounter.
-        // provider_id` already uses elsewhere in this codebase.
-        $availabilityDayOfWeek = $carbonDate->dayOfWeek === 0 ? 7 : $carbonDate->dayOfWeek;
-        $employeesWithProfiles = ClinicEmployee::withoutGlobalScopes()
-            ->whereIn('id', $visibleIds)
-            ->with('practitionerProfile')
-            ->get(['id']);
-
-        $availabilityByPractitioner = [];
-        foreach ($employeesWithProfiles as $employee) {
-            $doctorProfileId = $employee->practitionerProfile?->id;
-            if (! $doctorProfileId) {
-                continue;
-            }
-
-            $rows = DoctorAvailability::where('doctor_profile_id', $doctorProfileId)
-                ->where('day_of_week', $availabilityDayOfWeek)
-                ->orderBy('start_time')
-                ->get(['start_time', 'end_time', 'is_available']);
-
-            if ($rows->isNotEmpty()) {
-                $availabilityByPractitioner[$employee->id] = $rows->map(fn ($row) => [
-                    'start_time' => $row->start_time,
-                    'end_time' => $row->end_time,
-                    'is_available' => $row->is_available,
-                ])->all();
-            }
-        }
+        // Recurring split-shift windows for the visible doctors on this day,
+        // at this branch, in one query (`practitioner_schedules`).
+        $availabilityByPractitioner = app(PractitionerScheduleService::class)
+            ->windowsOn($clinic, $visibleIds, $carbonDate, $branch)
+            ->map(fn ($windows) => $windows->map(fn ($row) => [
+                'start_time' => $row->start_time,
+                'end_time' => $row->end_time,
+                'is_available' => $row->is_available,
+            ])->values()->all())
+            ->all();
 
         $operatingHour = $branch
             ? ClinicOperatingHour::where('branch_id', $branch->id)->where('day_of_week', $carbonDate->dayOfWeek)->first()
@@ -224,8 +205,10 @@ class AppointmentController extends Controller
 
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
-            'practitioner_id' => ['required', 'integer', 'exists:clinic_employees,id'],
-            'room_id' => ['nullable', 'integer', 'exists:clinic_rooms,id'],
+            // Only this clinic's staff, and only rooms at the branch the
+            // appointment is booked into.
+            'practitioner_id' => ['required', 'integer', Rule::exists('clinic_employees', 'id')->where('clinic_id', $clinic->id)],
+            'room_id' => ['nullable', 'integer', Rule::exists('clinic_rooms', 'id')->where('branch_id', $branch->id)],
             'scheduled_at' => ['required', 'date', 'after_or_equal:now - 1 hour'],
             'duration_minutes' => ['nullable', 'integer', 'min:5', 'max:240'],
             'appointment_type' => ['nullable', 'string', 'in:consultation,follow_up,procedure,emergency,general'],

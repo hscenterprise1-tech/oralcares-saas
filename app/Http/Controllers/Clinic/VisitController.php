@@ -10,6 +10,7 @@ use App\Services\ClinicContext;
 use App\VisitRegistrationType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,12 +26,12 @@ class VisitController extends Controller
     public function index(Request $request): Response
     {
         $clinic = $this->clinicContext->clinic();
-        $branch = $this->clinicContext->branch();
 
         if (! $clinic) {
             abort(403, 'No active clinic selected.');
         }
 
+        $branch = $this->clinicContext->branchScopeOrAbort();
         $date = $request->input('date');
 
         $query = PatientVisit::withoutGlobalScopes()
@@ -71,15 +72,16 @@ class VisitController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $clinic = $this->clinicContext->clinic();
-        $branch = $this->clinicContext->branch();
 
         if (! $clinic) {
             abort(403, 'No active clinic selected.');
         }
 
+        $branch = $this->clinicContext->requireBranch();
+
         $validated = $request->validate([
             'patient_id' => ['required', 'integer', 'exists:patients,id'],
-            'doctor_id' => ['nullable', 'integer', 'exists:clinic_employees,id'],
+            'doctor_id' => ['nullable', 'integer', Rule::exists('clinic_employees', 'id')->where('clinic_id', $clinic->id)],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -89,7 +91,7 @@ class VisitController extends Controller
 
         $visit = PatientVisit::create([
             'clinic_id' => $clinic->id,
-            'branch_id' => $branch?->id ?? $clinic->branches()->first()?->id ?? 1,
+            'branch_id' => $branch->id,
             'patient_id' => $patient->id,
             'doctor_id' => $validated['doctor_id'] ?? null,
             'registration_type' => VisitRegistrationType::Repeat->value,

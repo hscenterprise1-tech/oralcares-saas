@@ -25,6 +25,8 @@ use Inertia\Inertia;
 
 class EmployeeInvitationController extends Controller
 {
+    public const EXISTING_LOGIN_MESSAGE = 'This email already has an OralCares login. Ask your clinic admin to contact OralCares support to add you to this clinic.';
+
     /**
      * Store a newly created invitation and send an email.
      */
@@ -132,6 +134,16 @@ class EmployeeInvitationController extends Controller
                 'password' => ['required', 'confirmed', Password::defaults()],
             ]);
 
+            // An email that already has an OralCares login (for example
+            // someone who works at another clinic) can't be joined here by
+            // setting a new password: that would either fail on the unique
+            // email or let the invite link take over the existing account.
+            // Joining an existing login needs that person to sign in first,
+            // which this flow does not do yet.
+            if (User::where('email', $invitation->email)->exists()) {
+                return back()->with('error', self::EXISTING_LOGIN_MESSAGE);
+            }
+
             // The real gate: this is the moment a seat actually gets
             // consumed (ClinicMembership::create() below), not when the
             // invite was sent. The invitee can't add seats or call an
@@ -164,16 +176,11 @@ class EmployeeInvitationController extends Controller
                 'has_all_branches_access' => false,
             ]);
 
-            // Sync branches to membership from the employee profile
+            // Branch access = the branches on the staff record, through the
+            // same audited, same-clinic-only path every other change uses.
             $branches = $invitation->employee->branches;
             if ($branches->isNotEmpty()) {
-                $membership->assignedBranches()->sync($branches->pluck('id'));
-
-                app(SecurityAudit::class)->record('access.branches_changed', $membership, [
-                    'member_user_id' => $user->id,
-                    'granted' => $branches->pluck('id')->values()->all(),
-                    'via' => 'invitation',
-                ], ['actor_user_id' => $user->id, 'clinic_id' => $invitation->clinic_id]);
+                $membership->syncAssignedBranches($branches, $user->id);
             }
 
             // Sync roles to User from Employee profile — scoped to each

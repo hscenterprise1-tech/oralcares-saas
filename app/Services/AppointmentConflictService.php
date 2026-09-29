@@ -5,10 +5,10 @@ namespace App\Services;
 use App\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Branch;
-use App\Models\ClinicEmployee;
 use App\Models\ClinicOperatingHour;
-use App\Models\DoctorAvailability;
 use App\Models\Leave;
+use App\Models\PractitionerSchedule;
+use App\Services\Staff\PractitionerScheduleService;
 use Carbon\Carbon;
 
 /**
@@ -23,6 +23,8 @@ use Carbon\Carbon;
  */
 class AppointmentConflictService
 {
+    public function __construct(protected PractitionerScheduleService $schedules) {}
+
     /**
      * Returns a human-readable reason the slot can't be booked, or null if
      * it's free. Checked in cheapest-first order so a closed clinic or a
@@ -45,7 +47,7 @@ class AppointmentConflictService
             return 'This doctor is on approved leave that day.';
         }
 
-        if ($reason = $this->checkDoctorAvailability($practitionerId, $start, $end)) {
+        if ($reason = $this->checkDoctorAvailability($branch, $practitionerId, $start, $end)) {
             return $reason;
         }
 
@@ -90,33 +92,23 @@ class AppointmentConflictService
     }
 
     /**
-     * Only enforced when the doctor actually has availability rows for that
+     * Checked against the doctor's `practitioner_schedules` windows at the
+     * booking's branch. Only enforced when the doctor actually has windows for that
      * day of week — a doctor with no schedule configured yet is treated as
      * "not yet set up", not "always unavailable".
      */
-    private function checkDoctorAvailability(int $practitionerId, Carbon $start, Carbon $end): ?string
+    private function checkDoctorAvailability(Branch $branch, int $practitionerId, Carbon $start, Carbon $end): ?string
     {
-        $employee = ClinicEmployee::withoutGlobalScopes()->with('practitionerProfile')->find($practitionerId);
-        $doctorProfileId = $employee?->practitionerProfile?->id;
-
-        if (! $doctorProfileId) {
-            return null;
-        }
-
-        // `DoctorAvailability.day_of_week` is 1=Monday..7=Sunday — different
-        // from Carbon's 0=Sunday..6=Saturday used everywhere else here.
-        $availabilityDayOfWeek = $start->dayOfWeek === 0 ? 7 : $start->dayOfWeek;
-
-        $rowsForDay = DoctorAvailability::where('doctor_profile_id', $doctorProfileId)
-            ->where('day_of_week', $availabilityDayOfWeek)
-            ->get();
+        $rowsForDay = $this->schedules
+            ->windowsOn($branch->clinic, [$practitionerId], $start, $branch)
+            ->get($practitionerId, collect());
 
         if ($rowsForDay->isEmpty()) {
             return null;
         }
 
         $fitsAnAvailableWindow = $rowsForDay->contains(
-            fn (DoctorAvailability $row) => $row->is_available
+            fn (PractitionerSchedule $row) => $row->is_available
                 && $start->format('H:i:s') >= $row->start_time
                 && $end->format('H:i:s') <= $row->end_time
         );

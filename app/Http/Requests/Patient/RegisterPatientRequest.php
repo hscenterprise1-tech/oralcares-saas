@@ -5,6 +5,7 @@ namespace App\Http\Requests\Patient;
 use App\Services\ClinicContext;
 use App\Services\PatientFieldConfigService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class RegisterPatientRequest extends FormRequest
 {
@@ -63,8 +64,8 @@ class RegisterPatientRequest extends FormRequest
             'medical_alerts.*' => ['string'],
 
             // Visit options
-            'department_id' => ['nullable', 'integer', 'exists:clinic_departments,id'],
-            'doctor_id' => [$required('doctor_id'), 'integer', 'exists:clinic_employees,id'],
+            'department_id' => ['nullable', 'integer', Rule::exists('clinic_departments', 'id')->where('clinic_id', $clinic?->id)],
+            'doctor_id' => [$required('doctor_id'), 'integer', Rule::exists('clinic_employees', 'id')->where('clinic_id', $clinic?->id)],
             'fee_collected' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];

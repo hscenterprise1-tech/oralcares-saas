@@ -230,9 +230,9 @@ class ReceptionController extends Controller
     private function context(): array
     {
         $clinic = $this->clinicContext->clinic() ?? abort(403, 'No active clinic selected.');
-        $branch = $this->clinicContext->branch()
-            ?? Branch::withoutGlobalScopes()->where('clinic_id', $clinic->id)->orderByDesc('is_main')->orderBy('id')->first()
-            ?? abort(404, 'This clinic has no branch yet.');
+        // Only a branch this member may open: never the clinic's main branch
+        // on behalf of someone with no branch access.
+        $branch = $this->clinicContext->requireBranch();
 
         return [$clinic, $branch];
     }

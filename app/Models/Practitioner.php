@@ -4,11 +4,13 @@ namespace App\Models;
 
 use App\Traits\Auditable;
 use App\Traits\ClinicScoped;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 /**
  * Generic healthcare practitioner / provider.
@@ -16,17 +18,55 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A Practitioner is a healthcare professional (Dentist, Physiotherapist,
  * General Physician, Orthopedic, Dermatologist, etc.) associated with a clinic.
  *
- * Decoupled Architecture:
- * - A Practitioner links to a `ClinicEmployee` record.
- * - A Practitioner MAY or MAY NOT have a login (`user_id` on `ClinicEmployee` is nullable).
- * - Reception/Staff can enter appointments & clinical records on behalf of any Practitioner.
- * - The actual operator who entered data is separately recorded via `created_by` / `Auditable`.
+ * This is the one practitioner profile model (table `doctor_profiles`).
+ * The staff chain is User → ClinicMembership → ClinicEmployee → this profile:
+ * - Clinical identity is the `ClinicEmployee`; every appointment, visit,
+ *   queue item and encounter points at `clinic_employees.id`. This profile
+ *   only adds what a clinician has on top (registration, specialty, fee).
+ * - One profile per staff record, in the staff record's own clinic.
+ * - The staff record MAY or MAY NOT have a login (`clinic_employees.user_id`).
+ * - Specialties are data (`specialty`, `doctor_specialties`), so a new
+ *   discipline needs no new model. `DoctorProfile` is a deprecated alias.
  */
 class Practitioner extends Model
 {
     use Auditable, ClinicScoped, HasFactory;
 
     protected $table = 'doctor_profiles';
+
+    /**
+     * The profile always lives in its staff record's clinic: the clinic is
+     * taken from the staff record when not given, and a mismatch is refused.
+     */
+    protected function performInsert(Builder $query)
+    {
+        $this->assertOwnClinic();
+
+        return parent::performInsert($query);
+    }
+
+    protected function performUpdate(Builder $query)
+    {
+        $this->assertOwnClinic();
+
+        return parent::performUpdate($query);
+    }
+
+    private function assertOwnClinic(): void
+    {
+        $employeeClinic = ClinicEmployee::withoutGlobalScopes()->whereKey($this->clinic_employee_id)->value('clinic_id');
+
+        if (! $employeeClinic) {
+            throw new LogicException('A practitioner profile needs a staff record.');
+        }
+
+        $this->clinic_id ??= $employeeClinic;
+        $this->organization_id ??= Clinic::query()->whereKey($employeeClinic)->value('organization_id');
+
+        if ((int) $this->clinic_id !== (int) $employeeClinic) {
+            throw new LogicException('A practitioner profile must belong to its staff record\'s clinic.');
+        }
+    }
 
     protected $fillable = [
         'clinic_id',
@@ -109,9 +149,20 @@ class Practitioner extends Model
     /**
      * Availabilities / scheduling slots.
      */
+    /**
+     * @deprecated Legacy weekly windows keyed by profile. Use `schedules()`.
+     */
     public function availabilities(): HasMany
     {
         return $this->hasMany(DoctorAvailability::class, 'doctor_profile_id');
+    }
+
+    /**
+     * Weekly windows at each branch (`practitioner_schedules`).
+     */
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(PractitionerSchedule::class, 'clinic_employee_id', 'clinic_employee_id');
     }
 
     /**

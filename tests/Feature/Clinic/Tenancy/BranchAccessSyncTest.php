@@ -47,11 +47,10 @@ beforeEach(function () {
     ]);
 });
 
-it('gives a member with no branch access no branch, and refuses a switch into one', function () {
+it('gives a member with no branch access no branch, no branch figures, and refuses a switch into one', function () {
     $session = [ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $this->staffMembership->id];
 
-    $this->actingAs($this->staffUser)->withSession($session)->get(route('clinic.dashboard'))
-        ->assertInertia(fn ($page) => $page->where('clinic.accessible_branches', []));
+    $this->actingAs($this->staffUser)->withSession($session)->get(route('clinic.dashboard'))->assertForbidden();
 
     $this->actingAs($this->staffUser)->withSession($session)
         ->post(route('clinic.branches.switch'), ['branch_id' => $this->main->id])

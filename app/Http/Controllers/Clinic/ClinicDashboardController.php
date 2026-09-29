@@ -24,7 +24,8 @@ class ClinicDashboardController extends Controller
     public function index(Request $request): Response
     {
         $clinic = $this->clinicContext->clinic();
-        $branch = $this->clinicContext->branch();
+        // A member without branch access sees no branch's figures.
+        $branch = $this->clinicContext->branchScopeOrAbort();
 
         $branchId = $branch?->id;
 

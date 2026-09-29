@@ -4,8 +4,8 @@ use App\AppointmentStatus;
 use App\Models\ClinicQueue;
 use App\Models\ClinicQueueItem;
 use App\Models\ClinicRoom;
-use App\Models\DoctorAvailability;
 use App\Models\Leave;
+use App\Models\PractitionerSchedule;
 use App\QueueItemStatus;
 use App\Services\QueueStateMachine;
 use App\Services\Reception\QueueBoard;
@@ -63,7 +63,7 @@ test('a walk-in without an available own doctor goes to the working doctor with 
 });
 
 test('a doctor outside their shift is not picked for a walk-in', function () {
-    DoctorAvailability::forceCreate(['organization_id' => $this->f->clinic->organization_id, 'branch_id' => $this->f->branch->id, 'doctor_profile_id' => $this->f->doctorA->practitionerProfile->id,
+    PractitionerSchedule::create(['branch_id' => $this->f->branch->id, 'clinic_employee_id' => $this->f->doctorA->id,
         'day_of_week' => 1, 'start_time' => '17:00:00', 'end_time' => '21:00:00', 'is_available' => true]);
 
     $item = $this->checkIn->checkIn($this->f->clinic, $this->f->branch, $this->f->patient());

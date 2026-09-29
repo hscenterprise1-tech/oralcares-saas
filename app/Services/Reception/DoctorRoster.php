@@ -5,8 +5,9 @@ namespace App\Services\Reception;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicEmployee;
-use App\Models\DoctorAvailability;
 use App\Models\Leave;
+use App\Models\PractitionerSchedule;
+use App\Services\Staff\PractitionerScheduleService;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -14,7 +15,7 @@ use Illuminate\Support\Collection;
 /**
  * Who can see patients at a branch right now, from real data only:
  * active employees with a practitioner profile, approved `Leave` for today,
- * and today's `DoctorAvailability` windows (the same sources
+ * and today's `PractitionerSchedule` windows at this branch (the same sources
  * `AppointmentConflictService` enforces bookings against).
  *
  * `shift` is one of on_shift | off_shift | not_set | on_leave. "not_set"
@@ -23,7 +24,10 @@ use Illuminate\Support\Collection;
  */
 class DoctorRoster
 {
-    public function __construct(protected PatientFlowConfigService $flowConfig) {}
+    public function __construct(
+        protected PatientFlowConfigService $flowConfig,
+        protected PractitionerScheduleService $schedules,
+    ) {}
 
     /**
      * @return Collection<int, array{employee: ClinicEmployee, shift: string, shift_label: string, room: string|null}>
@@ -50,18 +54,12 @@ class DoctorRoster
             ->pluck('employee_id')
             ->all();
 
-        // `DoctorAvailability.day_of_week` is 1=Monday..7=Sunday.
-        $windows = DoctorAvailability::whereIn('doctor_profile_id', $employees->pluck('practitionerProfile.id')->filter())
-            ->where('day_of_week', $now->dayOfWeekIso)
-            ->where(fn ($q) => $q->whereNull('branch_id')->orWhere('branch_id', $branch->id))
-            ->orderBy('start_time')
-            ->get()
-            ->groupBy('doctor_profile_id');
+        $windows = $this->schedules->windowsOn($clinic, $employees->pluck('id'), $now, $branch);
 
         return $employees->map(function (ClinicEmployee $employee) use ($onLeave, $windows, $now, $roomsEnabled, $branch) {
             [$shift, $label] = in_array($employee->id, $onLeave, true)
                 ? ['on_leave', 'On leave today']
-                : $this->shiftAt($windows->get($employee->practitionerProfile?->id, collect()), $now);
+                : $this->shiftAt($windows->get($employee->id, collect()), $now);
 
             $room = $roomsEnabled
                 ? $employee->rooms->first(fn ($room) => $room->is_active && (int) $room->branch_id === $branch->id)?->name
@@ -72,7 +70,7 @@ class DoctorRoster
     }
 
     /**
-     * @param  Collection<int, DoctorAvailability>  $windows
+     * @param  Collection<int, PractitionerSchedule>  $windows
      * @return array{0: string, 1: string}
      */
     private function shiftAt(Collection $windows, CarbonImmutable $now): array
@@ -82,14 +80,14 @@ class DoctorRoster
         }
 
         $time = $now->format('H:i:s');
-        $available = $windows->filter(fn (DoctorAvailability $window) => $window->is_available);
+        $available = $windows->filter(fn (PractitionerSchedule $window) => $window->is_available);
 
-        $current = $available->first(fn (DoctorAvailability $window) => $time >= $window->start_time && $time < $window->end_time);
+        $current = $available->first(fn (PractitionerSchedule $window) => $time >= $window->start_time && $time < $window->end_time);
         if ($current) {
             return ['on_shift', 'Until '.substr($current->end_time, 0, 5)];
         }
 
-        $next = $available->first(fn (DoctorAvailability $window) => $window->start_time > $time);
+        $next = $available->first(fn (PractitionerSchedule $window) => $window->start_time > $time);
 
         return ['off_shift', $next ? 'Back at '.substr($next->start_time, 0, 5) : 'Done for today'];
     }

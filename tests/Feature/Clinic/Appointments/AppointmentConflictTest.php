@@ -9,10 +9,10 @@ use App\Models\Clinic;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicMembership;
 use App\Models\ClinicOperatingHour;
-use App\Models\DoctorAvailability;
 use App\Models\Leave;
 use App\Models\Patient;
 use App\Models\Practitioner;
+use App\Models\PractitionerSchedule;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\UserType;
@@ -113,14 +113,9 @@ test('a pending (not yet approved) leave does not block booking', function () {
 });
 
 test('booking outside a doctors configured availability window is rejected', function () {
-    $dayOfWeek = now()->addDay()->dayOfWeek === 0 ? 7 : now()->addDay()->dayOfWeek;
-    // `organization_id` is auto-stamped from the acting user by
-    // `OrganizationScoped` and isn't in `$fillable` — `forceCreate()` sets it
-    // directly rather than depending on an auth side effect in the fixture.
-    DoctorAvailability::forceCreate([
-        'organization_id' => $this->clinic->organization_id,
-        'branch_id' => $this->branch->id, 'doctor_profile_id' => $this->practitioner->id,
-        'day_of_week' => $dayOfWeek, 'start_time' => '09:00:00', 'end_time' => '13:00:00', 'is_available' => true,
+    PractitionerSchedule::create([
+        'branch_id' => $this->branch->id, 'clinic_employee_id' => $this->practitioner->clinic_employee_id,
+        'day_of_week' => now()->addDay()->dayOfWeek, 'start_time' => '09:00:00', 'end_time' => '13:00:00', 'is_available' => true,
     ]);
 
     $response = bookAppointment($this, now()->addDay()->setTime(15, 0)->toDateTimeString());

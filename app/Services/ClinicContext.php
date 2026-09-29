@@ -178,6 +178,61 @@ class ClinicContext
     }
 
     /**
+     * The branch a branch-scoped screen works in: the active branch, else
+     * the first active branch this membership may open (main branch first).
+     * Null when the membership may open no branch at all.
+     */
+    public function workingBranch(): ?Branch
+    {
+        if ($this->branch) {
+            return $this->branch;
+        }
+
+        $membership = $this->membership;
+
+        if (! $membership || ! $this->clinic) {
+            return null;
+        }
+
+        return Branch::withoutGlobalScopes()
+            ->where('clinic_id', $this->clinic->id)
+            ->where('status', BranchStatus::Active)
+            ->when(! $membership->has_all_branches_access, fn ($query) => $query->whereIn(
+                'id',
+                fn ($access) => $access->select('branch_id')->from('branch_clinic_membership')->where('clinic_membership_id', $membership->id),
+            ))
+            ->orderByDesc('is_main')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * The working branch, or a 403 for a member with no branch access. Use it
+     * wherever records are read or written for one branch.
+     */
+    public function requireBranch(): Branch
+    {
+        return $this->workingBranch() ?? abort(403, 'You do not have access to any branch of this clinic.');
+    }
+
+    /**
+     * For lists that may show the whole clinic: the working branch, or null
+     * only when this member may see every branch (owner or all-branches
+     * access). A member without branch access gets a 403, never the whole
+     * clinic's records.
+     */
+    public function branchScopeOrAbort(): ?Branch
+    {
+        $membership = $this->membership;
+
+        if ($membership && ($membership->has_all_branches_access || $membership->is_primary_owner)) {
+            return $this->branch;
+        }
+
+        return $this->requireBranch();
+    }
+
+    /**
      * Determine if a branch is active.
      */
     public function hasBranch(): bool

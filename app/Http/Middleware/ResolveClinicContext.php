@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\BranchStatus;
 use App\ClinicMembershipStatus;
 use App\ClinicStatus;
+use App\EmploymentStatus;
 use App\Scopes\TenantScope;
 use App\Services\ClinicContext;
 use App\UserType;
@@ -28,6 +29,11 @@ class ResolveClinicContext
     {
         $user = $request->user();
 
+        // Resolve from scratch on every request: a context left over from an
+        // earlier request on a long-lived worker must never stand in for
+        // this one (for example after the membership stopped qualifying).
+        $this->clinicContext->clear();
+
         if ($user && $user->user_type === UserType::ClinicUser) {
             $requestedSlug = $this->clinicContext->requestedClinicSlug($request);
             $isDomainMode = config('app.routing_mode') === 'domain';
@@ -39,6 +45,14 @@ class ResolveClinicContext
                 // nothing, including in a session that was signed in before
                 // the clinic was suspended.
                 ->whereHas('clinic', fn ($query) => $query->where('status', ClinicStatus::Active))
+                // A login whose staff record in that clinic has been made
+                // inactive, suspended or resigned opens nothing there either,
+                // even if nobody remembered to suspend the membership too.
+                // (Owners and staff with no staff record are unaffected.)
+                ->whereNotExists(fn ($query) => $query->from('clinic_employees')
+                    ->whereColumn('clinic_employees.clinic_id', 'clinic_memberships.clinic_id')
+                    ->whereColumn('clinic_employees.user_id', 'clinic_memberships.user_id')
+                    ->whereIn('clinic_employees.status', EmploymentStatus::accessEnding()))
                 ->when(
                     $requestedSlug !== null,
                     // A clinic was explicitly named (always true in domain
