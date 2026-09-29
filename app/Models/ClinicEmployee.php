@@ -85,7 +85,8 @@ class ClinicEmployee extends Model
 
     public function branches(): BelongsToMany
     {
-        return $this->belongsToMany(Branch::class, 'clinic_employee_branches', 'clinic_employee_id', 'branch_id');
+        return $this->belongsToMany(Branch::class, 'clinic_employee_branches', 'clinic_employee_id', 'branch_id')
+            ->using(StaffBranchPlacement::class);
     }
 
     public function departments(): BelongsToMany

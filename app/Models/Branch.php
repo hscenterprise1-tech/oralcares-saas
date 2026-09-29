@@ -79,7 +79,9 @@ class Branch extends Model
      */
     public function memberships(): BelongsToMany
     {
-        return $this->belongsToMany(ClinicMembership::class, 'branch_clinic_membership');
+        return $this->belongsToMany(ClinicMembership::class, 'branch_clinic_membership')
+            ->using(MembershipBranchAccess::class)
+            ->withTimestamps();
     }
 
     /**

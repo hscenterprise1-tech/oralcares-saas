@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
-use App\ClinicMembershipStatus;
+use App\ClinicRole;
 use App\Exceptions\ResourceLimitExceededException;
 use App\Http\Controllers\Controller;
 use App\Models\Clinic;
@@ -11,29 +11,31 @@ use App\Models\ClinicEmployeeInvitation;
 use App\Models\ClinicMembership;
 use App\Models\User;
 use App\Services\ClinicContext;
-use App\Services\ClinicRoleAssignmentService;
 use App\Services\ResourceLimitService;
 use App\Services\Security\SecurityAudit;
+use App\Services\Staff\InvitationAcceptance;
 use App\UserType;
+use DomainException;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class EmployeeInvitationController extends Controller
 {
-    public const EXISTING_LOGIN_MESSAGE = 'This email already has an OralCares login. Ask your clinic admin to contact OralCares support to add you to this clinic.';
-
     /**
      * Store a newly created invitation and send an email.
      */
     public function store(Request $request, ClinicContext $context, ResourceLimitService $limits): RedirectResponse
     {
         $validated = $request->validate([
-            'clinic_employee_id' => ['required', 'exists:clinic_employees,id'],
+            'clinic_employee_id' => ['required', Rule::exists('clinic_employees', 'id')->where('clinic_id', $context->clinic()->id)],
             'email' => ['required', 'email'],
         ]);
 
@@ -106,9 +108,15 @@ class EmployeeInvitationController extends Controller
     }
 
     /**
-     * Show the acceptance form (Password setup for invitee).
+     * Accept a staff invitation.
+     *
+     * One person is one login. When the invited email has no login yet, the
+     * invitee sets a password and the login is created. When it already has
+     * one (they work at another clinic), they confirm with that login's own
+     * password and this clinic is added to it; the password is only checked,
+     * never changed.
      */
-    public function accept(Request $request, string $token, ClinicRoleAssignmentService $roleAssignments, ResourceLimitService $limits)
+    public function accept(Request $request, string $token, InvitationAcceptance $acceptance, ResourceLimitService $limits, ClinicContext $clinicContext)
     {
         // A stale or tampered link is a normal thing for an invitee to hit
         // (they waited too long, or forwarded an old email) — it gets the
@@ -118,111 +126,108 @@ class EmployeeInvitationController extends Controller
             return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'invalid']);
         }
 
-        $invitation = ClinicEmployeeInvitation::where('token', hash('sha256', $token))
-            ->whereNull('accepted_at')
-            ->whereNull('revoked_at')
-            ->where('expires_at', '>', now())
-            ->first();
+        $invitation = $acceptance->findPending($token);
 
         if (! $invitation) {
             return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'invalid']);
         }
 
-        // If it's a POST request, we are saving the password
-        if ($request->isMethod('post')) {
-            $validated = $request->validate([
-                'password' => ['required', 'confirmed', Password::defaults()],
-            ]);
+        $existing = $acceptance->existingAccount($invitation);
+        $page = [
+            'employeeName' => $invitation->employee->name,
+            'email' => $invitation->email,
+            'roleName' => $invitation->employee->roles->pluck('name')->intersect(ClinicRole::values())->implode(', ') ?: null,
+            'clinicName' => $invitation->clinic->branding_name,
+            'clinicLogo' => $invitation->clinic->logo_url,
+        ];
 
-            // An email that already has an OralCares login (for example
-            // someone who works at another clinic) can't be joined here by
-            // setting a new password: that would either fail on the unique
-            // email or let the invite link take over the existing account.
-            // Joining an existing login needs that person to sign in first,
-            // which this flow does not do yet.
-            if (User::where('email', $invitation->email)->exists()) {
-                return back()->with('error', self::EXISTING_LOGIN_MESSAGE);
+        if ($existing) {
+            if ($existing->user_type !== UserType::ClinicUser) {
+                return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'account_conflict'] + $page);
             }
 
-            // The real gate: this is the moment a seat actually gets
-            // consumed (ClinicMembership::create() below), not when the
-            // invite was sent. The invitee can't add seats or call an
-            // account manager, so this gets its own message — see
-            // `checkSeatLimits()`.
-            $error = $this->checkSeatLimits(
-                $invitation->clinic,
-                $invitation->employee->roles->contains('name', 'Doctor'),
-                $limits,
-                audience: 'invitee'
-            );
-            if ($error) {
+            if ($acceptance->isMember($invitation, $existing)) {
+                return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'already_member'] + $page);
+            }
+
+            // Signed in as someone else: never switch accounts under them.
+            if ($request->user() && $request->user()->id !== $existing->id) {
+                return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'wrong_account'] + $page);
+            }
+
+            if (! $request->isMethod('post')) {
+                return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'existing'] + $page);
+            }
+
+            $request->validate(['password' => ['required', 'string']]);
+
+            if (! Hash::check($request->string('password')->toString(), $existing->password)) {
+                event(new Failed('web', $existing, ['email' => $existing->email]));
+
+                throw ValidationException::withMessages(['password' => 'That password does not match this account.']);
+            }
+
+            if ($error = $this->seatLimitError($invitation, $limits)) {
                 return back()->with('error', $error);
             }
 
-            // Create User
-            $user = User::create([
-                'name' => $invitation->employee->name,
-                'email' => $invitation->email,
-                'password' => Hash::make($validated['password']),
-                'user_type' => UserType::ClinicUser,
-                'organization_id' => $invitation->clinic->organization_id,
-            ]);
-
-            // Create ClinicMembership
-            $membership = ClinicMembership::create([
-                'clinic_id' => $invitation->clinic_id,
-                'user_id' => $user->id,
-                'status' => ClinicMembershipStatus::Active,
-                'has_all_branches_access' => false,
-            ]);
-
-            // Branch access = the branches on the staff record, through the
-            // same audited, same-clinic-only path every other change uses.
-            $branches = $invitation->employee->branches;
-            if ($branches->isNotEmpty()) {
-                $membership->syncAssignedBranches($branches, $user->id);
+            try {
+                $membership = $acceptance->acceptAsExistingUser($invitation, $existing);
+            } catch (DomainException $e) {
+                return back()->with('error', $e->getMessage());
             }
 
-            // Sync roles to User from Employee profile — scoped to each
-            // branch, since the invitee has no active clinic context of
-            // their own yet for a plain syncRoles() call to land under.
-            $roleNames = $invitation->employee->roles->pluck('name')->all();
-            if (! empty($roleNames) && $branches->isNotEmpty()) {
-                $roleAssignments->syncRoles($user, $roleNames, $branches);
-            }
-
-            // Update Employee record
-            $invitation->employee->update([
-                'user_id' => $user->id,
-                'email' => $user->email, // Ensure email matches
-            ]);
-
-            // Mark invitation accepted
-            $invitation->update(['accepted_at' => now()]);
-
-            app(SecurityAudit::class)->record('invitation.accepted', $invitation, [], [
-                'actor_user_id' => $user->id,
-                'clinic_id' => $invitation->clinic_id,
-            ]);
-
-            // Log them in, on a fresh session id, so a session id planted
-            // before sign-in is not the one carried into the portal.
-            auth()->login($user);
-            $request->session()->regenerate();
-
-            // Redirect to dashboard (they bypass onboarding since organization is already onboarded)
-            return redirect()->route('dashboard');
+            return $this->signInto($request, $existing, $membership, $clinicContext);
         }
 
-        // GET request - show the form
-        return Inertia::render('Clinic/Auth/AcceptInvitation', [
-            'status' => 'valid',
-            'employeeName' => $invitation->employee->name,
-            'email' => $invitation->email,
-            'roleName' => $invitation->employee->roles->pluck('name')->implode(', ') ?: null,
-            'clinicName' => $invitation->clinic->branding_name,
-            'clinicLogo' => $invitation->clinic->logo_url,
+        if (! $request->isMethod('post')) {
+            return Inertia::render('Clinic/Auth/AcceptInvitation', ['status' => 'valid'] + $page);
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'confirmed', Password::defaults()],
         ]);
+
+        if ($error = $this->seatLimitError($invitation, $limits)) {
+            return back()->with('error', $error);
+        }
+
+        try {
+            $membership = $acceptance->acceptAsNewUser($invitation, $validated['password']);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return $this->signInto($request, $membership->user, $membership, $clinicContext);
+    }
+
+    /**
+     * The real seat gate: a seat is consumed when the membership is created,
+     * not when the invite was sent. The invitee can't add seats or call an
+     * account manager, so this gets its own message — see `checkSeatLimits()`.
+     */
+    private function seatLimitError(ClinicEmployeeInvitation $invitation, ResourceLimitService $limits): ?string
+    {
+        return $this->checkSeatLimits(
+            $invitation->clinic,
+            $invitation->employee->roles->contains('name', ClinicRole::Doctor->value),
+            $limits,
+            audience: 'invitee'
+        );
+    }
+
+    /**
+     * Sign the person in (on a fresh session id, so a session id planted
+     * before sign-in is not the one carried into the portal) and open the
+     * clinic they just joined.
+     */
+    private function signInto(Request $request, User $user, ClinicMembership $membership, ClinicContext $clinicContext): RedirectResponse
+    {
+        auth()->login($user);
+        $request->session()->regenerate();
+        $clinicContext->activateMembership($membership);
+
+        return redirect()->route('dashboard');
     }
 
     /**

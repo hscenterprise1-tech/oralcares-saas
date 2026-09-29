@@ -10,7 +10,6 @@ use App\Models\SecurityAuditLog;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\UserType;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Branch access for a login lives on the membership (`branch_clinic_membership`).
@@ -96,11 +95,9 @@ it('leaves an all-branches member\'s access alone when their staff branches chan
 });
 
 it('backfills missing access only from the member\'s own staff branches in the same clinic', function () {
-    DB::table('clinic_employee_branches')->insert([
-        ['clinic_employee_id' => $this->employee->id, 'branch_id' => $this->east->id],
-        ['clinic_employee_id' => $this->employee->id, 'branch_id' => $this->foreignBranch->id],
-        ['clinic_employee_id' => 999999, 'branch_id' => $this->main->id],
-    ]);
+    // Placements at another clinic's branch or for a missing staff record
+    // can no longer be stored at all (see StaffBranchIntegrityTest).
+    $this->employee->branches()->attach($this->east->id);
 
     $noEvidenceUser = User::factory()->create(['user_type' => UserType::ClinicUser]);
     $noEvidence = ClinicMembership::factory()->create([

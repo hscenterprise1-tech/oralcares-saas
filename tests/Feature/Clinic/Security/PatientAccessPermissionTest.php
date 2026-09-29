@@ -42,7 +42,15 @@ function actAsPatientAccessRole(string $role, ?array $permissions = null): array
         'clinic_id' => $test->clinic->id, 'user_id' => $user->id, 'is_primary_owner' => false,
         'has_all_branches_access' => true, 'status' => ClinicMembershipStatus::Active,
     ]);
-    app(ClinicRoleAssignmentService::class)->syncRoles($user, [$role], [$test->branch]);
+    if (in_array($role, ClinicRole::values(), true)) {
+        app(ClinicRoleAssignmentService::class)->syncRoles($user, [$role], [$test->branch]);
+    } else {
+        // A custom role, only to exercise the permission check; the staff
+        // role service itself only hands out clinic roles.
+        setPermissionsTeamId($test->branch->id);
+        $user->assignRole($role);
+        setPermissionsTeamId(null);
+    }
     $test->actingAs($user);
 
     return [

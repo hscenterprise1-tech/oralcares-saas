@@ -14,7 +14,6 @@ use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
 use App\UserType;
 use Database\Seeders\SystemRoleTemplateSeeder;
-use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -52,7 +51,17 @@ beforeEach(function () {
         if ($employeeStatus) {
             ClinicEmployee::create(['clinic_id' => $this->clinic->id, 'user_id' => $user->id, 'name' => 'Staff', 'email' => "staff{$user->id}@clinic.test", 'status' => $employeeStatus]);
         }
-        app(ClinicRoleAssignmentService::class)->syncRoles($user, $roles, $roleBranches);
+        $clinicRoles = array_values(array_intersect($roles, ClinicRole::values()));
+        app(ClinicRoleAssignmentService::class)->syncRoles($user, $clinicRoles, $roleBranches);
+        foreach (array_diff($roles, $clinicRoles) as $customRole) {
+            // A custom role, only to exercise permission checks; the staff
+            // role service itself only hands out clinic roles.
+            foreach ($roleBranches as $branch) {
+                setPermissionsTeamId($branch->id);
+                $user->assignRole($customRole);
+            }
+            setPermissionsTeamId(null);
+        }
 
         return [$user, array_filter([
             ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id,
@@ -169,7 +178,7 @@ it('keeps a linked staff member\'s roles in Spatie only, per branch, and shows t
     [$admin, $session] = ($this->member)([ClinicRole::ClinicAdmin->value], [$this->main], null);
     [$doctorUser] = ($this->member)([], [], [$this->main]);
     $employee = ClinicEmployee::create(['clinic_id' => $this->clinic->id, 'user_id' => $doctorUser->id, 'name' => 'Dr. Linked', 'email' => 'linked@clinic.test', 'status' => 'active']);
-    DB::table('clinic_employee_branches')->insert(['clinic_employee_id' => $employee->id, 'branch_id' => $this->main->id]);
+    $employee->branches()->attach($this->main->id);
     $doctorRole = Role::where('name', ClinicRole::Doctor->value)->whereNull('branch_id')->first();
 
     $this->actingAs($admin)->withSession($session)
@@ -182,4 +191,19 @@ it('keeps a linked staff member\'s roles in Spatie only, per branch, and shows t
 
     $this->actingAs($admin)->withSession($session)->get(route('admin.employees.edit', $employee->id))
         ->assertInertia(fn ($page) => $page->where('employee.roles.0.name', ClinicRole::Doctor->value));
+});
+
+it('only lets the staff role service hand out clinic roles, on one clinic at a time', function () {
+    $user = User::factory()->create(['user_type' => UserType::ClinicUser]);
+    $service = app(ClinicRoleAssignmentService::class);
+
+    foreach (['Super Admin', 'Company Admin', 'master_admin'] as $platformRole) {
+        expect(fn () => $service->syncRoles($user, [$platformRole], [$this->main]))->toThrow(InvalidArgumentException::class);
+    }
+
+    expect(fn () => $service->syncRoles($user, [ClinicRole::Doctor->value], [$this->main, $this->otherBranch]))->toThrow(InvalidArgumentException::class);
+
+    setPermissionsTeamId($this->main->id);
+    expect($user->fresh()->getRoleNames()->all())->toBe([]);
+    setPermissionsTeamId(null);
 });

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Staff\StaffIdentityLinker;
+use App\Services\Staff\StaffOrphanFinder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -17,12 +18,28 @@ class StaffAuditCommand extends Command
     protected $signature = 'clinic:staff-audit
         {--clinic=* : Only these clinic ids}
         {--link : Link staff to logins where the evidence is unambiguous (default is report only)}
-        {--details : List every unresolved staff record}';
+        {--details : List every staff record that was not linked, with the reason}
+        {--orphans : List staff placement, role, department, room and invitation rows whose parent no longer exists}';
 
     protected $description = 'Report clinic staff identity and, with --link, link staff records to their logins';
 
-    public function handle(StaffIdentityLinker $linker): int
+    public function handle(StaffIdentityLinker $linker, StaffOrphanFinder $orphanFinder): int
     {
+        if ($this->option('orphans')) {
+            $orphans = $orphanFinder->find();
+
+            $this->table(
+                ['Table', 'Row id', 'Staff record', 'Links to', 'Missing parent', 'Clinic', 'Created'],
+                $orphans->map(fn (array $row) => [
+                    $row['table'], $row['id'], $row['employee_id'], $row['other'] ?? '—',
+                    implode(', ', $row['missing']), $row['clinic_id'] ?? 'unknown', $row['created_at'] ?? '—',
+                ])->all(),
+            );
+            $this->line("{$orphans->count()} orphaned row(s). Report only. Nothing changed.");
+
+            return self::SUCCESS;
+        }
+
         $rows = [];
         $unresolved = [];
         $linkedTotal = 0;
@@ -51,7 +68,9 @@ class StaffAuditCommand extends Command
                     count($report['unresolved']),
                 ];
 
-                foreach ($report['unresolved'] as $item) {
+                // Every staff record that was not linked, with why: the ones
+                // that need a person first, then those with no login at all.
+                foreach ([...$report['unresolved'], ...$report['skipped']] as $item) {
                     $unresolved[] = [$clinic->id, $item['employee_id'], $item['reason']];
                 }
             }

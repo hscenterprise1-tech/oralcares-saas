@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Branch access (`branch_clinic_membership`) is what decides which branches
@@ -25,6 +26,8 @@ return new class extends Migration
                 ->whereColumn('branch_clinic_membership.clinic_membership_id', 'clinic_memberships.id'))
             ->get(['id', 'clinic_id', 'user_id']);
 
+        $hasClinicColumn = Schema::hasColumn('branch_clinic_membership', 'clinic_id');
+
         foreach ($members as $member) {
             $branchIds = DB::table('clinic_employee_branches')
                 ->join('clinic_employees', 'clinic_employees.id', '=', 'clinic_employee_branches.clinic_employee_id')
@@ -36,12 +39,15 @@ return new class extends Migration
                 ->pluck('branches.id');
 
             foreach ($branchIds as $branchId) {
-                DB::table('branch_clinic_membership')->insertOrIgnore([
+                // `clinic_id` exists on this table from a later migration
+                // on; include it when this runs against that schema.
+                DB::table('branch_clinic_membership')->insertOrIgnore(array_filter([
                     'clinic_membership_id' => $member->id,
                     'branch_id' => $branchId,
+                    'clinic_id' => $hasClinicColumn ? $member->clinic_id : null,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
+                ], fn ($value) => $value !== null));
             }
         }
     }

@@ -1,19 +1,15 @@
 <?php
 
 use App\ClinicMembershipStatus;
-use App\Http\Controllers\Clinic\Admin\EmployeeInvitationController;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicEmployee;
-use App\Models\ClinicEmployeeInvitation;
 use App\Models\ClinicMembership;
 use App\Models\SecurityAuditLog;
 use App\Models\User;
 use App\Services\Staff\StaffIdentityLinker;
 use App\UserType;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\URL;
 
 /**
  * User → ClinicMembership → ClinicEmployee. A staff record is linked to a
@@ -41,7 +37,7 @@ beforeEach(function () {
 it('links a staff record to the login with the same email that is a member of the same clinic', function () {
     $user = ($this->login)('asha@clinic.test', $this->clinic);
     $employee = ($this->staff)('asha@clinic.test');
-    DB::table('clinic_employee_branches')->insert(['clinic_employee_id' => $employee->id, 'branch_id' => $this->branch->id]);
+    $employee->branches()->attach($this->branch->id);
 
     expect($this->linker->link($this->clinic->id))->toBe(1)
         ->and($employee->fresh()->user_id)->toBe($user->id);
@@ -136,21 +132,19 @@ it('reports without changing anything unless asked to link', function () {
     expect($employee->fresh()->user_id)->not->toBeNull();
 });
 
-it('refuses an invitation for an email that already has a login instead of creating a second one', function () {
-    ($this->login)('existing@clinic.test', $this->otherClinic);
-    $employee = ($this->staff)('existing@clinic.test');
-    $token = 'invite-token-for-an-existing-login-0001';
-    ClinicEmployeeInvitation::create([
-        'clinic_id' => $this->clinic->id, 'clinic_employee_id' => $employee->id, 'email' => 'existing@clinic.test',
-        'token' => hash('sha256', $token), 'expires_at' => now()->addDay(),
-    ]);
+it('can never see two candidate staff records for one login: a clinic holds each email once', function () {
+    ($this->staff)('dup@clinic.test');
 
-    $url = URL::temporarySignedRoute('clinic.invitation.accept', now()->addDay(), ['token' => $token]);
+    expect(fn () => ($this->staff)('dup@clinic.test'))->toThrow(QueryException::class);
+});
 
-    $this->post($url, ['password' => 'Strong-Passw0rd!', 'password_confirmation' => 'Strong-Passw0rd!'])
-        ->assertSessionHas('error', EmployeeInvitationController::EXISTING_LOGIN_MESSAGE);
+it('reports every staff record it did not link, with the reason', function () {
+    ($this->login)('elsewhere@clinic.test', $this->otherClinic);
+    $conflict = ($this->staff)('elsewhere@clinic.test');
+    $noLogin = ($this->staff)('nobody@clinic.test');
 
-    expect(User::where('email', 'existing@clinic.test')->count())->toBe(1)
-        ->and($employee->fresh()->user_id)->toBeNull()
-        ->and(ClinicMembership::withoutGlobalScopes()->where('clinic_id', $this->clinic->id)->count())->toBe(0);
+    $report = $this->linker->report($this->clinic->id);
+
+    expect($report['unresolved'])->toBe([['employee_id' => $conflict->id, 'reason' => 'a login with this email has no membership in this clinic']])
+        ->and($report['skipped'])->toBe([['employee_id' => $noLogin->id, 'reason' => 'no login uses this email']]);
 });

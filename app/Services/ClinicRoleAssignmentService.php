@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\ClinicRole;
 use App\Models\Branch;
 use App\Models\User;
 use App\Services\Security\SecurityAudit;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 /**
  * Assigns clinic staff roles under the correct Spatie team (branch) scope.
@@ -28,6 +30,17 @@ class ClinicRoleAssignmentService
      */
     public function syncRoles(User $user, array $roleNames, Collection|array $branches): void
     {
+        // Clinic staff get clinic roles, nothing else: never a Company,
+        // Master Admin or Super Admin role, whichever screen asked.
+        $notClinicRoles = array_diff($roleNames, ClinicRole::values());
+        if ($notClinicRoles !== []) {
+            throw new InvalidArgumentException('Only clinic roles can be given to clinic staff: '.implode(', ', $notClinicRoles).' is not one.');
+        }
+
+        if (collect($branches)->pluck('clinic_id')->unique()->count() > 1) {
+            throw new InvalidArgumentException('Roles can only be set across branches of one clinic at a time.');
+        }
+
         foreach ($branches as $branch) {
             $previousTeamId = getPermissionsTeamId();
 

@@ -1087,8 +1087,10 @@ $clinicRoutes = function () {
     Route::post('/logout', [ClinicLoginController::class, 'destroy'])->name('clinic.logout');
 
     // Reached via a signed link before the invitee has any session — must
-    // stay outside the authenticated group below.
+    // stay outside the authenticated group below. Rate-limited like sign-in:
+    // it checks an existing account's password.
     Route::match(['get', 'post'], '/invitations/accept/{token}', [ClinicAdminEmployeeInvitationController::class, 'accept'])
+        ->middleware('throttle:clinic-login')
         ->name('clinic.invitation.accept');
 
     // One-time password links: the primary owner's first password (setup)

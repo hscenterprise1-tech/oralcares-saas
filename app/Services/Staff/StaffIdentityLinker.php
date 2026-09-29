@@ -33,14 +33,15 @@ class StaffIdentityLinker
      *     membership_branch_rows: int, members_without_branch_access: int,
      *     invalid_staff_branch_rows: int, unmigrated_availability_rows: int,
      *     candidates: list<array{employee_id: int, user_id: int, membership_id: int}>,
-     *     unresolved: list<array{employee_id: int, reason: string}>
+     *     unresolved: list<array{employee_id: int, reason: string}>,
+     *     skipped: list<array{employee_id: int, reason: string}>
      * }
      */
     public function report(int $clinicId): array
     {
         $employees = DB::table('clinic_employees')->where('clinic_id', $clinicId);
 
-        [$candidates, $unresolved] = $this->linkCandidates($clinicId);
+        [$candidates, $unresolved, $skipped] = $this->linkCandidates($clinicId);
 
         return [
             'clinic_id' => $clinicId,
@@ -76,6 +77,7 @@ class StaffIdentityLinker
                 ->count(),
             'candidates' => $candidates,
             'unresolved' => $unresolved,
+            'skipped' => $skipped,
         ];
     }
 
@@ -120,7 +122,7 @@ class StaffIdentityLinker
     }
 
     /**
-     * @return array{0: list<array{employee_id: int, user_id: int, membership_id: int}>, 1: list<array{employee_id: int, reason: string}>}
+     * @return array{0: list<array{employee_id: int, user_id: int, membership_id: int}>, 1: list<array{employee_id: int, reason: string}>, 2: list<array{employee_id: int, reason: string}>}
      */
     private function linkCandidates(int $clinicId): array
     {
@@ -148,6 +150,7 @@ class StaffIdentityLinker
 
         $candidates = [];
         $unresolved = [];
+        $skipped = [];
         $claimed = new Collection;
 
         foreach ($unlinked as $employee) {
@@ -166,7 +169,10 @@ class StaffIdentityLinker
             };
 
             if ($reason === null) {
-                continue; // No login with this email: nothing to link, and nothing wrong.
+                // No login with this email: nothing to link, and nothing wrong.
+                $skipped[] = ['employee_id' => (int) $employee->id, 'reason' => 'no login uses this email'];
+
+                continue;
             }
 
             if ($reason !== false) {
@@ -179,6 +185,6 @@ class StaffIdentityLinker
             $candidates[] = ['employee_id' => (int) $employee->id, 'user_id' => (int) $user->id, 'membership_id' => (int) $membership->id];
         }
 
-        return [$candidates, $unresolved];
+        return [$candidates, $unresolved, $skipped];
     }
 }
