@@ -24,22 +24,27 @@ export function Notice({
   tone,
   title,
   children,
+  action,
   className,
 }: {
   tone: Tone;
   title?: string;
   children?: ReactNode;
+  /** A control at the end of the first line, e.g. a dismiss button. */
+  action?: ReactNode;
   className?: string;
 }) {
   const { icon: Icon, classes, role } = TONES[tone];
 
   return (
-    <div role={role} className={cn('flex gap-3 rounded-2xl border px-4 py-3', classes, className)}>
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <div className="min-w-0 text-[13px] leading-relaxed">
+    <div role={role} className={cn('flex items-start gap-3 rounded-2xl border px-4 py-3', classes, className)}>
+      <Icon className="mt-[3px] h-4 w-4 shrink-0" aria-hidden="true" />
+      <div className="min-w-0 flex-1 text-[13px] leading-relaxed">
         {title && <p className="font-semibold">{title}</p>}
         {children && <div className={cn(title && 'mt-0.5', 'text-clinic-ink/85')}>{children}</div>}
       </div>
+      {/* -my-1.5 keeps a 32px control centred on the 21px first line without growing the row. */}
+      {action && <div className="-my-1.5 -mr-2 shrink-0">{action}</div>}
     </div>
   );
 }

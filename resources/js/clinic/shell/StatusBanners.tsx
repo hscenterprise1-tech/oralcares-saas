@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { WifiOff, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import type { FlashProps, SubscriptionWindowProps } from '../types';
 import { Notice } from '../ui/Notice';
 
@@ -97,20 +96,27 @@ export function FlashNotices({ flash }: { flash: FlashProps | undefined }) {
   }
 
   return (
-    <div className="relative mb-5 space-y-2">
-      {entries.map((entry) => (
-        <Notice key={entry.text} tone={entry.tone} className={cn('pr-12')}>
+    <div className="mb-5 space-y-2">
+      {entries.map((entry, index) => (
+        <Notice
+          key={entry.text}
+          tone={entry.tone}
+          action={
+            index === 0 ? (
+              <button
+                type="button"
+                onClick={() => setDismissed(signature)}
+                aria-label="Dismiss message"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-clinic-secondary hover:bg-black/5 hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : undefined
+          }
+        >
           {entry.text}
         </Notice>
       ))}
-      <button
-        type="button"
-        onClick={() => setDismissed(signature)}
-        aria-label="Dismiss message"
-        className="absolute right-2 top-1.5 flex h-8 w-8 items-center justify-center rounded-full text-clinic-secondary hover:bg-black/5 hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
     </div>
   );
 }
