@@ -8,6 +8,7 @@ use App\Http\Middleware\EnsureClinicEntitled;
 use App\Http\Middleware\EnsureClinicPermission;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsureOnboardingCompleted;
+use App\Http\Middleware\EnsureOwnerMode;
 use App\Http\Middleware\EnsureUserIsMasterAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireClinicContext;
@@ -73,6 +74,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'onboarding_completed' => EnsureOnboardingCompleted::class,
             'clinic_permission' => EnsureClinicPermission::class,
             'clinic_entitled' => EnsureClinicEntitled::class,
+            'clinic_owner_mode' => EnsureOwnerMode::class,
         ]);
 
         /*

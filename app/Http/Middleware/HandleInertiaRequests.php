@@ -6,6 +6,7 @@ use App\ClinicPermission;
 use App\ClinicRole;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\Provisioning\EntitlementResolver;
 use App\Support\ClinicNavigation;
 use App\Support\ClinicPortalErrors;
@@ -269,6 +270,12 @@ class HandleInertiaRequests extends Middleware
              */
             'permissions' => $permissions,
             'roles' => $isOwner ? ['Owner'] : $this->clinicRoles($user),
+            // The staff roles actually held here, owner or not, so an owner
+            // who is also a doctor reads as "Doctor · Clinic Owner".
+            'staff_roles' => $this->clinicRoles($user),
+            // Whether Owner Mode is offered to this user and whether it is on.
+            // Presentation only: owner-only routes use `clinic_owner_mode`.
+            'owner_mode' => app(OwnerMode::class)->status(),
             'navigation' => ClinicNavigation::for(
                 $permissions,
                 ['has_subscription' => (bool) $entitlement['has_subscription'], 'modules' => array_values($entitlement['modules'])],
@@ -301,6 +308,7 @@ class HandleInertiaRequests extends Middleware
             'dashboard' => route('clinic.dashboard', $parameters, false),
             'branches' => route('clinic.branches.index', $parameters, false),
             'branchSwitch' => route('clinic.branches.switch', $parameters, false),
+            'ownerMode' => route('clinic.owner-mode.store', $parameters, false),
             'notifications' => route('api.notifications.index', [], false),
             'notificationsUnreadCount' => route('api.notifications.unreadCount', [], false),
             'notificationsMarkAllRead' => route('api.notifications.markAllAsRead', [], false),

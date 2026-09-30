@@ -42,12 +42,10 @@ export function useNavigation(): NavDestination[] {
 }
 
 /** The role this user holds here, as one label for the account menu. */
-export function roleLabel(clinic: Pick<ClinicContextProps, 'roles' | 'is_owner'>): string {
-  if (clinic.is_owner) {
-    return 'Owner';
-  }
+export function roleLabel(clinic: Pick<ClinicContextProps, 'staff_roles' | 'is_owner'>): string {
+  const labels = [...clinic.staff_roles, ...(clinic.is_owner ? ['Clinic Owner'] : [])];
 
-  return clinic.roles.length > 0 ? clinic.roles.join(', ') : 'Staff';
+  return labels.length > 0 ? labels.join(' · ') : 'Staff';
 }
 
 /** Whether `href` is the current page or a page beneath it. */

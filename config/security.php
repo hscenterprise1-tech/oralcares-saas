@@ -109,4 +109,13 @@ return [
     */
     'demo_seeding' => (bool) env('SEED_DEMO_DATA', false),
 
+    /*
+    | Owner Mode: the clinic owner's privileged workspace, entered with a
+    | password check and held in the session only. It ends after this many
+    | minutes without a request, and then needs the password again.
+    */
+    'owner_mode' => [
+        'idle_timeout_minutes' => (int) env('OWNER_MODE_IDLE_MINUTES', 15),
+    ],
+
 ];

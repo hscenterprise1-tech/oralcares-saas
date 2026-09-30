@@ -15,6 +15,7 @@ use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentContro
 use App\Http\Controllers\Clinic\BranchSwitchController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
 use App\Http\Controllers\Clinic\OnboardingController as ClinicOnboardingController;
+use App\Http\Controllers\Clinic\OwnerModeController;
 use App\Http\Controllers\Clinic\Patient360Controller;
 use App\Http\Controllers\Clinic\PatientController as ClinicPatientController;
 use App\Http\Controllers\Clinic\ReceptionController;
@@ -1128,6 +1129,13 @@ $clinicRoutes = function () {
             ->middleware('throttle:60,1')
             ->name('clinic.branches.index');
         Route::post('/branches/switch', [BranchSwitchController::class, 'switch'])->name('clinic.branches.switch');
+
+        // Owner Mode: the owner's privileged workspace, entered with a
+        // password check (see App\Services\OwnerMode\OwnerMode).
+        Route::post('/owner-mode', [OwnerModeController::class, 'store'])
+            ->middleware('throttle:clinic-owner-mode')
+            ->name('clinic.owner-mode.store');
+        Route::delete('/owner-mode', [OwnerModeController::class, 'destroy'])->name('clinic.owner-mode.destroy');
 
         // ==========================================
         // RECEPTION COMMAND CENTER (Phase 2)

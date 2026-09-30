@@ -57,6 +57,18 @@ export interface NavDestination {
   keywords: string[];
 }
 
+/**
+ * Owner Mode as the server sees it on this request. Presentation only: the
+ * server checks Owner Mode itself on every owner-only action.
+ */
+export interface OwnerModeStatus {
+  /** The signed-in user is the owner of this clinic. */
+  available: boolean;
+  active: boolean;
+  expires_at: string | null;
+  idle_timeout_minutes: number;
+}
+
 export interface ClinicContextProps {
   id: number;
   name: string;
@@ -74,6 +86,9 @@ export interface ClinicContextProps {
   has_subscription: boolean;
   permissions: ClinicPermission[];
   roles: string[];
+  /** Staff roles held at this branch, whether or not the user is the owner. */
+  staff_roles: string[];
+  owner_mode: OwnerModeStatus;
   navigation: NavDestination[];
 }
 
@@ -105,6 +120,8 @@ export interface PortalLinks {
   dashboard: string;
   branches: string;
   branchSwitch: string;
+  /** POST to enter Owner Mode, DELETE to leave it. */
+  ownerMode: string;
   notifications: string;
   notificationsUnreadCount: string;
   notificationsMarkAllRead: string;

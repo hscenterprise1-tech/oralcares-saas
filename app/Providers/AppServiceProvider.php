@@ -46,6 +46,8 @@ use App\Services\Backup\MysqlDumper;
 use App\Services\Backup\MysqlRestorer;
 use App\Services\ClinicContext;
 use App\Services\Marketing\MarketingSettingsService;
+use App\Services\OwnerMode\OwnerModeVerifier;
+use App\Services\OwnerMode\PasswordOwnerModeVerifier;
 use App\Services\Security\Malware\ClamAvScanner;
 use App\Services\Security\Malware\FakeMalwareScanner;
 use App\Services\Security\Malware\MalwareScannerVirusAdapter;
@@ -73,6 +75,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(ClinicContext::class);
+
+        // Owner Mode's step-up check. A one-time code or MFA verifier replaces it here.
+        $this->app->bind(OwnerModeVerifier::class, PasswordOwnerModeVerifier::class);
 
         // Database backups: mysqldump / mysql client, swappable (see BackupManager).
         $this->app->bind(DatabaseDumper::class, fn () => new MysqlDumper(config('database.default'), config('security.backup.mysqldump_binary')));
@@ -226,6 +231,8 @@ class AppServiceProvider extends ServiceProvider
          */
         RateLimiter::for('clinic-login', fn (Request $request) => Limit::perMinute(30)->by('clinic-login:'.$request->ip()));
         RateLimiter::for('clinic-password', fn (Request $request) => Limit::perMinute(10)->by('clinic-password:'.$request->ip()));
+        // Owner Mode checks a password, so it is limited like sign-in, per account.
+        RateLimiter::for('clinic-owner-mode', fn (Request $request) => Limit::perMinute(5)->by('clinic-owner-mode:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
         /*
          * Signed-in API and lookup endpoints, one bucket per user per group.
