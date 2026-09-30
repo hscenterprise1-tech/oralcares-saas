@@ -6,6 +6,7 @@ use App\Events\WorkflowCancelled;
 use App\Events\WorkflowCompleted;
 use App\Events\WorkflowStageChanged;
 use App\Events\WorkflowStarted;
+use App\Models\Branch;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\WorkflowDefinition;
@@ -29,11 +30,39 @@ class WorkflowEngineService
         WorkflowDefinition $def,
         ?ClinicEmployee $performer = null
     ): WorkflowRun {
+        $this->assertDefinitionFitsEncounter($encounter, $def);
+
         return DB::transaction(function () use ($encounter, $def, $performer) {
-            $firstStage = $def->stages()->orderBy('position')->firstOrFail();
+            $firstStage = $def->stages()->orderBy('position')->first();
+
+            if (! $firstStage) {
+                throw new \InvalidArgumentException(
+                    "Workflow definition {$def->id} has no stages, so there is nothing to start."
+                );
+            }
+
+            /*
+             * `encounter_id` is unique on the runs table. Without this the
+             * second start surfaced as a raw integrity constraint violation,
+             * which no caller could tell apart from a database fault.
+             */
+            if (WorkflowRun::where('encounter_id', $encounter->id)->exists()) {
+                throw new \InvalidArgumentException(
+                    "Encounter {$encounter->id} already has a workflow run."
+                );
+            }
 
             $run = WorkflowRun::create([
-                'clinic_id' => $encounter->clinic_id,
+                /*
+                 * From the definition, not the encounter.
+                 *
+                 * `clinical_encounters.clinic_id` was dropped when encounters
+                 * became organisation-scoped; reading it here produced null
+                 * against a NOT NULL column, so every start failed. The
+                 * definition is the only row that still records a clinic, and a
+                 * run belongs to the workflow it is running.
+                 */
+                'clinic_id' => $def->clinic_id,
                 'branch_id' => $encounter->branch_id,
                 'workflow_definition_id' => $def->id,
                 'encounter_id' => $encounter->id,
@@ -67,9 +96,7 @@ class WorkflowEngineService
         array $context = []
     ): void {
         DB::transaction(function () use ($run, $toStage, $performer, $reason, $context) {
-            if ($run->status !== 'active') {
-                throw new \InvalidArgumentException('Cannot transition a inactive workflow run.');
-            }
+            $this->assertActive($run, 'transition');
 
             if (! $this->transitionService->canTransition($run, $toStage, $context)) {
                 throw new \InvalidArgumentException('Transition criteria check failed.');
@@ -97,6 +124,8 @@ class WorkflowEngineService
      */
     public function completeWorkflow(WorkflowRun $run, ?ClinicEmployee $performer = null): void
     {
+        $this->assertActive($run, 'complete');
+
         DB::transaction(function () use ($run, $performer) {
             $run->update(['status' => 'completed']);
 
@@ -121,6 +150,8 @@ class WorkflowEngineService
         ?ClinicEmployee $performer = null,
         ?string $reason = null
     ): void {
+        $this->assertActive($run, 'cancel');
+
         DB::transaction(function () use ($run, $performer, $reason) {
             $run->update(['status' => 'cancelled']);
 
@@ -135,5 +166,63 @@ class WorkflowEngineService
 
             event(new WorkflowCancelled($run));
         });
+    }
+
+    /**
+     * Refuse a definition that does not belong where the encounter is.
+     *
+     * None of this was checked. One clinic's definition could be started on
+     * another clinic's encounter, and a definition switched off still ran,
+     * because `is_active` was written by the definition service and read by
+     * nothing.
+     */
+    protected function assertDefinitionFitsEncounter(ClinicalEncounter $encounter, WorkflowDefinition $def): void
+    {
+        if (! $def->is_active) {
+            throw new \InvalidArgumentException(
+                "Workflow definition {$def->id} is not active and cannot be started."
+            );
+        }
+
+        /*
+         * Read without the organisation scope: this runs from HQ and from a
+         * tenant request alike, and the check must give the same answer in both.
+         */
+        $branch = Branch::withoutOrganizationScope()->find($encounter->branch_id);
+
+        if (! $branch) {
+            throw new \InvalidArgumentException(
+                "Encounter {$encounter->id} has no branch, so its clinic cannot be established."
+            );
+        }
+
+        if ((int) $branch->clinic_id !== (int) $def->clinic_id) {
+            throw new \InvalidArgumentException(
+                "Workflow definition {$def->id} belongs to another clinic than encounter {$encounter->id}."
+            );
+        }
+
+        /* A branch-scoped definition runs only in its own branch. */
+        if ($def->branch_id !== null && (int) $def->branch_id !== (int) $encounter->branch_id) {
+            throw new \InvalidArgumentException(
+                "Workflow definition {$def->id} is scoped to another branch than encounter {$encounter->id}."
+            );
+        }
+    }
+
+    /**
+     * A run that has finished stays finished.
+     *
+     * Only `transitionTo` checked this, so a completed run could be completed
+     * again or cancelled afterwards — writing another history row and firing the
+     * event a second time each time it happened.
+     */
+    protected function assertActive(WorkflowRun $run, string $action): void
+    {
+        if ($run->status !== 'active') {
+            throw new \InvalidArgumentException(
+                "Cannot {$action} workflow run {$run->id}: it is already {$run->status}."
+            );
+        }
     }
 }

@@ -16,7 +16,17 @@ class ClinicQueue extends Model
         'branch_id',
         'name',
         'doctor_id',
+        'queue_date',
+        'closed_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'queue_date' => 'date',
+            'closed_at' => 'datetime',
+        ];
+    }
 
     public function clinic(): BelongsTo
     {

@@ -10,6 +10,7 @@ use App\Models\PatientAlert;
 use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
+use App\Models\User;
 use App\Services\ClinicalDomainValidationService;
 use App\Services\ClinicalIdentifierService;
 use Database\Seeders\SystemRoleTemplateSeeder;
@@ -24,7 +25,8 @@ beforeEach(function () {
 test('clinical database relationship integrity', function () {
     $clinic = Clinic::factory()->create();
     $branch = Branch::factory()->create(['clinic_id' => $clinic->id]);
-    $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
+    $user = User::factory()->create(['organization_id' => $clinic->organization_id]);
+    $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'user_id' => $user->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
 
     $patient = Patient::create([
         'clinic_id' => $clinic->id,
@@ -61,7 +63,7 @@ test('clinical database relationship integrity', function () {
     $note = ClinicalNote::create([
         'encounter_id' => $encounter->id,
         'patient_id' => $patient->id,
-        'author_id' => $doctor->id,
+        'author_id' => $user->id,
         'note_type' => 'soap',
         'content' => 'Patient has tooth pain.',
     ]);

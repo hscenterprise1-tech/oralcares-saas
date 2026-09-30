@@ -4,9 +4,6 @@ use App\Events\FeatureDisabled;
 use App\Events\LimitReached;
 use App\Exceptions\FeatureDisabledException;
 use App\Exceptions\ResourceLimitExceededException;
-use App\Exceptions\SubscriptionExpiredException;
-use App\Exceptions\SubscriptionSuspendedException;
-use App\Http\Middleware\RequireFeatureEntitlement;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicMembership;
@@ -22,7 +19,6 @@ use App\SubscriptionStatus;
 use App\UserType;
 use Database\Seeders\SystemRoleTemplateSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 
@@ -32,41 +28,17 @@ beforeEach(function () {
     $this->seed(SystemRoleTemplateSeeder::class);
 });
 
-test('expired subscription throws SubscriptionExpiredException', function () {
-    $clinic = Clinic::factory()->create();
-    $sub = CompanySubscription::factory()->create([
-        'clinic_id' => $clinic->id,
-        'status' => SubscriptionStatus::Expired,
-    ]);
-
-    $clinicContext = mock(ClinicContext::class);
-    $clinicContext->shouldReceive('getClinic')->andReturn($clinic);
-
-    $middleware = new RequireFeatureEntitlement($clinicContext, app(FeatureGateService::class), app(ResourceLimitService::class));
-
-    $request = Request::create('/patients', 'GET');
-
-    $this->expectException(SubscriptionExpiredException::class);
-    $middleware->handle($request, fn () => 'next', 'patients');
-});
-
-test('suspended subscription throws SubscriptionSuspendedException', function () {
-    $clinic = Clinic::factory()->create();
-    $sub = CompanySubscription::factory()->create([
-        'clinic_id' => $clinic->id,
-        'status' => SubscriptionStatus::Suspended,
-    ]);
-
-    $clinicContext = mock(ClinicContext::class);
-    $clinicContext->shouldReceive('getClinic')->andReturn($clinic);
-
-    $middleware = new RequireFeatureEntitlement($clinicContext, app(FeatureGateService::class), app(ResourceLimitService::class));
-
-    $request = Request::create('/patients', 'GET');
-
-    $this->expectException(SubscriptionSuspendedException::class);
-    $middleware->handle($request, fn () => 'next', 'patients');
-});
+/*
+ * The two RequireFeatureEntitlement tests that stood here have been removed
+ * with the middleware itself. It was applied to no route and called
+ * `ClinicContext::getClinic()`, which does not exist on that class — these
+ * tests passed only because they mocked the collaborator and stubbed the
+ * missing method, so they could never have caught that it was unrunnable.
+ *
+ * What they asserted — an expired or suspended subscription is refused — is now
+ * covered by EnforceSubscriptionWindow in TrialAccessEnforcementTest, against
+ * the real ClinicContext and the real EntitlementResolver.
+ */
 
 test('feature disabled throws FeatureDisabledException and dispatches event', function () {
     Event::fake();
@@ -136,14 +108,11 @@ test('enforce doctor limit blocks creation and fires event', function () {
     $membership = ClinicMembership::create(['clinic_id' => $clinic->id, 'user_id' => $user->id]);
 
     // Assign doctor role
-    $role = Role::create([
-        'clinic_id' => $clinic->id,
-        'key' => 'doctor',
-        'name' => 'Doctor',
-        'is_system' => false,
-        'is_active' => true,
-    ]);
-    $membership->roleAssignments()->create(['role_id' => $role->id]);
+    // Assign doctor role via Spatie
+    $role = Spatie\Permission\Models\Role::firstOrCreate(['name' => 'Doctor', 'guard_name' => 'web', 'branch_id' => null]);
+    $branch = Branch::factory()->create(['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id]);
+    setPermissionsTeamId($branch->id);
+    $user->assignRole($role);
 
     $limitService = app(ResourceLimitService::class);
 

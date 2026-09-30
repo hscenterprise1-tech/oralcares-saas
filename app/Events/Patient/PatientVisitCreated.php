@@ -1,0 +1,18 @@
+<?php
+
+namespace App\Events\Patient;
+
+use App\Models\CaseNumber;
+use App\Models\PatientVisit;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Queue\SerializesModels;
+
+class PatientVisitCreated
+{
+    use Dispatchable, SerializesModels;
+
+    public function __construct(
+        public readonly PatientVisit $visit,
+        public readonly CaseNumber $caseNumber
+    ) {}
+}

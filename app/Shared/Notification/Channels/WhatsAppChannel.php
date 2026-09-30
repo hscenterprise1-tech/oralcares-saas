@@ -17,21 +17,21 @@ class WhatsAppChannel implements NotificationChannelInterface
     {
         try {
             $notifiable = $notification->notifiable;
-            
+
             // Assuming notifiable has a phone_number property or a routeNotificationForWhatsApp method
-            $phone = method_exists($notifiable, 'routeNotificationForWhatsApp') 
-                        ? $notifiable->routeNotificationForWhatsApp($notification) 
+            $phone = method_exists($notifiable, 'routeNotificationForWhatsApp')
+                        ? $notifiable->routeNotificationForWhatsApp($notification)
                         : ($notifiable->phone_number ?? $notifiable->phone ?? null);
 
-            if (!$phone) {
+            if (! $phone) {
                 throw new \Exception('No phone number found for WhatsApp notification');
             }
 
             // Using Meta WhatsApp Cloud API as the default enterprise implementation
             $token = config('services.whatsapp.token');
             $phoneNumberId = config('services.whatsapp.phone_number_id');
-            
-            if (!$token || !$phoneNumberId) {
+
+            if (! $token || ! $phoneNumberId) {
                 throw new \Exception('WhatsApp API credentials not configured');
             }
 
@@ -42,12 +42,12 @@ class WhatsAppChannel implements NotificationChannelInterface
                     'type' => 'text',
                     'text' => [
                         'preview_url' => false,
-                        'body' => $dto->title . "\n\n" . $dto->message,
-                    ]
+                        'body' => $dto->title."\n\n".$dto->message,
+                    ],
                 ]);
 
             if ($response->failed()) {
-                throw new \Exception('WhatsApp API Error: ' . $response->body());
+                throw new \Exception('WhatsApp API Error: '.$response->body());
             }
 
             NotificationLog::create([
@@ -61,15 +61,15 @@ class WhatsAppChannel implements NotificationChannelInterface
 
             return true;
         } catch (\Exception $e) {
-            Log::error('WhatsAppChannel Error: ' . $e->getMessage());
-            
+            Log::error('WhatsAppChannel Error: '.$e->getMessage());
+
             NotificationLog::create([
                 'notification_id' => $notification->id,
                 'channel' => NotificationChannel::WHATSAPP,
                 'status' => NotificationStatus::FAILED,
                 'error_message' => $e->getMessage(),
             ]);
-            
+
             return false;
         }
     }

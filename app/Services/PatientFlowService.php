@@ -13,6 +13,14 @@ use App\Models\ClinicQueueItem;
 use App\QueueItemStatus;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @deprecated Since Phase A2. Use `QueueStateMachine`: it guards every move,
+ *             stamps state timestamps, keeps the appointment and visit in step
+ *             and logs through the same `queue_histories` table. Kept only
+ *             because `QueueDisplayFlowTest` and the TV-display foundation still
+ *             exercise the old call/recall/hold/resume flow; remove once A3
+ *             moves the display onto `QueueItemTransitioned`.
+ */
 class PatientFlowService
 {
     public function __construct(

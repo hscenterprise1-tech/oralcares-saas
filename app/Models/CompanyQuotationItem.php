@@ -19,6 +19,8 @@ class CompanyQuotationItem extends Model
      */
     protected $fillable = [
         'company_quotation_id',
+        'item_type',
+        'company_package_addon_id',
         'title',
         'description',
         'quantity',
@@ -50,5 +52,17 @@ class CompanyQuotationItem extends Model
     public function quotation(): BelongsTo
     {
         return $this->belongsTo(CompanyQuotation::class, 'company_quotation_id');
+    }
+
+    /**
+     * The catalogue add-on this line was generated from, if `item_type` is
+     * `addon`. Metadata only — `title`/`unit_price`/`total` on this row are
+     * the frozen snapshot; this relation is never read to price anything.
+     *
+     * @return BelongsTo<CompanyPackageAddon, $this>
+     */
+    public function packageAddon(): BelongsTo
+    {
+        return $this->belongsTo(CompanyPackageAddon::class, 'company_package_addon_id');
     }
 }

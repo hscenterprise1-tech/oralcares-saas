@@ -12,7 +12,7 @@ class EnterpriseNotificationPolicy
 
     public function view(User $user, EnterpriseNotification $notification): bool
     {
-        return $notification->notifiable_type === $user->getMorphClass() 
+        return $notification->notifiable_type === $user->getMorphClass()
             && $notification->notifiable_id === $user->getKey();
     }
 

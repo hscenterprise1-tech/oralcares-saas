@@ -3,13 +3,19 @@
 namespace App\Models;
 
 use App\LabCaseStatus;
+use App\Traits\Auditable;
+use App\Traits\ClinicScoped;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class LabOrder extends Model
 {
+    use Auditable, ClinicScoped, HasFactory;
+
     protected $fillable = [
+        'clinic_id',
         'patient_id',
         'encounter_id',
         'lab_order_number',
@@ -25,6 +31,7 @@ class LabOrder extends Model
         'lab_shade_id',
         'requested_teeth',
         'delivery_due_date',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -35,6 +42,11 @@ class LabOrder extends Model
             'delivery_due_date' => 'date',
             'is_internal' => 'boolean',
         ];
+    }
+
+    public function clinic(): BelongsTo
+    {
+        return $this->belongsTo(Clinic::class);
     }
 
     public function patient(): BelongsTo

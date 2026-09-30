@@ -2,8 +2,8 @@
 
 namespace App\Shared\Notification\Repositories;
 
-use App\Shared\Notification\Models\NotificationPreference;
 use App\Models\User;
+use App\Shared\Notification\Models\NotificationPreference;
 
 class PreferenceRepository
 {

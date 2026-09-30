@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicMembership;
 use App\Models\CompanySubscription;
+use App\Models\User;
 use App\SubscriptionStatus;
 use Illuminate\Support\Facades\Cache;
 
@@ -37,8 +38,16 @@ class ResourceLimitService
     public function getCurrentDoctorCount(Clinic $clinic): int
     {
         return ClinicMembership::where('clinic_id', $clinic->id)
-            ->whereHas('roleAssignments.role', function ($query) {
-                $query->where('key', 'doctor');
+            ->whereHas('user', function ($query) use ($clinic) {
+                $query->whereIn('id', function ($sub) use ($clinic) {
+                    $sub->select('model_id')
+                        ->from('spatie_model_has_roles')
+                        ->where('model_type', User::class)
+                        ->whereIn('branch_id', $clinic->branches()->pluck('id'))
+                        ->whereIn('role_id', function ($roleSub) {
+                            $roleSub->select('id')->from('spatie_roles')->where('name', 'Doctor');
+                        });
+                });
             })
             ->count();
     }
@@ -49,6 +58,19 @@ class ResourceLimitService
     public function getCurrentBranchCount(Clinic $clinic): int
     {
         return Branch::where('clinic_id', $clinic->id)->count();
+    }
+
+    /**
+     * Get current non-doctor staff count.
+     *
+     * `max_staff` is a sub-cap under `max_users`, not a second independent
+     * population — every membership is either a doctor or staff, so this is
+     * the complement of {@see getCurrentDoctorCount()} rather than its own
+     * role-matching query.
+     */
+    public function getCurrentStaffCount(Clinic $clinic): int
+    {
+        return $this->getCurrentUserCount($clinic) - $this->getCurrentDoctorCount($clinic);
     }
 
     /**
@@ -90,6 +112,23 @@ class ResourceLimitService
     }
 
     /**
+     * Calculate allowed staff including addons.
+     *
+     * Null means the plan hasn't set a distinct staff sub-cap — the seat
+     * ceiling (`max_users`) still applies, this sub-cap just doesn't.
+     */
+    public function getAllowedStaff(CompanySubscription $sub): ?int
+    {
+        if ($sub->max_staff === null) {
+            return null;
+        }
+
+        $extra = $sub->addons()->where('addon_type', 'additional_staff')->where('is_active', true)->sum('quantity');
+
+        return $sub->max_staff + $extra;
+    }
+
+    /**
      * Calculate allowed storage in GB including addons.
      */
     public function getAllowedStorageGb(CompanySubscription $sub): float
@@ -121,7 +160,7 @@ class ResourceLimitService
     {
         $sub = $this->getActiveSubscription($clinic);
         if (! $sub) {
-            throw new ResourceLimitExceededException('No active subscription found.');
+            throw new ResourceLimitExceededException('No active subscription found. Contact your account manager.');
         }
 
         $limit = $this->getAllowedUsers($sub);
@@ -129,7 +168,7 @@ class ResourceLimitService
 
         if ($usage >= $limit) {
             event(new LimitReached($clinic, 'users', $limit, $usage));
-            throw new ResourceLimitExceededException('Maximum user limit of '.$limit.' reached under your plan.');
+            throw new ResourceLimitExceededException("Your plan allows up to {$limit} users in total. Contact your account manager to add more seats.");
         }
     }
 
@@ -155,7 +194,7 @@ class ResourceLimitService
     {
         $sub = $this->getActiveSubscription($clinic);
         if (! $sub) {
-            throw new ResourceLimitExceededException('No active subscription found.');
+            throw new ResourceLimitExceededException('No active subscription found. Contact your account manager.');
         }
 
         $limit = $this->getAllowedDoctors($sub);
@@ -163,7 +202,55 @@ class ResourceLimitService
 
         if ($usage >= $limit) {
             event(new LimitReached($clinic, 'doctors', $limit, $usage));
-            throw new ResourceLimitExceededException('Maximum doctor limit of '.$limit.' reached under your plan.');
+            throw new ResourceLimitExceededException("Your plan allows up to {$limit} doctors. Contact your account manager to add more seats.");
+        }
+    }
+
+    /**
+     * Check if clinic can create a new staff member (non-doctor).
+     *
+     * A plan with no `max_staff` set has no sub-cap — only the overall
+     * `max_users` ceiling applies, so this passes unconditionally.
+     */
+    public function canCreateStaff(Clinic $clinic): bool
+    {
+        $sub = $this->getActiveSubscription($clinic);
+        if (! $sub) {
+            return false;
+        }
+
+        $limit = $this->getAllowedStaff($sub);
+        if ($limit === null) {
+            return true;
+        }
+
+        return $this->getCurrentStaffCount($clinic) < $limit;
+    }
+
+    /**
+     * Enforce the staff sub-cap, throwing an exception if exceeded.
+     *
+     * No-op when the plan hasn't set `max_staff` — see {@see canCreateStaff()}.
+     *
+     * @throws ResourceLimitExceededException
+     */
+    public function enforceStaffLimit(Clinic $clinic): void
+    {
+        $sub = $this->getActiveSubscription($clinic);
+        if (! $sub) {
+            throw new ResourceLimitExceededException('No active subscription found. Contact your account manager.');
+        }
+
+        $limit = $this->getAllowedStaff($sub);
+        if ($limit === null) {
+            return;
+        }
+
+        $usage = $this->getCurrentStaffCount($clinic);
+
+        if ($usage >= $limit) {
+            event(new LimitReached($clinic, 'staff', $limit, $usage));
+            throw new ResourceLimitExceededException("Your plan allows up to {$limit} staff members. Contact your account manager to add more seats.");
         }
     }
 
@@ -189,7 +276,7 @@ class ResourceLimitService
     {
         $sub = $this->getActiveSubscription($clinic);
         if (! $sub) {
-            throw new ResourceLimitExceededException('No active subscription found.');
+            throw new ResourceLimitExceededException('No active subscription found. Contact your account manager.');
         }
 
         $limit = $this->getAllowedBranches($sub);
@@ -197,7 +284,7 @@ class ResourceLimitService
 
         if ($usage >= $limit) {
             event(new LimitReached($clinic, 'branches', $limit, $usage));
-            throw new ResourceLimitExceededException('Maximum branch limit of '.$limit.' reached under your plan.');
+            throw new ResourceLimitExceededException("Your plan allows up to {$limit} branches. Contact your account manager to add more.");
         }
     }
 

@@ -1,14 +1,11 @@
 <?php
 
-use App\LeadActivityType;
+use App\ActivityType;
 use App\LeadStatus;
-use App\Models\Clinic;
 use App\Models\Lead;
-use App\Models\LeadActivity;
 use App\Models\Task;
 use App\Models\Team;
 use App\Models\User;
-use App\Services\LogLeadActivityService;
 use App\TaskPriority;
 use App\TaskStatus;
 use Illuminate\Database\QueryException;
@@ -96,27 +93,28 @@ test('lead cannot be assigned to a clinic user', function () {
     ]))->toThrow(InvalidArgumentException::class, 'CRM records cannot be assigned to clinic users.');
 });
 
-test('lead activity logging via service preserves actor and payload', function () {
+test('lead activity logging preserves actor and payload', function () {
     $lead = Lead::factory()->create();
     $employee = User::factory()->companyUser()->create();
-    $service = app(LogLeadActivityService::class);
 
-    $activity = $service->execute(
-        lead: $lead,
-        type: LeadActivityType::StatusChanged,
-        description: 'Lead marked as demo scheduled',
-        actor: $employee,
-        properties: ['old_status' => 'new', 'new_status' => 'demo_scheduled']
-    );
+    $activity = $lead->activities()->create([
+        'user_id' => $employee->id,
+        'type' => ActivityType::RecordUpdated,
+        'description' => 'Lead marked as demo scheduled',
+        'properties' => ['old_status' => 'new', 'new_status' => 'demo_scheduled'],
+    ]);
 
-    expect($activity->lead_id)->toBe($lead->id)
-        ->and($activity->user_id)->toBe($employee->id)
-        ->and($activity->type)->toBe(LeadActivityType::StatusChanged)
+    expect($activity->user_id)->toBe($employee->id)
+        ->and($activity->type)->toBe(ActivityType::RecordUpdated)
         ->and($activity->description)->toBe('Lead marked as demo scheduled')
-        ->and($activity->properties)->toBe(['old_status' => 'new', 'new_status' => 'demo_scheduled']);
-
-    expect($lead->activities)->toHaveCount(1)
-        ->and($lead->activities->first()->id)->toBe($activity->id);
+        ->and($activity->properties)->toBe(['old_status' => 'new', 'new_status' => 'demo_scheduled'])
+        /*
+         * On the deal's own timeline, beside the `record_created` LeadObserver
+         * writes when the lead is made. The retired `lead_activities` table had
+         * no observer behind it, so the count there was 1 — asserting that here
+         * would pin the absence of a row the product deliberately writes.
+         */
+        ->and($lead->activities()->whereKey($activity->id)->exists())->toBeTrue();
 });
 
 test('task creation and assignment constraints', function () {
@@ -182,49 +180,28 @@ test('soft delete behavior on lead, team, and task', function () {
         ->and(Task::withTrashed()->find($task->id))->not->toBeNull();
 });
 
-test('lead to clinic relationship future readiness', function () {
+/*
+ * The `lead_activities` tests are gone with the table.
+ *
+ * That table predated the polymorphic `activities` table and had exactly one
+ * writer, a service nothing in the product called. Every CRM surface — the deal
+ * timeline, the conversation thread, Marketing's automation actions — writes to
+ * `activities`, and the two jobs that once wrote here were moved off it because
+ * nothing read it back. What those tests pinned (append-only history that
+ * survives a soft-deleted lead) is covered for the live table by
+ * Phase1ActivityIntegrityTest.
+ */
+test('soft deleting a Lead preserves its activity timeline', function () {
     $lead = Lead::factory()->create();
-    $clinic = Clinic::factory()->create();
 
-    $lead->update(['clinic_id' => $clinic->id]);
-
-    expect($lead->clinic->id)->toBe($clinic->id);
-});
-
-test('lead activities are strictly append-only in Eloquent', function () {
-    $lead = Lead::factory()->create();
-    $activity = LeadActivity::create([
-        'lead_id' => $lead->id,
-        'type' => LeadActivityType::LeadCreated,
-        'description' => 'Initial ingestion',
-    ]);
-
-    expect($activity->exists)->toBeTrue();
-
-    expect(fn () => $activity->update(['description' => 'Updated Description']))
-        ->toThrow(LogicException::class, 'Lead activities are append-only and cannot be modified.');
-
-    $activity->description = 'Direct modification';
-    expect(fn () => $activity->save())
-        ->toThrow(LogicException::class, 'Lead activities are append-only and cannot be modified.');
-
-    $activity = $activity->fresh();
-    expect(fn () => $activity->delete())
-        ->toThrow(LogicException::class, 'Lead activities are append-only and cannot be deleted.');
-});
-
-test('soft deleting a Lead preserves activity timeline', function () {
-    $lead = Lead::factory()->create();
-    $activity = LeadActivity::create([
-        'lead_id' => $lead->id,
-        'type' => LeadActivityType::LeadCreated,
+    $activity = $lead->activities()->create([
+        'type' => ActivityType::Note,
         'description' => 'Initial ingestion',
     ]);
 
     $lead->delete();
 
-    $dbRecord = DB::table('lead_activities')->where('id', $activity->id)->first();
-    expect($dbRecord)->not->toBeNull();
+    expect(DB::table('activities')->where('id', $activity->id)->first())->not->toBeNull();
 });
 
 test('task polymorphic relationship records stable lowercase domain morph aliases in db', function () {

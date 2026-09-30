@@ -27,7 +27,7 @@ class SeedPackageService
             $p = ClinicalProcedure::create(array_merge($proc, [
                 'clinic_id' => $clinic->id,
                 'is_active' => true,
-                'default_duration' => 30,
+                'default_duration_minutes' => 30,
                 'clinical_complexity' => 'low',
             ]));
             $entities['procedures'][] = $p->id;

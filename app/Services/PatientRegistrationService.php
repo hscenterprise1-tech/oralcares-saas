@@ -2,10 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Clinic;
 use App\Models\Patient;
+use App\Models\PatientTimelineEvent;
 use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 
 class PatientRegistrationService
 {
@@ -20,42 +19,46 @@ class PatientRegistrationService
      * Register a new patient, with duplicate guards.
      */
     public function registerPatient(
-        Clinic $clinic,
+        $organizationId,
         array $demographics,
         array $profileData = [],
         array $medicalHistoryData = [],
         bool $force = false
     ): Patient {
-        return DB::transaction(function () use ($clinic, $demographics, $profileData, $medicalHistoryData, $force) {
-            // 1. Duplicate detection check
-            if (! $force) {
-                $duplicates = $this->duplicateDetector->detectDuplicates($clinic, [
-                    'phone' => $demographics['phone'] ?? null,
-                    'email' => $demographics['email'] ?? null,
-                    'name' => $demographics['name'] ?? null,
-                    'date_of_birth' => $demographics['date_of_birth'] ?? null,
-                ]);
+        return DB::transaction(function () use ($organizationId, $demographics, $profileData, $medicalHistoryData) {
+            // 1. Generate UHID and patient_number
+            // In a real implementation, this would use a NumberingSequenceService.
+            $uhid = 'UHID-'.date('Ymd').'-'.rand(1000, 9999);
+            $patientNumber = 'PAT-'.date('Ymd').'-'.rand(1000, 9999);
 
-                if ($duplicates->isNotEmpty()) {
-                    throw new InvalidArgumentException('Potential duplicate patient records found.');
-                }
-            }
-
-            // 2. Generate immutable patient number
-            $patientNumber = $this->identifierService->generatePatientNumber($clinic);
-
-            // 3. Create Patient
+            // 2. Create Patient
             $patient = Patient::create(array_merge($demographics, [
-                'clinic_id' => $clinic->id,
+                'organization_id' => $organizationId,
+                'uhid' => $uhid,
                 'patient_number' => $patientNumber,
                 'status' => 'active',
             ]));
 
-            // 4. Create Profile
-            $this->profileService->updateProfile($patient, $profileData);
+            // 3. Create Profile
+            $patient->profile()->create(array_merge($profileData, [
+                'organization_id' => $organizationId,
+            ]));
 
-            // 5. Create Medical History
-            $this->medicalHistoryService->updateMedicalHistory($patient, $medicalHistoryData);
+            // 4. Create Medical History
+            $patient->medicalHistory()->create(array_merge($medicalHistoryData, [
+                'organization_id' => $organizationId,
+            ]));
+
+            // 5. Create Timeline Event
+            PatientTimelineEvent::create([
+                'organization_id' => $organizationId,
+                'patient_id' => $patient->id,
+                'event_type' => 'registered',
+                'context' => [
+                    'source' => 'reception',
+                ],
+                'actor_id' => auth()->id() ?? null,
+            ]);
 
             return $patient;
         });

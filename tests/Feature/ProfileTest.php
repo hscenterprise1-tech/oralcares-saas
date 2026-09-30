@@ -33,6 +33,22 @@ test('profile information can be updated', function () {
     $this->assertNull($user->email_verified_at);
 });
 
+test('profile phone number can be saved for WhatsApp reminders', function () {
+    $user = User::factory()->create();
+
+    $response = $this
+        ->actingAs($user)
+        ->patch('/profile', [
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => '+91 98765 43210',
+        ]);
+
+    $response->assertSessionHasNoErrors()->assertRedirect('/profile');
+
+    $this->assertSame('+91 98765 43210', $user->refresh()->phone);
+});
+
 test('email verification status is unchanged when the email address is unchanged', function () {
     $user = User::factory()->create();
 

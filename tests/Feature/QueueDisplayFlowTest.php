@@ -74,11 +74,11 @@ test('patient calling recall skip hold and resume workflow records histories', f
     $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
     $patient = Patient::create(['clinic_id' => $clinic->id, 'patient_number' => 'PT-1', 'name' => 'John Doe']);
 
+    // `clinical_encounters` is organization-scoped (no clinic_id/doctor_id since the July foundation refactor).
     $encounter = ClinicalEncounter::create([
-        'clinic_id' => $clinic->id,
+        'organization_id' => $clinic->organization_id,
         'patient_id' => $patient->id,
         'branch_id' => $branch->id,
-        'doctor_id' => $doctor->id,
         'encounter_number' => 'ENC-1',
         'status' => 'checked_in',
     ]);
@@ -139,11 +139,11 @@ test('multi-floor routing logic updates queue item attributes', function () {
     $patient = Patient::create(['clinic_id' => $clinic->id, 'patient_number' => 'PT-1', 'name' => 'John Doe']);
     $doctor = ClinicEmployee::create(['clinic_id' => $clinic->id, 'name' => 'Dr. House', 'email' => 'house@example.com']);
 
+    // `clinical_encounters` is organization-scoped (no clinic_id/doctor_id since the July foundation refactor).
     $encounter = ClinicalEncounter::create([
-        'clinic_id' => $clinic->id,
+        'organization_id' => $clinic->organization_id,
         'patient_id' => $patient->id,
         'branch_id' => $branch->id,
-        'doctor_id' => $doctor->id,
         'encounter_number' => 'ENC-1',
         'status' => 'checked_in',
     ]);

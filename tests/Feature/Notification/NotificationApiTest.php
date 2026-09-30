@@ -2,9 +2,8 @@
 
 use App\Models\User;
 use App\Shared\Notification\Models\EnterpriseNotification;
+
 use function Pest\Laravel\actingAs;
-use function Pest\Laravel\getJson;
-use function Pest\Laravel\patchJson;
 
 beforeEach(function () {
     $this->user = User::factory()->create();

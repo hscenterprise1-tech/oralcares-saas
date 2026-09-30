@@ -2,8 +2,8 @@
 
 namespace App\Shared\Notification\Repositories;
 
-use App\Shared\Notification\Models\EnterpriseNotification;
 use App\Models\User;
+use App\Shared\Notification\Models\EnterpriseNotification;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class NotificationRepository

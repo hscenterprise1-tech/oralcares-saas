@@ -30,6 +30,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Routing Mode
+    |--------------------------------------------------------------------------
+    |
+    | Determines the URL structure for the application's multi-tenant portals.
+    | "domain" (default): Uses subdomains (admin.example.com, clinic.example.com)
+    | "path": Uses path prefixes (/company/login, /clinic/login) for local dev.
+    |
+    */
+
+    'routing_mode' => env('ROUTING_MODE', 'domain'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Patient Identity Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Controls how UHID and Case Numbers are generated for the Universal
+    | Patient Platform. These values can be overridden per environment.
+    |
+    */
+
+    'patient' => [
+        'uhid_prefix' => env('PATIENT_UHID_PREFIX', 'OC-'),
+        'uhid_pad_length' => (int) env('PATIENT_UHID_PAD', 8),
+        'case_number_pad_length' => (int) env('CASE_NUMBER_PAD', 6),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     |

@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -104,6 +105,37 @@ return [
             'formatter' => env('LOG_STDERR_FORMATTER'),
             'processors' => [PsrLogMessageProcessor::class],
         ],
+
+        /*
+         * The security trail's off-box copy (see config/security.php).
+         * Locally a daily file. In production SECURITY_LOG_DRIVER must be
+         * `syslog` or `stderr`, collected by an agent (rsyslog, Fluent Bit,
+         * CloudWatch, Loki, …) into a store the app server cannot rewrite.
+         * The production check enforces this.
+         */
+        'security' => match (env('SECURITY_LOG_DRIVER', 'daily')) {
+            'syslog' => [
+                'driver' => 'syslog',
+                'level' => 'info',
+                'facility' => env('SECURITY_LOG_SYSLOG_FACILITY', LOG_AUTH),
+                'ident' => env('SECURITY_LOG_IDENT', 'oralcares-security'),
+                'replace_placeholders' => true,
+            ],
+            'stderr' => [
+                'driver' => 'monolog',
+                'level' => 'info',
+                'handler' => StreamHandler::class,
+                'handler_with' => ['stream' => 'php://stderr'],
+                'formatter' => JsonFormatter::class,
+            ],
+            default => [
+                'driver' => 'daily',
+                'path' => storage_path('logs/security.log'),
+                'level' => 'info',
+                'days' => (int) env('SECURITY_AUDIT_RETENTION_DAYS', 180),
+                'replace_placeholders' => true,
+            ],
+        },
 
         'syslog' => [
             'driver' => 'syslog',

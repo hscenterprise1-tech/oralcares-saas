@@ -10,7 +10,12 @@ use Illuminate\Support\Facades\Hash;
 class MasterAdminSeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Create the Master Admin from configuration, once.
+     *
+     * The configured password is only the initial one. When the account already
+     * exists, re-seeding keeps its password, name and verification state, so a
+     * deploy that runs seeders never resets a credential the admin has changed.
+     * It only makes sure the account still holds the Master Admin role.
      */
     public function run(): void
     {
@@ -32,11 +37,8 @@ class MasterAdminSeeder extends Seeder
                 'user_type' => UserType::MasterAdmin,
                 'email_verified_at' => now(),
             ]);
-        } else {
-            $user->update([
-                'name' => $name,
-                'user_type' => UserType::MasterAdmin,
-            ]);
+        } elseif ($user->user_type !== UserType::MasterAdmin) {
+            $user->update(['user_type' => UserType::MasterAdmin]);
         }
     }
 }

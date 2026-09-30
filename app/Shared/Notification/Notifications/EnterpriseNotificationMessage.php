@@ -10,11 +10,11 @@ class EnterpriseNotificationMessage extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    // This is essentially a marker class or a base class. 
+    // This is essentially a marker class or a base class.
     // In our custom NotificationEngineService, we manually create the DatabaseNotification
-    // model, but if we were to broadcast via Reverb or push to other channels natively via 
+    // model, but if we were to broadcast via Reverb or push to other channels natively via
     // Laravel's notification system, we would define toMail(), toBroadcast(), etc. here.
-    
+
     public function __construct(
         public string $title,
         public string $message,

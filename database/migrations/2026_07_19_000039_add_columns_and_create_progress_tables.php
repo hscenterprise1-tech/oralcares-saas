@@ -82,12 +82,12 @@ return new class extends Migration
         Schema::dropIfExists('patient_tooth_status_histories');
 
         Schema::table('billing_references', function (Blueprint $table) {
-            $table->dropForeign('bill_ref_tx_rec_fk');
+            $table->dropForeign(['treatment_record_id']);
             $table->dropColumn('treatment_record_id');
         });
 
         Schema::table('treatment_records', function (Blueprint $table) {
-            $table->dropForeign('tx_rec_proc_fk');
+            $table->dropForeign(['clinical_procedure_id']);
             $table->dropColumn('clinical_procedure_id');
         });
     }

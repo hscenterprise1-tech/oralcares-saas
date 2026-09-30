@@ -11,16 +11,19 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
     /**
      * Display the login view.
      */
-    public function create(): View
+    public function create(): Response
     {
-        return view('auth.login');
+        return Inertia::render('Auth/Login', [
+            'status' => session('status'),
+        ]);
     }
 
     /**
@@ -58,8 +61,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        if ($user->isMasterAdmin()) {
-            return redirect()->intended('/master/dashboard');
+        if ($user->isMasterAdmin() || $user->user_type === UserType::CompanyUser) {
+            return redirect()->intended(route('company.dashboard', absolute: false));
         }
 
         return redirect()->intended(route('dashboard', absolute: false));

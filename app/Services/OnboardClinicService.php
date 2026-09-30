@@ -7,7 +7,6 @@ use App\ClinicStatus;
 use App\Data\ClinicOnboardingData;
 use App\Data\ClinicOnboardingResult;
 use App\Models\Clinic;
-use App\Models\Role;
 use App\UserType;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -19,12 +18,11 @@ class OnboardClinicService
      * Create a new service instance.
      */
     public function __construct(
-        protected AssignPrimaryOwnerService $assignPrimaryOwnerService,
-        protected CloneSystemRolesToClinicService $cloneSystemRolesToClinicService
+        protected AssignPrimaryOwnerService $assignPrimaryOwnerService
     ) {}
 
     /**
-     * Onboard a new clinic with a primary branch, primary owner, and cloned default roles.
+     * Onboard a new clinic with a primary branch, primary owner.
      *
      * @throws InvalidArgumentException|RuntimeException
      */
@@ -35,16 +33,6 @@ class OnboardClinicService
             throw new InvalidArgumentException('Only clinic users can be assigned as clinic primary owners.');
         }
 
-        // 2. System role template dependency check
-        $systemTemplateCount = Role::whereNull('clinic_id')
-            ->where('is_system', true)
-            ->where('is_active', true)
-            ->count();
-
-        if ($systemTemplateCount === 0) {
-            throw new RuntimeException('Cannot onboard clinic: no active system role templates are available.');
-        }
-
         // 3. Early unique check for clinic slug (idempotency strategy boundary)
         if (Clinic::where('slug', $data->clinicSlug)->exists()) {
             throw new InvalidArgumentException("A clinic with slug '{$data->clinicSlug}' already exists.");
@@ -53,12 +41,19 @@ class OnboardClinicService
         // 4. Atomic transaction orchestration
         return DB::transaction(function () use ($data) {
             $clinic = Clinic::create([
+                'organization_id' => $data->organization->id,
                 'name' => $data->clinicName,
                 'slug' => $data->clinicSlug,
                 'status' => ClinicStatus::Active,
             ]);
 
+            /*
+             * The branch carries the organisation alongside its clinic, which is
+             * the rule BranchProvisioningService already states: the clinic owns
+             * the branch, and `organization_id` rides along for scoping.
+             */
             $primaryBranch = $clinic->branches()->create([
+                'organization_id' => $data->organization->id,
                 'name' => $data->primaryBranchName,
                 'slug' => 'main',
                 'is_main' => true,
@@ -67,15 +62,10 @@ class OnboardClinicService
 
             $ownerMembership = $this->assignPrimaryOwnerService->execute($clinic, $data->owner);
 
-            $this->cloneSystemRolesToClinicService->execute($clinic);
-
-            $clonedRoles = $clinic->roles()->get();
-
             return new ClinicOnboardingResult(
                 $clinic,
                 $primaryBranch,
-                $ownerMembership,
-                $clonedRoles
+                $ownerMembership
             );
         });
     }

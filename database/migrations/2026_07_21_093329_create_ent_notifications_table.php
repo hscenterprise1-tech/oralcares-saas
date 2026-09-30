@@ -16,7 +16,7 @@ return new class extends Migration
             $table->string('type');
             $table->morphs('notifiable');
             $table->text('data');
-            
+
             // Multitenancy and context scoping
             $table->foreignId('clinic_id')->nullable()->constrained()->cascadeOnDelete();
             $table->foreignId('branch_id')->nullable()->constrained()->cascadeOnDelete();
@@ -25,10 +25,10 @@ return new class extends Migration
             $table->string('category')->index(); // SYSTEM, CRM, BILLING, etc.
             $table->string('priority')->default('normal')->index();
             $table->string('title')->nullable();
-            
+
             // Optional Action links
             $table->json('actions')->nullable();
-            
+
             $table->timestamp('read_at')->nullable();
             $table->timestamp('archived_at')->nullable();
             $table->timestamps();

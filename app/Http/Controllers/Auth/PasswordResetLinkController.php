@@ -7,16 +7,27 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
-use Illuminate\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class PasswordResetLinkController extends Controller
 {
     /**
      * Display the password reset link request view.
      */
-    public function create(): View
+    public function create(): Response
     {
-        return view('auth.forgot-password');
+        /*
+         * The Inertia page, not the Blade one.
+         *
+         * Both existed. The Blade view was what this route served, and the
+         * Company login page linked instead to `/company/forgot-password`,
+         * which rendered the Inertia page against a POST route that was never
+         * registered. One working backend, one page, one route.
+         */
+        return Inertia::render('Auth/ForgotPassword', [
+            'status' => session('status'),
+        ]);
     }
 
     /**

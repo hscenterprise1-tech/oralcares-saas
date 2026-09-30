@@ -2,14 +2,18 @@
 
 namespace App\Models;
 
+use App\BranchStatus;
 use App\ClinicMembershipStatus;
+use App\Scopes\OrganizationScope;
+use App\Services\Security\SecurityAudit;
 use App\Traits\ClinicScoped;
 use Database\Factories\ClinicMembershipFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class ClinicMembership extends Model
 {
@@ -66,7 +70,32 @@ class ClinicMembership extends Model
      */
     public function assignedBranches(): BelongsToMany
     {
-        return $this->belongsToMany(Branch::class, 'branch_clinic_membership');
+        return $this->belongsToMany(Branch::class, 'branch_clinic_membership')
+            ->using(MembershipBranchAccess::class)
+            ->withTimestamps();
+    }
+
+    /**
+     * The active branches this membership may open, as an unexecuted query,
+     * so callers can count, search and page it without loading every branch.
+     *
+     * Bounded by this membership's own clinic (and its branch assignments),
+     * not by `users.organization_id`. That column holds one organisation, and
+     * one login can belong to clinics in several (see `InvitationAcceptance`),
+     * so the organisation scope would hide every branch of the second clinic.
+     *
+     * @return Builder<Branch>
+     */
+    public function accessibleActiveBranches(): Builder
+    {
+        return Branch::query()
+            ->withoutGlobalScope(OrganizationScope::class)
+            ->where('branches.clinic_id', $this->clinic_id)
+            ->where('branches.status', BranchStatus::Active)
+            ->when(! $this->has_all_branches_access, fn (Builder $query) => $query->whereHas(
+                'memberships',
+                fn (Builder $membership) => $membership->where('clinic_membership_id', $this->id),
+            ));
     }
 
     /**
@@ -82,7 +111,34 @@ class ClinicMembership extends Model
             return true;
         }
 
-        return $this->assignedBranches()->where('branch_id', $branch->id)->exists();
+        // Bounded by this membership's own assignment rows, not by the login's
+        // single `organization_id` (see `accessibleActiveBranches`).
+        return $this->assignedBranches()->withoutGlobalScope(OrganizationScope::class)->where('branch_id', $branch->id)->exists();
+    }
+
+    /**
+     * Make this membership's branch access exactly the given branches, and
+     * record what was granted and revoked in the security trail.
+     *
+     * @param  Collection<int, Branch>  $branches
+     *
+     * @throws \InvalidArgumentException when a branch belongs to another clinic
+     */
+    public function syncAssignedBranches(Collection $branches, ?int $actorUserId = null): void
+    {
+        if ($branches->contains(fn (Branch $branch) => $branch->clinic_id !== $this->clinic_id)) {
+            throw new \InvalidArgumentException('Cannot assign a branch belonging to another clinic.');
+        }
+
+        $changes = $this->assignedBranches()->sync($branches->pluck('id')->all());
+
+        if ($changes['attached'] !== [] || $changes['detached'] !== []) {
+            app(SecurityAudit::class)->record('access.branches_changed', $this, [
+                'member_user_id' => $this->user_id,
+                'granted' => array_values($changes['attached']),
+                'revoked' => array_values($changes['detached']),
+            ], array_filter(['actor_user_id' => $actorUserId, 'clinic_id' => $this->clinic_id], fn ($value) => $value !== null));
+        }
     }
 
     /**
@@ -96,16 +152,13 @@ class ClinicMembership extends Model
             throw new \InvalidArgumentException('Cannot assign a branch belonging to another clinic.');
         }
 
-        $this->assignedBranches()->syncWithoutDetaching([$branch->id]);
-    }
+        $changes = $this->assignedBranches()->syncWithoutDetaching([$branch->id]);
 
-    /**
-     * Get the role assignments for the membership.
-     *
-     * @return HasMany<ClinicMembershipRole, $this>
-     */
-    public function roleAssignments(): HasMany
-    {
-        return $this->hasMany(ClinicMembershipRole::class);
+        if ($changes['attached'] !== []) {
+            app(SecurityAudit::class)->record('access.branches_changed', $this, [
+                'member_user_id' => $this->user_id,
+                'granted' => [$branch->id],
+            ], ['clinic_id' => $this->clinic_id]);
+        }
     }
 }

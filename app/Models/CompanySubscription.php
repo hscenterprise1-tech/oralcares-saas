@@ -20,16 +20,30 @@ class CompanySubscription extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'organization_id',
         'clinic_id',
         'opportunity_id',
         'company_plan_id',
+        /*
+         * The recurring value, snapshotted here rather than read from the plan.
+         *
+         * Revenue used to sum a column that did not exist, so every figure on
+         * the page was silently zero. Deriving it live from the plan would be
+         * worse than that: a price change would rewrite what earlier months
+         * earned. Null means not recorded, and Revenue reports it as an
+         * exception rather than counting it as nothing.
+         */
+        'mrr',
+        'mrr_currency',
         'status',
         'starts_at',
         'ends_at',
         'trial_ends_at',
+        'grace_ends_at',
         'canceled_at',
         'max_users',
         'max_doctors',
+        'max_staff',
         'max_branches',
         'storage_limit_gb',
     ];
@@ -39,13 +53,25 @@ class CompanySubscription extends Model
      *
      * @return array<string, string>
      */
+    /**
+     * Every change to this subscription, in order.
+     *
+     * The row above is the current agreement; this is how it got there.
+     */
+    public function events(): HasMany
+    {
+        return $this->hasMany(SubscriptionEvent::class)->latest('id');
+    }
+
     protected function casts(): array
     {
         return [
             'status' => SubscriptionStatus::class,
+            'mrr' => 'decimal:2',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'trial_ends_at' => 'datetime',
+            'grace_ends_at' => 'datetime',
             'canceled_at' => 'datetime',
         ];
     }
@@ -61,6 +87,16 @@ class CompanySubscription extends Model
     }
 
     /**
+     * Get the organization tenant linked to this subscription.
+     *
+     * @return BelongsTo<Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'organization_id');
+    }
+
+    /**
      * Get the clinic tenant linked to this subscription.
      *
      * @return BelongsTo<Clinic, $this>
@@ -68,16 +104,6 @@ class CompanySubscription extends Model
     public function clinic(): BelongsTo
     {
         return $this->belongsTo(Clinic::class, 'clinic_id');
-    }
-
-    /**
-     * Get the sales opportunity associated with this subscription.
-     *
-     * @return BelongsTo<CompanyOpportunity, $this>
-     */
-    public function opportunity(): BelongsTo
-    {
-        return $this->belongsTo(CompanyOpportunity::class, 'opportunity_id');
     }
 
     /**

@@ -6,8 +6,10 @@ use App\ClinicStatus;
 use Database\Factories\ClinicFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Storage;
 
 class Clinic extends Model
 {
@@ -20,9 +22,18 @@ class Clinic extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'organization_id',
         'name',
         'slug',
         'status',
+        'logo_path',
+        'display_name',
+        'legal_name',
+        'invoice_logo_path',
+        'use_clinic_logo_for_invoice',
+        'patient_field_config',
+        'case_number_config',
+        'patient_flow_config',
     ];
 
     /**
@@ -34,7 +45,25 @@ class Clinic extends Model
     {
         return [
             'status' => ClinicStatus::class,
+            'use_clinic_logo_for_invoice' => 'boolean',
+            'patient_field_config' => 'array',
+            'case_number_config' => 'array',
+            'patient_flow_config' => 'array',
         ];
+    }
+
+    /**
+     * The commercial account this tenant belongs to.
+     *
+     * `clinics.organization_id` has existed since July but was missing from
+     * $fillable, so every write silently dropped it and the middle of the
+     * Organization → Clinic → Branch hierarchy was never linked.
+     *
+     * @return BelongsTo<Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     /**
@@ -76,13 +105,44 @@ class Clinic extends Model
     }
 
     /**
-     * Get the roles scoped to the clinic.
+     * The name to show the clinic's own staff and patients.
      *
-     * @return HasMany<Role, $this>
+     * Separate from `name`, the legal/CRM-facing name used across Company
+     * HQ — a clinic may want a shorter or different trading name on its own
+     * login page and portal header.
      */
-    public function roles(): HasMany
+    public function getBrandingNameAttribute(): string
     {
-        return $this->hasMany(Role::class);
+        return $this->display_name ?: $this->name;
+    }
+
+    /**
+     * Public URL for the clinic's logo, or null when none is set.
+     *
+     * Served from the `public` disk: this is shown on the pre-auth login
+     * page before the visitor has any session, so it can't go through a
+     * signed-URL/private-disk path the way clinical documents do.
+     */
+    public function getLogoUrlAttribute(): ?string
+    {
+        return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+    }
+
+    /**
+     * Public URL for the clinic's invoice logo, or null when none is set.
+     *
+     * Schema-only for now — nothing renders an invoice yet. `logo_url` is
+     * returned instead whenever `use_clinic_logo_for_invoice` is on, so a
+     * clinic that never bothers with a separate invoice logo still gets a
+     * sensible one once billing exists.
+     */
+    public function getInvoiceLogoUrlAttribute(): ?string
+    {
+        if ($this->use_clinic_logo_for_invoice) {
+            return $this->logo_url;
+        }
+
+        return $this->invoice_logo_path ? Storage::disk('public')->url($this->invoice_logo_path) : null;
     }
 
     /**

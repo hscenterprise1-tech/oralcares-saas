@@ -22,3 +22,25 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Recovery/debug scratch files — not source, and their truncated
+# extracts break Pint parsing.
+/scratch
+
+# Local one-off scripts, dumps and a local SQLite database. Root-anchored so
+# no source file of the same name elsewhere is hidden. Never commit these.
+/reset.php
+/update_password.php
+/test-widget.php
+/all())
+/oralcares_saas
+/.cc.cjs
+/.mine.cjs
+/reconstruct.cjs
+/generate_*.cjs
+/refactor.ps1
+/.gemini/
+
+# Local-only developer scripts: browser checks with dev logins, data seeders.
+# Never committed or deployed.
+/.local/

@@ -28,7 +28,7 @@ class EnterpriseNotificationMail extends Mailable
     {
         return new Content(
             // Use a default blade template or fallback to raw html
-            htmlString: '<div><h1>' . $this->dto->title . '</h1><p>' . $this->dto->message . '</p></div>'
+            htmlString: '<div><h1>'.$this->dto->title.'</h1><p>'.$this->dto->message.'</p></div>'
         );
     }
 }

@@ -16,7 +16,15 @@ class QueueHistory extends Model
         'action',
         'performed_by',
         'notes',
+        'created_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'created_at' => 'datetime',
+        ];
+    }
 
     public function clinic(): BelongsTo
     {

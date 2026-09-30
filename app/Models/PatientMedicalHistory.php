@@ -2,13 +2,19 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
+use App\Traits\OrganizationScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PatientMedicalHistory extends Model
 {
+    use Auditable, OrganizationScoped;
+
     protected $fillable = [
+        'organization_id',
         'patient_id',
+        // Legacy
         'pregnancy_status',
         'blood_disorder',
         'diabetes',
@@ -21,6 +27,10 @@ class PatientMedicalHistory extends Model
         'current_medications',
         'previous_surgeries',
         'notes',
+        // Generic JSON
+        'medical_alerts',
+        'lifestyle_factors',
+        'chronic_conditions',
     ];
 
     protected function casts(): array
@@ -37,6 +47,9 @@ class PatientMedicalHistory extends Model
             'medical_conditions' => 'array',
             'current_medications' => 'array',
             'previous_surgeries' => 'array',
+            'medical_alerts' => 'array',
+            'lifestyle_factors' => 'array',
+            'chronic_conditions' => 'array',
         ];
     }
 

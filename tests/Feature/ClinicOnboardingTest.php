@@ -8,7 +8,7 @@ use App\Data\ClinicOnboardingResult;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicMembership;
-use App\Models\Role;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\OnboardClinicService;
@@ -27,7 +27,8 @@ test('a valid clinic_user can onboard a clinic successfully', function () {
         clinicName: 'Happy Teeth Clinic',
         clinicSlug: 'happy-teeth',
         owner: $user,
-        primaryBranchName: 'Happy Teeth Main Branch'
+        primaryBranchName: 'Happy Teeth Main Branch',
+        organization: Organization::factory()->create()
     );
 
     $result = $service->execute($data);
@@ -48,10 +49,7 @@ test('a valid clinic_user can onboard a clinic successfully', function () {
         ->and($result->ownerMembership->clinic_id)->toBe($result->clinic->id)
         ->and($result->ownerMembership->is_primary_owner)->toBeTrue()
         ->and($result->ownerMembership->has_all_branches_access)->toBeTrue()
-        ->and($result->ownerMembership->status)->toBe(ClinicMembershipStatus::Active)
-
-        // Cloned roles
-        ->and($result->clonedRoles)->toHaveCount(4);
+        ->and($result->ownerMembership->status)->toBe(ClinicMembershipStatus::Active);
 });
 
 test('onboarding result exposes clinic, primary branch, owner membership, and cloned roles', function () {
@@ -62,33 +60,15 @@ test('onboarding result exposes clinic, primary branch, owner membership, and cl
         clinicName: 'Bright Smile Dental',
         clinicSlug: 'bright-smile',
         owner: $user,
-        primaryBranchName: 'Bright Smile Main'
+        primaryBranchName: 'Bright Smile Main',
+        organization: Organization::factory()->create()
     );
 
     $result = $service->execute($data);
 
     expect($result->clinic)->toBeInstanceOf(Clinic::class)
         ->and($result->primaryBranch)->toBeInstanceOf(Branch::class)
-        ->and($result->ownerMembership)->toBeInstanceOf(ClinicMembership::class)
-        ->and($result->clonedRoles->first())->toBeInstanceOf(Role::class);
-});
-
-test('primary owner is not redundantly assigned any roles during onboarding', function () {
-    $user = User::factory()->create();
-    $service = app(OnboardClinicService::class);
-
-    $data = new ClinicOnboardingData(
-        clinicName: 'Grace Dental',
-        clinicSlug: 'grace-dental',
-        owner: $user,
-        primaryBranchName: 'Grace Main'
-    );
-
-    $result = $service->execute($data);
-
-    // Primary owner is authorized via dynamic is_primary_owner flag override,
-    // so no roles are directly assigned in clinic_membership_roles pivot
-    expect($result->ownerMembership->roleAssignments)->toBeEmpty();
+        ->and($result->ownerMembership)->toBeInstanceOf(ClinicMembership::class);
 });
 
 test('invalid master_admin owner is rejected', function () {
@@ -99,7 +79,8 @@ test('invalid master_admin owner is rejected', function () {
         clinicName: 'Fail Clinic',
         clinicSlug: 'fail-clinic',
         owner: $user,
-        primaryBranchName: 'Fail Branch'
+        primaryBranchName: 'Fail Branch',
+        organization: Organization::factory()->create()
     );
 
     $this->expectException(InvalidArgumentException::class);
@@ -114,7 +95,8 @@ test('invalid company_user owner is rejected', function () {
         clinicName: 'Fail Clinic 2',
         clinicSlug: 'fail-clinic-2',
         owner: $user,
-        primaryBranchName: 'Fail Branch 2'
+        primaryBranchName: 'Fail Branch 2',
+        organization: Organization::factory()->create()
     );
 
     $this->expectException(InvalidArgumentException::class);
@@ -129,7 +111,8 @@ test('invalid owner onboarding leaves no clinic behind (atomic rollback)', funct
         clinicName: 'Atomic Rollback Clinic',
         clinicSlug: 'atomic-rollback',
         owner: $user,
-        primaryBranchName: 'Atomic Branch'
+        primaryBranchName: 'Atomic Branch',
+        organization: Organization::factory()->create()
     );
 
     try {
@@ -142,30 +125,6 @@ test('invalid owner onboarding leaves no clinic behind (atomic rollback)', funct
         ->and(Branch::where('name', 'Atomic Branch')->exists())->toBeFalse();
 });
 
-test('missing active system role templates causes complete rollback', function () {
-    // Delete all system roles
-    Role::whereNull('clinic_id')->delete();
-
-    $user = User::factory()->create();
-    $service = app(OnboardClinicService::class);
-
-    $data = new ClinicOnboardingData(
-        clinicName: 'No Template Clinic',
-        clinicSlug: 'no-template',
-        owner: $user,
-        primaryBranchName: 'No Template Branch'
-    );
-
-    $this->expectException(RuntimeException::class);
-    try {
-        $service->execute($data);
-    } finally {
-        expect(Clinic::where('slug', 'no-template')->exists())->toBeFalse()
-            ->and(Branch::where('name', 'No Template Branch')->exists())->toBeFalse()
-            ->and(ClinicMembership::where('user_id', $user->id)->exists())->toBeFalse();
-    }
-});
-
 test('failed onboarding does not alter existing clinics', function () {
     $user1 = User::factory()->create();
     $service = app(OnboardClinicService::class);
@@ -175,7 +134,8 @@ test('failed onboarding does not alter existing clinics', function () {
         clinicName: 'Healthy Clinic',
         clinicSlug: 'healthy-clinic',
         owner: $user1,
-        primaryBranchName: 'Healthy Branch'
+        primaryBranchName: 'Healthy Branch',
+        organization: Organization::factory()->create()
     ));
 
     $user2 = User::factory()->masterAdmin()->create(); // invalid user type to trigger failure
@@ -183,7 +143,8 @@ test('failed onboarding does not alter existing clinics', function () {
         clinicName: 'Failing Clinic',
         clinicSlug: 'failing-clinic',
         owner: $user2,
-        primaryBranchName: 'Failing Branch'
+        primaryBranchName: 'Failing Branch',
+        organization: Organization::factory()->create()
     );
 
     try {
@@ -208,7 +169,8 @@ test('repeated onboarding with same slug triggers early validation failure', fun
         clinicName: 'Unique Clinic',
         clinicSlug: 'unique-slug',
         owner: $user1,
-        primaryBranchName: 'Unique Branch 1'
+        primaryBranchName: 'Unique Branch 1',
+        organization: Organization::factory()->create()
     );
 
     $service->execute($data1);
@@ -218,7 +180,8 @@ test('repeated onboarding with same slug triggers early validation failure', fun
         clinicName: 'Duplicate Clinic',
         clinicSlug: 'unique-slug',
         owner: $user2,
-        primaryBranchName: 'Unique Branch 2'
+        primaryBranchName: 'Unique Branch 2',
+        organization: Organization::factory()->create()
     );
 
     $this->expectException(InvalidArgumentException::class);
@@ -233,7 +196,8 @@ test('a single-branch clinic auto-resolves branch context correctly in HTTP requ
         clinicName: 'Single Branch Auto Clinic',
         clinicSlug: 'single-branch-auto',
         owner: $user,
-        primaryBranchName: 'Auto Primary Branch'
+        primaryBranchName: 'Auto Primary Branch',
+        organization: Organization::factory()->create()
     ));
 
     // Register a test endpoint that outputs the resolved clinic and branch contexts

@@ -35,4 +35,31 @@ return [
         ],
     ],
 
+    'meta_whatsapp' => [
+        'api_version' => env('META_WHATSAPP_API_VERSION', 'v18.0'),
+
+        /*
+         * The app secret Meta signs webhook payloads with.
+         *
+         * `POST /webhooks/whatsapp` is a public, unauthenticated endpoint that
+         * creates conversations, messages and contacts. Without this, anything
+         * that can reach the server can post a payload and have it processed as
+         * though Meta sent it.
+         *
+         * Left null it stays unset, and the endpoint keeps accepting payloads —
+         * turning verification on by default would take inbound WhatsApp down
+         * for a running system the moment this shipped. Every unverified event
+         * is recorded as such and the Integrations page says so out loud.
+         */
+        'app_secret' => env('META_WHATSAPP_APP_SECRET'),
+    ],
+
+    'meta_instagram' => [
+        'api_version' => env('META_INSTAGRAM_API_VERSION', 'v18.0'),
+    ],
+
+    'openai' => [
+        'api_base' => env('OPENAI_API_BASE', 'https://api.openai.com/v1'),
+    ],
+
 ];

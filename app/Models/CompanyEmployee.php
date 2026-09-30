@@ -7,7 +7,6 @@ use Database\Factories\CompanyEmployeeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CompanyEmployee extends Model
@@ -99,21 +98,6 @@ class CompanyEmployee extends Model
     }
 
     /**
-     * Get the roles assigned to this employee.
-     *
-     * @return BelongsToMany<CompanyRole, $this>
-     */
-    public function roles(): BelongsToMany
-    {
-        return $this->belongsToMany(
-            CompanyRole::class,
-            'company_employee_roles',
-            'company_employee_id',
-            'company_role_id'
-        );
-    }
-
-    /**
      * Get the invitations sent to this employee.
      *
      * @return HasMany<CompanyEmployeeInvitation, $this>
@@ -131,5 +115,50 @@ class CompanyEmployee extends Model
     public function activities(): HasMany
     {
         return $this->hasMany(CompanyEmployeeActivity::class, 'company_employee_id');
+    }
+
+    /**
+     * Get this employee's HQ attendance, most recent day first.
+     *
+     * Company-side only. The clinic `leaves` and `shifts` tables belong to
+     * `clinic_employees` and describe a different workforce entirely.
+     *
+     * @return HasMany<CompanyAttendanceRecord, $this>
+     */
+    public function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(CompanyAttendanceRecord::class, 'employee_id')->orderByDesc('work_date');
+    }
+
+    /**
+     * Get this employee's leave requests, most recent first.
+     *
+     * @return HasMany<CompanyLeaveRequest, $this>
+     */
+    public function leaveRequests(): HasMany
+    {
+        return $this->hasMany(CompanyLeaveRequest::class, 'employee_id')->orderByDesc('start_date');
+    }
+
+    /**
+     * Get this employee's leave balances.
+     *
+     * @return HasMany<CompanyLeaveBalance, $this>
+     */
+    public function leaveBalances(): HasMany
+    {
+        return $this->hasMany(CompanyLeaveBalance::class, 'employee_id');
+    }
+
+    /**
+     * The timezone this employee's working day is measured in.
+     *
+     * Three of the nine people on record carry no timezone, so a fallback is
+     * needed rather than optional. It is the application's own timezone —
+     * the only one this system establishes — never an invented default.
+     */
+    public function resolvedTimezone(): string
+    {
+        return $this->timezone ?: (string) config('app.timezone', 'UTC');
     }
 }

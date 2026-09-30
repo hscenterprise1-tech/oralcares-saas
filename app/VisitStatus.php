@@ -11,6 +11,7 @@ enum VisitStatus: string
     case SentToXray = 'sent_to_xray';
     case SentToLab = 'sent_to_lab';
     case SentToBilling = 'sent_to_billing';
+    case InProgress = 'in_progress';
     case Completed = 'completed';
     case Cancelled = 'cancelled';
 }

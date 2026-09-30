@@ -36,7 +36,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('xray_records', function (Blueprint $table) {
-            $table->dropForeign('xr_req_doc_fk');
+            $table->dropForeign(['requesting_doctor_id']);
             $table->dropColumn([
                 'category',
                 'requesting_doctor_id',

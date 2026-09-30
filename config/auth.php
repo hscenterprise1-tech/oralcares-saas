@@ -42,6 +42,14 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'company' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
+        'clinic' => [
+            'driver' => 'session',
+            'provider' => 'users',
+        ],
     ],
 
     /*
@@ -126,7 +134,7 @@ return [
 
     'master_admin' => [
         'name' => env('MASTER_ADMIN_NAME', 'OralCares Master Admin'),
-        'email' => env('MASTER_ADMIN_EMAIL', 'master@oralcares.com'),
+        'email' => env('MASTER_ADMIN_EMAIL', 'master@oralcares.in'),
         'password' => env('MASTER_ADMIN_PASSWORD'),
     ],
 

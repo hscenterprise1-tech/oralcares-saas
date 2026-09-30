@@ -26,10 +26,14 @@ class CompanyPlan extends Model
         'billing_period',
         'version',
         'max_users',
+        'additional_user_price',
         'max_doctors',
+        'max_staff',
         'max_branches',
         'storage_limit_gb',
         'is_active',
+        'is_trial_available',
+        'trial_duration_days',
     ];
 
     /**
@@ -41,7 +45,10 @@ class CompanyPlan extends Model
     {
         return [
             'price' => 'decimal:2',
+            'additional_user_price' => 'decimal:2',
             'is_active' => 'boolean',
+            'is_trial_available' => 'boolean',
+            'trial_duration_days' => 'integer',
         ];
     }
 
@@ -68,5 +75,15 @@ class CompanyPlan extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(CompanySubscription::class, 'company_plan_id');
+    }
+
+    /**
+     * Get the CRM trials offered against this plan.
+     *
+     * @return HasMany<Trial, $this>
+     */
+    public function trials(): HasMany
+    {
+        return $this->hasMany(Trial::class);
     }
 }
