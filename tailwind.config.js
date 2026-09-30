@@ -41,6 +41,30 @@ export default {
     		colors: {
                 // OVS Generated Tokens
                 ...ovsTokens.colors,
+                // Clinic Portal palette: the CRM visual language's values,
+                // owned by the portal (resources/js/clinic) and independent of
+                // any OVS token. `secondary` is the smallest text allowed on
+                // `canvas`; `muted` passes AA on `surface` only.
+                clinic: {
+                    canvas: '#F4F6F8',
+                    surface: '#FFFFFF',
+                    inset: '#EEF1F4',
+                    ink: '#0B0B0F',
+                    'ink-soft': '#2A2D35',
+                    secondary: '#565F73',
+                    muted: '#6B7385',
+                    border: '#E4E7EC',
+                    'border-strong': '#CDD2DA',
+                    brand: '#12A0B5',
+                    'brand-strong': '#0A7181',
+                    'brand-soft': '#E4F5F8',
+                    danger: '#B42318',
+                    'danger-soft': '#FEF3F2',
+                    warning: '#93370D',
+                    'warning-soft': '#FFFAEB',
+                    success: '#067647',
+                    'success-soft': '#ECFDF3',
+                },
                 navy: {
     				DEFAULT: '#0A2540',
     				900: '#0A2540',

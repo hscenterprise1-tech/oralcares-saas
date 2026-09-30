@@ -22,6 +22,12 @@ class ClinicPortalMiddleware
     {
         // 1. Ensure user is authenticated
         if (! Auth::check()) {
+            // A background call (branch search, notifications) gets a status
+            // it can act on, not the HTML of the sign-in page.
+            if ($request->expectsJson()) {
+                abort(401);
+            }
+
             return redirect()->route('clinic.login');
         }
 

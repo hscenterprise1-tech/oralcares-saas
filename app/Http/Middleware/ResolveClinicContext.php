@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\BranchStatus;
 use App\ClinicMembershipStatus;
 use App\ClinicStatus;
 use App\EmploymentStatus;
@@ -92,29 +91,26 @@ class ResolveClinicContext
                 $this->clinicContext->setUser($user);
                 $this->clinicContext->setMembership($resolvedMembership);
 
-                // Eagerly query accessible branches
-                $branchQuery = $resolvedMembership->clinic->branches()
-                    ->where('status', BranchStatus::Active);
-
-                if (! $resolvedMembership->has_all_branches_access) {
-                    $branchQuery->whereHas('memberships', function ($query) use ($resolvedMembership) {
-                        $query->where('clinic_membership_id', $resolvedMembership->id);
-                    });
-                }
-
-                $accessibleActiveBranches = $branchQuery->get();
+                // The session's branch, if it is still one this membership may
+                // open; otherwise the only branch, when there is exactly one.
+                // Bounded lookups: a clinic with hundreds of branches is never
+                // loaded whole on every request.
+                $branchQuery = $resolvedMembership->accessibleActiveBranches();
                 $resolvedBranch = null;
 
-                if ($accessibleActiveBranches->count() === 1) {
-                    $resolvedBranch = $accessibleActiveBranches->first();
-                    session([ClinicContext::SESSION_BRANCH_ID => $resolvedBranch->id]);
-                } elseif ($accessibleActiveBranches->count() > 1) {
-                    $sessionBranchId = session(ClinicContext::SESSION_BRANCH_ID);
-                    if ($sessionBranchId) {
-                        $resolvedBranch = $accessibleActiveBranches->firstWhere('id', $sessionBranchId);
-                        if (! $resolvedBranch) {
-                            session()->forget(ClinicContext::SESSION_BRANCH_ID);
-                        }
+                $sessionBranchId = session(ClinicContext::SESSION_BRANCH_ID);
+                if ($sessionBranchId) {
+                    $resolvedBranch = (clone $branchQuery)->whereKey($sessionBranchId)->first();
+                    if (! $resolvedBranch) {
+                        session()->forget(ClinicContext::SESSION_BRANCH_ID);
+                    }
+                }
+
+                if (! $resolvedBranch) {
+                    $candidates = (clone $branchQuery)->limit(2)->get();
+                    if ($candidates->count() === 1) {
+                        $resolvedBranch = $candidates->first();
+                        session([ClinicContext::SESSION_BRANCH_ID => $resolvedBranch->id]);
                     }
                 }
 

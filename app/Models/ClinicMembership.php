@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\BranchStatus;
 use App\ClinicMembershipStatus;
+use App\Scopes\OrganizationScope;
 use App\Services\Security\SecurityAudit;
 use App\Traits\ClinicScoped;
 use Database\Factories\ClinicMembershipFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -73,6 +76,29 @@ class ClinicMembership extends Model
     }
 
     /**
+     * The active branches this membership may open, as an unexecuted query,
+     * so callers can count, search and page it without loading every branch.
+     *
+     * Bounded by this membership's own clinic (and its branch assignments),
+     * not by `users.organization_id`. That column holds one organisation, and
+     * one login can belong to clinics in several (see `InvitationAcceptance`),
+     * so the organisation scope would hide every branch of the second clinic.
+     *
+     * @return Builder<Branch>
+     */
+    public function accessibleActiveBranches(): Builder
+    {
+        return Branch::query()
+            ->withoutGlobalScope(OrganizationScope::class)
+            ->where('branches.clinic_id', $this->clinic_id)
+            ->where('branches.status', BranchStatus::Active)
+            ->when(! $this->has_all_branches_access, fn (Builder $query) => $query->whereHas(
+                'memberships',
+                fn (Builder $membership) => $membership->where('clinic_membership_id', $this->id),
+            ));
+    }
+
+    /**
      * Determine whether the membership can access the given branch.
      */
     public function hasAccessToBranch(Branch $branch): bool
@@ -85,7 +111,9 @@ class ClinicMembership extends Model
             return true;
         }
 
-        return $this->assignedBranches()->where('branch_id', $branch->id)->exists();
+        // Bounded by this membership's own assignment rows, not by the login's
+        // single `organization_id` (see `accessibleActiveBranches`).
+        return $this->assignedBranches()->withoutGlobalScope(OrganizationScope::class)->where('branch_id', $branch->id)->exists();
     }
 
     /**

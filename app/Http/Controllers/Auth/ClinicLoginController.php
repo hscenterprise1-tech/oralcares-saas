@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\ClinicMembershipStatus;
 use App\ClinicStatus;
+use App\EmploymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ClinicLoginRequest;
 use App\Models\Clinic;
@@ -157,6 +158,14 @@ class ClinicLoginController extends Controller
                 $query->where('status', ClinicStatus::Active)
                     ->when($clinicSlug !== null, fn ($q) => $q->where('slug', $clinicSlug));
             })
+            // The rule `ResolveClinicContext` applies to every later request:
+            // an inactive, suspended or resigned staff record ends that
+            // login's access. Checking it here refuses the sign-in with a
+            // reason instead of opening a session that then meets a bare 403.
+            ->whereNotExists(fn ($query) => $query->from('clinic_employees')
+                ->whereColumn('clinic_employees.clinic_id', 'clinic_memberships.clinic_id')
+                ->whereColumn('clinic_employees.user_id', 'clinic_memberships.user_id')
+                ->whereIn('clinic_employees.status', EmploymentStatus::accessEnding()))
             ->with('clinic')
             ->orderBy('id')
             ->first();

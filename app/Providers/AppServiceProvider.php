@@ -52,6 +52,7 @@ use App\Services\Security\Malware\MalwareScannerVirusAdapter;
 use App\Services\Security\Malware\UnconfiguredScanner;
 use App\Services\Security\SecurityAudit;
 use App\Shared\Search\Observers\SearchIndexObserver;
+use App\Support\ClinicPortalErrors;
 use App\Support\CrmPermissions;
 use App\Support\CrmScope;
 use App\UserType;
@@ -64,6 +65,8 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Inertia\ExceptionResponse;
+use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -114,6 +117,9 @@ class AppServiceProvider extends ServiceProvider
             config(['app.debug' => false]);
             logger()->critical('APP_DEBUG was true in production and has been forced off. Fix the environment.');
         }
+
+        // The Clinic Portal's own error pages and session-expiry redirect.
+        Inertia::handleExceptionsUsing(fn (ExceptionResponse $response) => ClinicPortalErrors::handle($response));
 
         /*
          * Where an already-signed-in visitor goes when they open a sign-in or

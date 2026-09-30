@@ -20,6 +20,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureClinicEntitled
 {
+    /**
+     * The refusal message, also how the portal's error page tells a plan
+     * refusal from a permission one.
+     */
+    public const REFUSAL = 'Your clinic\'s plan does not include this module.';
+
     public function __construct(
         protected ClinicContext $clinicContext,
         protected EntitlementResolver $entitlements,
@@ -50,7 +56,7 @@ class EnsureClinicEntitled
         abort_unless(
             in_array($module, $entitlement['modules'], true),
             403,
-            'Your clinic\'s plan does not include this module.'
+            self::REFUSAL
         );
 
         return $next($request);

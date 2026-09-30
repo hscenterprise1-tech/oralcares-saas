@@ -1122,6 +1122,11 @@ $clinicRoutes = function () {
             return redirect()->route('clinic.dashboard');
         })->name('dashboard');
 
+        // The branch switcher's search: bounded pages of the member's own
+        // accessible branches, for clinics with too many to share on a page.
+        Route::get('/branches', [BranchSwitchController::class, 'index'])
+            ->middleware('throttle:60,1')
+            ->name('clinic.branches.index');
         Route::post('/branches/switch', [BranchSwitchController::class, 'switch'])->name('clinic.branches.switch');
 
         // ==========================================

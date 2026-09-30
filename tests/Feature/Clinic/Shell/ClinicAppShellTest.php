@@ -64,7 +64,7 @@ test('clinic dashboard renders successfully with operational metrics and shared 
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Dashboard')
+        ->component('ClinicPortal/Home')
         ->has('metrics')
         ->where('metrics.totalAppointments', 1)
         ->has('upcomingAppointments', 1)

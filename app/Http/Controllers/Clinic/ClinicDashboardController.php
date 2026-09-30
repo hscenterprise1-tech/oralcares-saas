@@ -137,7 +137,7 @@ class ClinicDashboardController extends Controller
             ];
         }
 
-        return Inertia::render('Clinic/Dashboard', [
+        return Inertia::render('ClinicPortal/Home', [
             'metrics' => [
                 'totalAppointments' => $totalAppointmentsToday,
                 'scheduledAppointments' => $scheduledAppointments,
