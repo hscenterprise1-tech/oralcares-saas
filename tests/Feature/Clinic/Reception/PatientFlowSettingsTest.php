@@ -11,15 +11,18 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-28 10:00', 'Asia/Kolkata'));
     $this->f = ReceptionFixture::make();
     $this->room = ClinicRoom::create(['branch_id' => $this->f->branch->id, 'name' => 'Chair 1', 'key' => 'chair-1', 'type' => 'chair', 'is_active' => true]);
+    // The doctor works from this chair; booking assigns it, nobody picks it.
+    $this->f->doctorA->rooms()->attach($this->room->id);
 });
 
 function bookWithRoom(int $roomId)
 {
     $test = test();
 
+    // `room_id` is sent to prove a client cannot choose the room.
     return $test->actingAs($test->f->owner)->withSession($test->f->session)->post('/clinic/appointments', [
         'patient_id' => $test->f->patient()->id, 'practitioner_id' => $test->f->doctorA->id, 'room_id' => $roomId,
-        'scheduled_at' => '2026-09-28 11:00:00', 'duration_minutes' => 15, 'appointment_type' => 'consultation',
+        'scheduled_at' => '2026-09-28 11:00:00', 'duration_minutes' => 15,
     ]);
 }
 
@@ -28,21 +31,16 @@ test('rooms are off until a clinic turns them on', function () {
         ->assertInertia(fn ($page) => $page->where('patientFlow.rooms_enabled', false));
 });
 
-test('with rooms off, appointment booking offers no rooms and ignores a room sent anyway', function () {
-    $this->actingAs($this->f->owner)->withSession($this->f->session)->get('/clinic/appointments?date=2026-09-28')
-        ->assertInertia(fn ($page) => $page->where('rooms', []));
-
+test('with rooms off, booking assigns no room and ignores a room sent anyway', function () {
     bookWithRoom($this->room->id)->assertSessionHasNoErrors();
 
     expect(Appointment::sole()->room_id)->toBeNull();
 });
 
-test('with rooms on, booking offers and saves the room', function () {
+test('with rooms on, booking assigns the doctor\'s room automatically', function () {
     $this->actingAs($this->f->owner)->withSession($this->f->session)->put('/clinic/admin/settings/patient-flow', ['rooms_enabled' => true]);
 
-    $this->actingAs($this->f->owner)->withSession($this->f->session)->get('/clinic/appointments?date=2026-09-28')
-        ->assertInertia(fn ($page) => $page->has('rooms', 1));
-    bookWithRoom($this->room->id);
+    bookWithRoom(999999)->assertSessionHasNoErrors();
 
     expect(Appointment::sole()->room_id)->toBe($this->room->id);
 });

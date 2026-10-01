@@ -15,7 +15,7 @@ export interface AppointmentRow {
   scheduled_at: string;
   scheduled_time: string;
   duration_minutes: number;
-  status: 'scheduled' | 'arrived' | 'checked_in' | 'in_consultation' | 'completed' | 'cancelled' | 'no_show';
+  status: 'scheduled' | 'confirmed' | 'arrived' | 'checked_in' | 'in_consultation' | 'completed' | 'cancelled' | 'no_show';
   appointment_type: string;
   notes: string | null;
 }

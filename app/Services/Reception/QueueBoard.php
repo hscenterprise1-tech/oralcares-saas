@@ -199,7 +199,7 @@ class QueueBoard
         $onLeave = $roster->where('shift', 'on_leave')->pluck('employee.id')->all();
 
         foreach ($appointments as $appointment) {
-            if (! in_array($appointment->status, [AppointmentStatus::Scheduled, AppointmentStatus::Arrived], true)) {
+            if (! in_array($appointment->status, AppointmentStatus::checkable(), true)) {
                 continue;
             }
 

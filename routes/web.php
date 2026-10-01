@@ -12,6 +12,7 @@ use App\Http\Controllers\Clinic\Admin\EmployeeInvitationController as ClinicAdmi
 use App\Http\Controllers\Clinic\Admin\RoomController as ClinicAdminRoomController;
 use App\Http\Controllers\Clinic\Admin\SettingsController as ClinicAdminSettingsController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
+use App\Http\Controllers\Clinic\AppointmentSettingsController;
 use App\Http\Controllers\Clinic\BranchSwitchController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
 use App\Http\Controllers\Clinic\DashboardVisibilityController;
@@ -1207,12 +1208,27 @@ $clinicRoutes = function () {
             Route::get('/', [ClinicAppointmentController::class, 'index'])
                 ->middleware('clinic_permission:appointment.view')
                 ->name('index');
+            Route::get('/availability', [ClinicAppointmentController::class, 'availability'])
+                ->middleware(['clinic_permission:appointment.view', 'throttle:60,1'])
+                ->name('availability');
             Route::post('/', [ClinicAppointmentController::class, 'store'])
                 ->middleware('clinic_permission:appointment.create')
                 ->name('store');
+            Route::patch('/{appointment}/reschedule', [ClinicAppointmentController::class, 'reschedule'])
+                ->middleware('clinic_permission:appointment.manage')
+                ->name('reschedule');
             Route::patch('/{appointment}/status', [ClinicAppointmentController::class, 'updateStatus'])
                 ->middleware('clinic_permission:appointment.manage')
                 ->name('status');
+            Route::post('/{appointment}/cancel', [ClinicAppointmentController::class, 'cancel'])
+                ->middleware('clinic_permission:appointment.manage')
+                ->name('cancel');
+            Route::patch('/{appointment}/patient', [ClinicAppointmentController::class, 'linkPatient'])
+                ->middleware('clinic_permission:appointment.manage')
+                ->name('link-patient');
+            Route::put('/settings', [AppointmentSettingsController::class, 'update'])
+                ->middleware('clinic_permission:settings.manage')
+                ->name('settings');
         });
 
         // ==========================================

@@ -11,6 +11,7 @@ import type { AppointmentRow } from './types';
  */
 export const APPOINTMENT_STATUS_TONE: Record<AppointmentRow['status'], { bg: string; border: string; text: string; dot: string }> = {
   scheduled: { bg: '#EAE6FD', border: '#C3BAF6', text: '#4C3DAF', dot: '#8B7FE8' }, // --ovs-crm-accent-violet-*
+  confirmed: { bg: '#DFF1F4', border: '#A2D4DD', text: '#1F6673', dot: '#4A9DAB' },
   arrived: { bg: '#DFF1F4', border: '#A2D4DD', text: '#1F6673', dot: '#4A9DAB' }, // --ovs-crm-accent-teal-*
   checked_in: { bg: '#DFF1F4', border: '#A2D4DD', text: '#1F6673', dot: '#4A9DAB' },
   in_consultation: { bg: '#FEF0DA', border: '#F6D9A6', text: '#8A5406', dot: '#F5A623' }, // --ovs-crm-warning-*
@@ -22,6 +23,7 @@ export const APPOINTMENT_STATUS_TONE: Record<AppointmentRow['status'], { bg: str
 
 export const APPOINTMENT_STATUS_PILL_TONE: Record<AppointmentRow['status'], CrmStatusTone> = {
   scheduled: 'blue',
+  confirmed: 'blue',
   arrived: 'warn',
   checked_in: 'warn',
   in_consultation: 'good',
@@ -32,6 +34,7 @@ export const APPOINTMENT_STATUS_PILL_TONE: Record<AppointmentRow['status'], CrmS
 
 export const APPOINTMENT_STATUS_OPTIONS: { value: AppointmentRow['status']; label: string }[] = [
   { value: 'scheduled', label: 'Scheduled' },
+  { value: 'confirmed', label: 'Confirmed' },
   { value: 'arrived', label: 'Arrived' },
   { value: 'checked_in', label: 'Checked in' },
   { value: 'in_consultation', label: 'In consultation' },

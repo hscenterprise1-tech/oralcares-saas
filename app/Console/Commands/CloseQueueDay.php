@@ -80,7 +80,7 @@ class CloseQueueDay extends Command
             $totals['no_shows'] += Appointment::withoutGlobalScopes()
                 ->where('branch_id', $branch->id)
                 ->whereDate('scheduled_at', $date)
-                ->where('status', AppointmentStatus::Scheduled)
+                ->whereIn('status', AppointmentStatus::awaitingArrival())
                 ->update(['status' => AppointmentStatus::NoShow]);
         }
 
@@ -106,7 +106,7 @@ class CloseQueueDay extends Command
             ->map(fn (ClinicQueue $queue) => [(int) $queue->branch_id, $queue->queue_date->toDateString()]);
 
         $fromBookings = Appointment::withoutGlobalScopes()
-            ->where('status', AppointmentStatus::Scheduled)
+            ->whereIn('status', AppointmentStatus::awaitingArrival())
             ->whereNotNull('branch_id')
             ->whereDate('scheduled_at', '>=', $from)
             ->whereDate('scheduled_at', '<=', $today)

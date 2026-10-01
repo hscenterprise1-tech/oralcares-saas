@@ -135,7 +135,7 @@ class ReceptionCheckIn
         $problem = match (true) {
             $appointment->patient_id !== $patient->id => 'This appointment belongs to a different patient.',
             $appointment->scheduled_at?->toDateString() !== $today => 'Only today\'s appointments can be checked in.',
-            ! in_array($appointment->status, [AppointmentStatus::Scheduled, AppointmentStatus::Arrived], true) => 'This appointment has already been checked in, completed or cancelled.',
+            ! in_array($appointment->status, AppointmentStatus::checkable(), true) => 'This appointment has already been checked in, completed or cancelled.',
             default => null,
         };
 

@@ -10,6 +10,7 @@ use App\Models\ClinicEmployee;
 use App\Models\ClinicMembership;
 use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
+use App\Models\Practitioner;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\UserType;
@@ -44,6 +45,11 @@ beforeEach(function () {
         'status' => 'active',
     ]);
 
+    Practitioner::create([
+        'clinic_id' => $this->clinic->id, 'organization_id' => $this->clinic->organization_id,
+        'clinic_employee_id' => $this->doctor->id, 'specialty' => 'General Physician', 'is_active' => true,
+    ]);
+
     $this->patient = Patient::create([
         'clinic_id' => $this->clinic->id,
         'first_name' => 'Ritu',
@@ -73,10 +79,10 @@ test('appointments index lists scheduled appointments and practitioners', functi
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Appointments/Index')
+        ->component('ClinicPortal/Appointments/Index')
         ->has('appointments', 1)
-        ->where('appointments.0.patient_name', 'Ritu Saxena')
-        ->has('practitioners', 1)
+        ->where('appointments.0.patient.name', 'Ritu Saxena')
+        ->has('providers', 1)
     );
 });
 
@@ -111,7 +117,7 @@ test('scheduling an appointment records operator audit and timeline event', func
     expect($timelineEvent)->not->toBeNull();
 });
 
-test('appointment status can be updated to completed', function () {
+test('appointment status can be updated to confirmed', function () {
     $appointment = Appointment::create([
         'clinic_id' => $this->clinic->id,
         'branch_id' => $this->branch->id,
@@ -127,9 +133,9 @@ test('appointment status can be updated to completed', function () {
             ClinicContext::SESSION_BRANCH_ID => $this->branch->id,
         ])
         ->patch("/clinic/appointments/{$appointment->id}/status", [
-            'status' => 'completed',
+            'status' => 'confirmed',
         ]);
 
     $response->assertSessionHas('success');
-    expect($appointment->fresh()->status)->toBe(AppointmentStatus::Completed);
+    expect($appointment->fresh()->status)->toBe(AppointmentStatus::Confirmed);
 });

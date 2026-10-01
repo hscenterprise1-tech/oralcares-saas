@@ -87,7 +87,7 @@ class ReceptionController extends Controller
             ->where('branch_id', $branch->id)
             ->whereIn('patient_id', $patients->pluck('id'))
             ->whereDate('scheduled_at', $now->toDateString())
-            ->whereIn('status', [AppointmentStatus::Scheduled, AppointmentStatus::Arrived])
+            ->whereIn('status', AppointmentStatus::checkable())
             ->with('practitioner')
             ->orderBy('scheduled_at')
             ->get()

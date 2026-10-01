@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\AppointmentSource;
 use App\AppointmentStatus;
 use App\Traits\Auditable;
 use App\Traits\ClinicScoped;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 class Appointment extends Model
 {
@@ -19,14 +21,25 @@ class Appointment extends Model
         'clinic_id',
         'branch_id',
         'room_id',
+        'service_id',
+        'appointment_series_id',
         'patient_id',
+        'prospect_name',
+        'prospect_phone',
         'practitioner_id',
         'provider_id',
         'scheduled_at',
         'duration_minutes',
         'status',
         'appointment_type',
+        'source',
         'notes',
+        'confirmed_at',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
+        'rescheduled_at',
+        'reschedule_count',
         'created_by',
         'updated_by',
     ];
@@ -37,6 +50,11 @@ class Appointment extends Model
             'scheduled_at' => 'datetime',
             'duration_minutes' => 'integer',
             'status' => AppointmentStatus::class,
+            'source' => AppointmentSource::class,
+            'confirmed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
+            'rescheduled_at' => 'datetime',
+            'reschedule_count' => 'integer',
         ];
     }
 
@@ -58,6 +76,27 @@ class Appointment extends Model
     public function room(): BelongsTo
     {
         return $this->belongsTo(ClinicRoom::class);
+    }
+
+    /**
+     * The service booked, from the clinic's procedure catalogue.
+     */
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(ClinicalProcedure::class, 'service_id');
+    }
+
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(AppointmentSeries::class, 'appointment_series_id');
+    }
+
+    /**
+     * The appointment's end, from its start and duration.
+     */
+    public function endsAt(): ?Carbon
+    {
+        return $this->scheduled_at?->copy()->addMinutes($this->duration_minutes ?? 15);
     }
 
     public function patient(): BelongsTo
@@ -95,6 +134,14 @@ class Appointment extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * The Reception queue item this appointment was checked in as.
+     */
+    public function queueItem(): HasOne
+    {
+        return $this->hasOne(ClinicQueueItem::class)->latestOfMany();
     }
 
     public function queueEntry(): HasOne
