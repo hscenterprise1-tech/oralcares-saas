@@ -164,21 +164,12 @@ export function ClinicPortalShell({ title, children }: { title: string; children
 }
 
 /**
- * The page's ambient colour: the Company CRM's mesh technique (large, heavily
- * blurred orbs on a clipped layer behind the content), in cool clinic washes
- * of teal, blue and violet. Near-white, so it lifts the canvas without
- * colouring it; the cards on top stay solid white. Fixed to the viewport so it
- * never adds scroll width, static so there is no motion to reduce, and smaller
- * and softer on a phone.
+ * The page's ambient colour: one blended mesh across the whole canvas (see
+ * `.clinic-ambient` in app.css). Fixed to the viewport so it never adds
+ * scroll width, static, and gentler on a phone.
  */
 function AmbientBackground() {
-  return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute -left-[12%] -top-[14%] h-[300px] w-[300px] rounded-full bg-[#BFE9F0] opacity-60 blur-[70px] sm:h-[560px] sm:w-[560px] sm:opacity-80 sm:blur-[100px]" />
-      <div className="absolute -right-[10%] top-[8%] h-[260px] w-[260px] rounded-full bg-[#CFDFFC] opacity-55 blur-[70px] sm:h-[500px] sm:w-[500px] sm:opacity-80 sm:blur-[100px]" />
-      <div className="absolute -bottom-[16%] left-[30%] h-[240px] w-[240px] rounded-full bg-[#E2DAFC] opacity-50 blur-[70px] sm:h-[520px] sm:w-[520px] sm:opacity-70 sm:blur-[110px]" />
-    </div>
-  );
+  return <div aria-hidden="true" className="clinic-ambient pointer-events-none fixed inset-0 -z-10 overflow-hidden" />;
 }
 
 /** A domain as the CRM shows a pillar: a pill, solid ink when it is the current one. */

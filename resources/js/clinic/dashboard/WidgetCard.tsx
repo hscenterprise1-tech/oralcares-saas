@@ -28,7 +28,7 @@ export function WidgetCard({
   return (
     <section
       aria-labelledby={`widget-${widget.key}`}
-      className="flex min-w-0 flex-col rounded-[22px] border border-clinic-border bg-clinic-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
+      className="flex min-w-0 flex-col rounded-[22px] border border-white/80 bg-white/[0.93] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_24px_-16px_rgba(16,24,40,0.12)] backdrop-blur-sm"
     >
       <header className="flex items-center gap-2.5 px-4 pt-4">
         <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', tone.chip)}>
@@ -72,8 +72,8 @@ export function KpiCard({ widget, children }: { widget: DashboardWidget; childre
     <section
       aria-labelledby={`widget-${widget.key}`}
       className={cn(
-        'relative min-w-0 overflow-hidden rounded-[22px] border border-clinic-border bg-clinic-surface p-4',
-        'shadow-[0_1px_2px_rgba(16,24,40,0.04)]',
+        'relative min-w-0 overflow-hidden rounded-[22px] border border-white/80 bg-white/[0.93] p-4 backdrop-blur-sm',
+        'shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_24px_-16px_rgba(16,24,40,0.12)]',
       )}
     >
       <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1', tone.fill)} />
