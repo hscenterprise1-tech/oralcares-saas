@@ -2,80 +2,115 @@
 
 namespace App\Support;
 
-use App\ClinicPermission;
-use Illuminate\Support\Facades\Route;
+use App\Support\ClinicAccess\ClinicAccess;
 
 /**
- * The one definition of the Clinic Portal's navigation.
+ * The one definition of the Clinic Portal's navigation: business domains,
+ * not pages.
  *
- * Every destination the portal can offer is declared here once, with the
- * route it opens, the permission a user needs and the plan module the clinic
- * needs. `for()` resolves that list against what the server itself would
- * allow, so the top navigation, the mobile menu and the command palette all
- * read one resolved list and can never offer a page the route would refuse.
+ * Each domain declares what it needs (see `ClinicAccess` for the requirement
+ * keys) and `for()` keeps only those this user may open right now. The top
+ * navigation, the mobile menu and the command palette all render this one
+ * resolved list; nothing in React declares a destination of its own.
  *
- * Hiding a destination is presentation only. Each route keeps its own
- * `clinic_permission:*` / `clinic_entitled:*` middleware or policy, and that
- * is what actually protects it.
+ * Reception, visits, check-in, walk-ins and the queue are workflows, not
+ * domains: they surface as quick actions and dashboard widgets
+ * (`ClinicActions`, `Dashboard\DashboardWidgets`), never here. There is no
+ * "More" and no "Workspace": every domain the user may open is shown, and one
+ * they may not is absent.
  *
- * A destination whose route does not exist yet (Queue, Clinical, Billing,
- * Inventory, Reports) is declared but never shown. It appears the moment its
- * route is registered, and not before, so no link can lead to a 404.
+ * A domain whose route is not registered yet (Orders, Billing, Reports) is
+ * declared but never shown, so no link can lead to a missing page. A domain
+ * without its own route (Administration) shows when any child does.
+ *
+ * Hiding is presentation; every route still protects itself.
  */
 class ClinicNavigation
 {
     /**
-     * @var list<array{key: string, label: string, section: 'primary'|'admin', route: string, permissions: list<ClinicPermission>, module: string|null, keywords: list<string>}>
+     * @var list<array{key: string, label: string, icon: string, order: int, route?: string, requires?: array<string, mixed>, hidden_in_owner_mode?: bool, keywords?: list<string>, children?: list<array<string, mixed>>}>
      */
-    private const DESTINATIONS = [
-        ['key' => 'dashboard', 'label' => 'Dashboard', 'section' => 'primary', 'route' => 'clinic.dashboard', 'permissions' => [], 'module' => null, 'keywords' => ['home', 'today', 'overview']],
-        ['key' => 'reception', 'label' => 'Reception', 'section' => 'primary', 'route' => 'clinic.reception', 'permissions' => [ClinicPermission::QueueManage], 'module' => null, 'keywords' => ['front desk', 'check-in', 'walk-in']],
-        ['key' => 'queue', 'label' => 'Queue', 'section' => 'primary', 'route' => 'clinic.queue.index', 'permissions' => [ClinicPermission::QueueManage], 'module' => null, 'keywords' => ['waiting', 'tokens']],
-        ['key' => 'appointments', 'label' => 'Appointments', 'section' => 'primary', 'route' => 'clinic.appointments.index', 'permissions' => [ClinicPermission::AppointmentView], 'module' => 'appointments', 'keywords' => ['calendar', 'schedule', 'booking']],
-        ['key' => 'patients', 'label' => 'Patients', 'section' => 'primary', 'route' => 'clinic.patients.index', 'permissions' => [ClinicPermission::PatientView], 'module' => 'patients', 'keywords' => ['directory', 'records']],
-        ['key' => 'visits', 'label' => 'Visits', 'section' => 'primary', 'route' => 'clinic.visits.index', 'permissions' => [ClinicPermission::VisitView], 'module' => null, 'keywords' => ['encounters', 'consultations']],
-        ['key' => 'clinical', 'label' => 'Clinical', 'section' => 'primary', 'route' => 'clinic.clinical.index', 'permissions' => [ClinicPermission::ClinicalView], 'module' => null, 'keywords' => ['notes', 'treatment']],
-        ['key' => 'billing', 'label' => 'Billing', 'section' => 'primary', 'route' => 'clinic.billing.index', 'permissions' => [ClinicPermission::BillingView], 'module' => 'billing', 'keywords' => ['invoices', 'payments']],
-        ['key' => 'inventory', 'label' => 'Inventory', 'section' => 'primary', 'route' => 'clinic.inventory.index', 'permissions' => [], 'module' => 'inventory', 'keywords' => ['stock', 'supplies']],
-        ['key' => 'reports', 'label' => 'Reports', 'section' => 'primary', 'route' => 'clinic.reports.index', 'permissions' => [ClinicPermission::ReportsView], 'module' => null, 'keywords' => ['analytics']],
-        ['key' => 'staff', 'label' => 'Staff', 'section' => 'admin', 'route' => 'admin.employees.index', 'permissions' => [ClinicPermission::StaffManage], 'module' => null, 'keywords' => ['team', 'employees', 'doctors', 'invitations']],
-        ['key' => 'branches', 'label' => 'Branches', 'section' => 'admin', 'route' => 'admin.branches.index', 'permissions' => [ClinicPermission::BranchManage], 'module' => null, 'keywords' => ['locations']],
-        ['key' => 'departments', 'label' => 'Departments', 'section' => 'admin', 'route' => 'admin.departments.index', 'permissions' => [ClinicPermission::BranchManage], 'module' => null, 'keywords' => []],
-        ['key' => 'rooms', 'label' => 'Rooms', 'section' => 'admin', 'route' => 'admin.rooms.index', 'permissions' => [ClinicPermission::BranchManage], 'module' => null, 'keywords' => ['chairs']],
-        ['key' => 'settings', 'label' => 'Settings', 'section' => 'admin', 'route' => 'admin.settings.index', 'permissions' => [ClinicPermission::SettingsManage], 'module' => null, 'keywords' => ['preferences', 'configuration']],
+    public const DOMAINS = [
+        [
+            'key' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard', 'order' => 10,
+            'route' => 'clinic.dashboard', 'requires' => [],
+            'keywords' => ['home', 'today', 'overview'],
+        ],
+        [
+            'key' => 'patients', 'label' => 'Patients', 'icon' => 'patients', 'order' => 20,
+            'route' => 'clinic.patients.index',
+            'requires' => ['permissions' => ['patient.view'], 'module' => 'patients'],
+            'keywords' => ['directory', 'records', 'cases'],
+        ],
+        [
+            'key' => 'appointments', 'label' => 'Appointments', 'icon' => 'appointments', 'order' => 30,
+            'route' => 'clinic.appointments.index',
+            'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
+            'keywords' => ['calendar', 'schedule', 'booking'],
+        ],
+        [
+            'key' => 'orders', 'label' => 'Orders', 'icon' => 'orders', 'order' => 40,
+            'route' => 'clinic.orders.index',
+            'requires' => ['permissions' => ['clinical.view'], 'capabilities' => ['lab', 'xray']],
+            'keywords' => ['lab', 'x-ray', 'radiology', 'diagnostics'],
+        ],
+        [
+            'key' => 'billing', 'label' => 'Billing', 'icon' => 'billing', 'order' => 50,
+            'route' => 'clinic.billing.index',
+            'requires' => ['permissions' => ['billing.view'], 'module' => 'billing'],
+            'keywords' => ['invoices', 'payments', 'collections'],
+        ],
+        [
+            'key' => 'reports', 'label' => 'Reports', 'icon' => 'reports', 'order' => 60,
+            'route' => 'clinic.reports.index',
+            'requires' => ['permissions' => ['reports.view']],
+            'keywords' => ['analytics', 'insights'],
+        ],
+        [
+            'key' => 'administration', 'label' => 'Administration', 'icon' => 'administration', 'order' => 90,
+            'keywords' => ['admin', 'setup'],
+            'children' => [
+                ['key' => 'staff', 'label' => 'Staff', 'icon' => 'staff', 'order' => 10, 'route' => 'admin.employees.index', 'requires' => ['permissions' => ['staff.manage']], 'keywords' => ['team', 'employees', 'doctors', 'invitations']],
+                ['key' => 'branches', 'label' => 'Branches', 'icon' => 'branches', 'order' => 20, 'route' => 'admin.branches.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => ['locations']],
+                ['key' => 'departments', 'label' => 'Departments', 'icon' => 'departments', 'order' => 30, 'route' => 'admin.departments.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => []],
+                ['key' => 'rooms', 'label' => 'Rooms', 'icon' => 'rooms', 'order' => 40, 'route' => 'admin.rooms.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => ['chairs', 'operatory']],
+                ['key' => 'settings', 'label' => 'Settings', 'icon' => 'settings', 'order' => 50, 'route' => 'admin.settings.index', 'requires' => ['permissions' => ['settings.manage']], 'keywords' => ['preferences', 'configuration']],
+            ],
+        ],
     ];
 
     /**
-     * The destinations this user may open, in display order.
+     * The domains this user may open, in order, each with its href and the
+     * children it may open.
      *
-     * @param  list<string>  $grantedPermissions  the user's effective clinic permissions at the active branch
-     * @param  array{has_subscription: bool, modules: list<string>}  $entitlements
      * @param  array<string, string>  $routeParameters  e.g. the `{clinic}` host parameter in domain mode
-     * @return list<array{key: string, label: string, section: 'primary'|'admin', href: string, keywords: list<string>}>
+     * @param  list<array<string, mixed>>|null  $domains  defaults to `DOMAINS`
+     * @return list<array{key: string, label: string, icon: string, href: string, keywords: list<string>, children: list<array{key: string, label: string, icon: string, href: string, keywords: list<string>}>}>
      */
-    public static function for(array $grantedPermissions, array $entitlements, array $routeParameters = []): array
+    public static function for(ClinicAccess $access, array $routeParameters = [], ?array $domains = null): array
     {
         $resolved = [];
 
-        foreach (self::DESTINATIONS as $destination) {
-            if (! Route::has($destination['route'])) {
-                continue;
+        foreach (self::sorted($domains ?? self::DOMAINS) as $domain) {
+            $children = [];
+            foreach (self::sorted($domain['children'] ?? []) as $child) {
+                if (self::visible($access, $child)) {
+                    $children[] = self::item($child, $routeParameters);
+                }
             }
 
-            if (! self::grants($destination['permissions'], $grantedPermissions)) {
-                continue;
-            }
-
-            if (! self::entitled($destination['module'], $entitlements)) {
+            $hasOwnRoute = isset($domain['route']);
+            if ($hasOwnRoute ? ! self::visible($access, $domain) : ($children === [] || ! self::visible($access, $domain))) {
                 continue;
             }
 
             $resolved[] = [
-                'key' => $destination['key'],
-                'label' => $destination['label'],
-                'section' => $destination['section'],
-                'href' => route($destination['route'], $routeParameters, false),
-                'keywords' => $destination['keywords'],
+                'key' => $domain['key'],
+                'label' => $domain['label'],
+                'icon' => $domain['icon'],
+                'href' => $hasOwnRoute ? route($domain['route'], $routeParameters, false) : $children[0]['href'],
+                'keywords' => $domain['keywords'] ?? [],
+                'children' => $children,
             ];
         }
 
@@ -83,36 +118,46 @@ class ClinicNavigation
     }
 
     /**
-     * @param  list<ClinicPermission>  $required  any one of them is enough
-     * @param  list<string>  $granted
+     * @param  array<string, mixed>  $entry
      */
-    private static function grants(array $required, array $granted): bool
+    private static function visible(ClinicAccess $access, array $entry): bool
     {
-        if ($required === []) {
-            return true;
+        if (! empty($entry['hidden_in_owner_mode']) && $access->ownerModeActive()) {
+            return false;
         }
 
-        foreach ($required as $permission) {
-            if (in_array($permission->value, $granted, true)) {
-                return true;
-            }
+        $requirement = $entry['requires'] ?? [];
+        if (isset($entry['route'])) {
+            $requirement['route'] = $entry['route'];
         }
 
-        return false;
+        return $access->allows($requirement);
     }
 
     /**
-     * Mirrors `EnsureClinicEntitled`: a clinic with no subscription predates
-     * plans and is not held to one; every other clinic gets only its modules.
-     *
-     * @param  array{has_subscription: bool, modules: list<string>}  $entitlements
+     * @param  array<string, mixed>  $entry
+     * @param  array<string, string>  $routeParameters
+     * @return array{key: string, label: string, icon: string, href: string, keywords: list<string>}
      */
-    private static function entitled(?string $module, array $entitlements): bool
+    private static function item(array $entry, array $routeParameters): array
     {
-        if ($module === null || ! $entitlements['has_subscription']) {
-            return true;
-        }
+        return [
+            'key' => $entry['key'],
+            'label' => $entry['label'],
+            'icon' => $entry['icon'],
+            'href' => route($entry['route'], $routeParameters, false),
+            'keywords' => $entry['keywords'] ?? [],
+        ];
+    }
 
-        return in_array($module, $entitlements['modules'], true);
+    /**
+     * @param  list<array<string, mixed>>  $entries
+     * @return list<array<string, mixed>>
+     */
+    private static function sorted(array $entries): array
+    {
+        usort($entries, fn (array $a, array $b) => ($a['order'] ?? 0) <=> ($b['order'] ?? 0));
+
+        return $entries;
     }
 }

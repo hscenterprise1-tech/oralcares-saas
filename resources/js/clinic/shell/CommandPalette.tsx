@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import { router } from '@inertiajs/react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Command } from 'cmdk';
-import { ArrowRight, LogOut, Search } from 'lucide-react';
-import type { NavDestination, PortalLinks } from '../types';
+import { LogOut, Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { NavDestination, NavLink, PortalLinks, QuickAction } from '../types';
+import { iconFor, toneFor } from '../ui/visuals';
 
 const ITEM =
   'flex min-h-11 cursor-pointer select-none items-center gap-3 rounded-xl px-3 text-[13.5px] text-clinic-ink outline-none data-[selected=true]:bg-clinic-inset';
@@ -26,19 +28,23 @@ export function useCommandShortcut(onOpen: () => void): void {
 }
 
 /**
- * Jump anywhere this user may go. Navigation only: it lists the destinations
- * the server already resolved for this user and clinic, filtered in the
- * browser, so it makes no request and cannot search another tenant's data.
+ * Jump anywhere this user may go, or start what they may start. It lists the
+ * navigation and quick actions the server already resolved for this user
+ * (the same lists the top bar and the dashboard use), filtered in the
+ * browser, so it makes no request, has no list of its own, and cannot search
+ * another tenant's data.
  */
 export function CommandPalette({
   open,
   onOpenChange,
   destinations,
+  actions,
   links,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   destinations: NavDestination[];
+  actions: QuickAction[];
   links: PortalLinks;
 }) {
   const go = (href: string) => {
@@ -46,9 +52,11 @@ export function CommandPalette({
     router.visit(href);
   };
 
-  const groups: { heading: string; items: NavDestination[] }[] = [
-    { heading: 'Go to', items: destinations.filter((item) => item.section === 'primary') },
-    { heading: 'Administration', items: destinations.filter((item) => item.section === 'admin') },
+  // Each domain, then its sub-areas, as places to go.
+  const places: NavLink[] = destinations.flatMap((domain) => (domain.children.length > 0 ? domain.children : [domain]));
+  const groups: { heading: string; items: (NavLink & { tone?: string })[] }[] = [
+    { heading: 'Go to', items: places },
+    { heading: 'Actions', items: actions },
   ].filter((group) => group.items.length > 0);
 
   return (
@@ -74,7 +82,7 @@ export function CommandPalette({
             </div>
             <Command.List className="max-h-[min(420px,60vh)] overflow-y-auto overscroll-contain p-2">
               <Command.Empty className="px-3 py-8 text-center text-[13px] text-clinic-secondary">
-                No page matches that.
+                Nothing matches that.
               </Command.Empty>
               {groups.map((group) => (
                 <Command.Group key={group.heading} heading={group.heading} className={GROUP_HEADING}>
@@ -86,7 +94,7 @@ export function CommandPalette({
                       onSelect={() => go(item.href)}
                       className={ITEM}
                     >
-                      <ArrowRight className="h-4 w-4 text-clinic-secondary" aria-hidden="true" />
+                      <PaletteIcon icon={item.icon} tone={item.tone} />
                       {item.label}
                     </Command.Item>
                   ))}
@@ -111,5 +119,20 @@ export function CommandPalette({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function PaletteIcon({ icon, tone }: { icon: string; tone?: string }) {
+  const Icon = iconFor(icon);
+
+  return (
+    <span
+      className={cn(
+        'flex h-7 w-7 items-center justify-center rounded-lg',
+        tone ? toneFor(tone).chip : 'bg-clinic-inset text-clinic-secondary',
+      )}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+    </span>
   );
 }

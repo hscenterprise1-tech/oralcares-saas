@@ -9,6 +9,7 @@ use App\Models\ClinicMembership;
 use App\Models\Patient;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Support\ClinicClock;
 use App\UserType;
 
 test('unauthenticated visitor accessing clinic dashboard is redirected to clinic login', function () {
@@ -50,7 +51,8 @@ test('clinic dashboard renders successfully with operational metrics and shared 
         'clinic_id' => $clinic->id,
         'branch_id' => $branch->id,
         'patient_id' => $patient->id,
-        'scheduled_at' => now(),
+        // Appointments store clinic wall-clock time, as the dashboard reads it.
+        'scheduled_at' => ClinicClock::now(),
         'status' => 'scheduled',
         'type' => 'Consultation',
     ]);
@@ -65,11 +67,13 @@ test('clinic dashboard renders successfully with operational metrics and shared 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
         ->component('ClinicPortal/Home')
-        ->has('metrics')
-        ->where('metrics.totalAppointments', 1)
-        ->has('upcomingAppointments', 1)
-        ->has('queue')
-        ->has('practitioners')
+        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('appointments_today')
+            && collect($widgets)->pluck('key')->contains('todays_appointments'))
+        ->missing('widgetData')
+        ->loadDeferredProps(fn ($reload) => $reload
+            ->where('widgetData.appointments_today.value', 1)
+            ->has('widgetData.todays_appointments.items', 1)
+            ->where('widgetData.todays_appointments.items.0.primary', 'Aarav Mehta'))
         ->where('clinic.id', $clinic->id)
         ->where('clinic.name', 'Metro Care Clinic')
         ->where('clinic.is_owner', true)

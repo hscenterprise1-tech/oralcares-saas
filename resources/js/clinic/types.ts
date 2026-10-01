@@ -46,16 +46,101 @@ export interface ActiveBranch extends BranchSummary {
   logo_url: string | null;
 }
 
-export type NavSection = 'primary' | 'admin';
-
-/** One destination, already filtered by the server to what this user may open. */
-export interface NavDestination {
+/** A navigation entry the server resolved for this user (`ClinicNavigation`). */
+export interface NavLink {
   key: string;
   label: string;
-  section: NavSection;
+  /** A key into the portal's icon map, never a component name from the server. */
+  icon: string;
   href: string;
   keywords: string[];
 }
+
+/** One business domain this user may open, with the children they may open. */
+export interface NavDestination extends NavLink {
+  children: NavLink[];
+}
+
+/** Colour roles. Each means something: brand = primary, blue = scheduling, green = done/paid, amber = pending, red = urgent, violet = clinical. */
+export type Tone = 'brand' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate' | 'ink';
+
+/** A quick action this user may start (`ClinicActions`). */
+export interface QuickAction extends NavLink {
+  description: string;
+  tone: Tone;
+}
+
+export type WidgetKind = 'kpi' | 'list' | 'flow' | 'stats' | 'breakdown' | 'trend' | 'facts' | 'actions';
+
+/** A dashboard widget the server resolved for this user (`DashboardWidgets`). Data arrives separately. */
+export interface DashboardWidget {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+  tone: Tone;
+  kind: WidgetKind;
+  /** Columns out of 4 on wide screens. */
+  span: 1 | 2 | 4;
+  empty: string | null;
+  action: { label: string; href: string } | null;
+}
+
+export interface KpiData {
+  value: number;
+  detail?: string;
+  format?: 'number' | 'currency';
+  currency?: string;
+}
+
+export interface ListItem {
+  id: number | string;
+  time?: string | null;
+  primary: string;
+  secondary?: string | null;
+  status?: string | null;
+  amount?: number;
+  currency?: string;
+}
+
+export interface ListData {
+  total: number;
+  items: ListItem[];
+  summary?: { value: number; label: string; format: 'number' | 'currency'; currency?: string; tone?: Tone };
+}
+
+export interface FlowData {
+  stages: { key: string; label: string; count: number; tone: Tone }[];
+}
+
+export interface StatsData {
+  currency?: string;
+  stats: { key: string; label: string; value: number; tone: Tone; format?: 'number' | 'currency' }[];
+}
+
+export interface BreakdownData {
+  currency: string;
+  total: number;
+  segments: { key: string; label: string; value: number; tone: Tone }[];
+}
+
+export interface TrendData {
+  series: { a: string; b: string };
+  points: { label: string; date: string; a: number; b: number }[];
+}
+
+export interface FactsData {
+  rows: {
+    id?: number;
+    label: string;
+    value?: string;
+    tone?: Tone;
+    values?: { label: string; value: number; tone: Tone }[];
+  }[];
+}
+
+export type WidgetData =
+  KpiData | ListData | FlowData | StatsData | BreakdownData | TrendData | FactsData | { error: true };
 
 /**
  * Owner Mode as the server sees it on this request. Presentation only: the
@@ -90,6 +175,9 @@ export interface ClinicContextProps {
   staff_roles: string[];
   owner_mode: OwnerModeStatus;
   navigation: NavDestination[];
+  actions: QuickAction[];
+  specialties: string[];
+  capabilities: string[];
 }
 
 export interface AuthUser {

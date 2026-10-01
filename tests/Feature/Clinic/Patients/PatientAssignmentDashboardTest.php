@@ -11,6 +11,7 @@ use App\Models\Patient;
 use App\Models\Practitioner;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Support\ClinicClock;
 use App\UserType;
 
 beforeEach(function () {
@@ -41,7 +42,8 @@ test('the dashboard shows a My day band with assigned counts for a practitioner'
 
     Appointment::create([
         'clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => $myPatient->id,
-        'scheduled_at' => now(), 'status' => 'scheduled',
+        // Appointments store clinic wall-clock time, as the dashboard reads it.
+        'scheduled_at' => ClinicClock::now(), 'status' => 'scheduled',
     ]);
 
     $membership = ClinicMembership::factory()->create([
@@ -54,9 +56,12 @@ test('the dashboard shows a My day band with assigned counts for a practitioner'
     ])->get('/clinic/dashboard');
 
     $response->assertStatus(200);
+    // "My day" is now a dashboard widget; its figures arrive as deferred data.
     $response->assertInertia(fn ($page) => $page
-        ->where('myDay.today_appointments', 1)
-        ->where('myDay.total_assigned', 1)
+        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('my_day'))
+        ->loadDeferredProps(fn ($reload) => $reload
+            ->where('widgetData.my_day.stats', fn ($stats) => collect($stats)->firstWhere('key', 'today_appointments')['value'] === 1
+                && collect($stats)->firstWhere('key', 'total_assigned')['value'] === 1))
     );
 });
 
@@ -72,5 +77,7 @@ test('the dashboard has no My day band for a user with no clinical profile', fun
     ])->get('/clinic/dashboard');
 
     $response->assertStatus(200);
-    $response->assertInertia(fn ($page) => $page->where('myDay', null));
+    $response->assertInertia(fn ($page) => $page
+        ->where('widgets', fn ($widgets) => ! collect($widgets)->pluck('key')->contains('my_day'))
+        ->loadDeferredProps(fn ($reload) => $reload->missing('widgetData.my_day')));
 });

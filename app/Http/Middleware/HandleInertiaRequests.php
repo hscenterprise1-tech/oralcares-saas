@@ -2,12 +2,12 @@
 
 namespace App\Http\Middleware;
 
-use App\ClinicPermission;
 use App\ClinicRole;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\OwnerMode\OwnerMode;
-use App\Services\Provisioning\EntitlementResolver;
+use App\Support\ClinicAccess\ClinicAccess;
+use App\Support\ClinicActions;
 use App\Support\ClinicNavigation;
 use App\Support\ClinicPortalErrors;
 use App\Support\CrmPermissions;
@@ -228,9 +228,16 @@ class HandleInertiaRequests extends Middleware
                 ->toArray();
         }
 
-        $entitlement = app(EntitlementResolver::class)->forClinic($clinic);
-        $isOwner = (bool) ($membership?->is_primary_owner);
-        $permissions = $this->clinicPermissions($user, $isOwner);
+        /*
+         * One resolver for everything below: permissions, plan, specialty,
+         * capabilities, branch scope and Owner Mode (see `ClinicAccess`).
+         * Navigation and quick actions are both resolved through it, so they
+         * cannot disagree with each other or with the dashboard.
+         */
+        $access = app(ClinicAccess::class);
+        $entitlement = $access->entitlement();
+        $isOwner = $access->isOwner();
+        $routeParameters = array_filter(['clinic' => $request->route('clinic')], fn ($value) => is_string($value));
 
         return [
             'id' => $clinic->id,
@@ -268,7 +275,9 @@ class HandleInertiaRequests extends Middleware
              * the plan allow. The portal reads these for presentation only;
              * every route still checks for itself.
              */
-            'permissions' => $permissions,
+            'permissions' => $access->permissions(),
+            'specialties' => $access->specialties(),
+            'capabilities' => $access->capabilities(),
             'roles' => $isOwner ? ['Owner'] : $this->clinicRoles($user),
             // The staff roles actually held here, owner or not, so an owner
             // who is also a doctor reads as "Doctor · Clinic Owner".
@@ -276,11 +285,12 @@ class HandleInertiaRequests extends Middleware
             // Whether Owner Mode is offered to this user and whether it is on.
             // Presentation only: owner-only routes use `clinic_owner_mode`.
             'owner_mode' => app(OwnerMode::class)->status(),
-            'navigation' => ClinicNavigation::for(
-                $permissions,
-                ['has_subscription' => (bool) $entitlement['has_subscription'], 'modules' => array_values($entitlement['modules'])],
-                array_filter(['clinic' => $request->route('clinic')], fn ($value) => is_string($value)),
-            ),
+            // The business domains this user may open (top bar, mobile menu
+            // and command palette), and the actions they may start (command
+            // palette and the dashboard's quick actions). Labels and links
+            // only, never data.
+            'navigation' => ClinicNavigation::for($access, $routeParameters),
+            'actions' => ClinicActions::for($access, $routeParameters),
         ];
     }
 
@@ -313,22 +323,6 @@ class HandleInertiaRequests extends Middleware
             'notificationsUnreadCount' => route('api.notifications.unreadCount', [], false),
             'notificationsMarkAllRead' => route('api.notifications.markAllAsRead', [], false),
         ];
-    }
-
-    /**
-     * The clinic permissions this user holds at the active branch.
-     *
-     * @return list<string>
-     */
-    protected function clinicPermissions(User $user, bool $isOwner): array
-    {
-        if ($isOwner || $user->isMasterAdmin()) {
-            return ClinicPermission::values();
-        }
-
-        $granted = $user->getAllPermissions()->pluck('name')->all();
-
-        return array_values(array_intersect(ClinicPermission::values(), $granted));
     }
 
     /**

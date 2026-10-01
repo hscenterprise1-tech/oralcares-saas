@@ -78,7 +78,10 @@ function portalAs(array $member)
  */
 function portalNavKeys(AssertableInertia $page): array
 {
-    return array_column($page->toArray()['props']['clinic']['navigation'], 'key');
+    // Each domain, followed by the sub-areas it opens.
+    return collect($page->toArray()['props']['clinic']['navigation'])
+        ->flatMap(fn (array $domain) => [$domain['key'], ...array_column($domain['children'], 'key')])
+        ->all();
 }
 
 /*
@@ -93,7 +96,8 @@ it('gives the owner every destination that exists, and none that does not', func
                 ->where('clinic.permissions', ClinicPermission::values())
                 ->where('clinic.roles', ['Owner']);
 
-            expect(portalNavKeys($page))->toBe(['dashboard', 'reception', 'appointments', 'patients', 'visits', 'staff', 'branches', 'departments', 'rooms', 'settings']);
+            // Business domains: Reception and Visits are workflows now, not destinations.
+            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments', 'administration', 'staff', 'branches', 'departments', 'rooms', 'settings']);
         });
 });
 
@@ -113,7 +117,7 @@ it('shows a receptionist only what the receptionist role grants at this branch',
         ->assertInertia(function (AssertableInertia $page) {
             $page->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
 
-            expect(portalNavKeys($page))->toBe(['dashboard', 'reception', 'appointments', 'patients', 'visits'])
+            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments'])
                 ->and($page->toArray()['props']['clinic']['permissions'])->not->toContain('staff.manage');
         });
 });
@@ -145,8 +149,10 @@ it('links only to pages the user can actually open', function () {
             $navigation = $page->toArray()['props']['clinic']['navigation'];
         });
 
-    foreach ($navigation as $destination) {
-        portalAs($member)->get($destination['href'])->assertOk();
+    foreach ($navigation as $domain) {
+        foreach ([$domain, ...$domain['children']] as $destination) {
+            portalAs($member)->get($destination['href'])->assertOk();
+        }
     }
 });
 
