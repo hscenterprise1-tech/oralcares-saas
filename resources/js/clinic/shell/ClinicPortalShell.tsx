@@ -63,7 +63,8 @@ export function ClinicPortalShell({ title, children }: { title: string; children
   return (
     <>
       <Head title={`${title} · ${name}`} />
-      <div className="flex min-h-screen flex-col bg-clinic-canvas text-clinic-ink">
+      <div className="relative isolate flex min-h-screen flex-col bg-clinic-canvas text-clinic-ink">
+        <AmbientBackground />
         <a
           href="#main"
           className="sr-only z-[60] rounded-full bg-clinic-ink px-4 py-2 text-[13px] font-semibold text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
@@ -75,7 +76,7 @@ export function ClinicPortalShell({ title, children }: { title: string; children
 
         {/* The Company CRM's header, in the clinic's palette: one row over the canvas, the
             navigation as a pill group, round tool buttons. */}
-        <header className="sticky top-0 z-40 bg-clinic-canvas/80 px-4 py-3 backdrop-blur-xl supports-[backdrop-filter]:bg-clinic-canvas/70 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-40 bg-white/50 px-4 py-3 backdrop-blur-xl supports-[backdrop-filter]:bg-white/40 sm:px-6 lg:px-8">
           <div className="mx-auto flex max-w-[1440px] items-center gap-2 sm:gap-3">
             <button
               type="button"
@@ -159,6 +160,24 @@ export function ClinicPortalShell({ title, children }: { title: string; children
         links={portalLinks}
       />
     </>
+  );
+}
+
+/**
+ * The page's ambient colour: the Company CRM's mesh technique (large, heavily
+ * blurred orbs on a clipped layer behind the content), in cool clinic washes
+ * of teal, blue and violet. Near-white, so it lifts the canvas without
+ * colouring it; the cards on top stay solid white. Fixed to the viewport so it
+ * never adds scroll width, static so there is no motion to reduce, and smaller
+ * and softer on a phone.
+ */
+function AmbientBackground() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div className="absolute -left-[12%] -top-[14%] h-[300px] w-[300px] rounded-full bg-[#BFE9F0] opacity-60 blur-[70px] sm:h-[560px] sm:w-[560px] sm:opacity-80 sm:blur-[100px]" />
+      <div className="absolute -right-[10%] top-[8%] h-[260px] w-[260px] rounded-full bg-[#CFDFFC] opacity-55 blur-[70px] sm:h-[500px] sm:w-[500px] sm:opacity-80 sm:blur-[100px]" />
+      <div className="absolute -bottom-[16%] left-[30%] h-[240px] w-[240px] rounded-full bg-[#E2DAFC] opacity-50 blur-[70px] sm:h-[520px] sm:w-[520px] sm:opacity-70 sm:blur-[110px]" />
+    </div>
   );
 }
 
