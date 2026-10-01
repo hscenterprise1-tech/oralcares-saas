@@ -265,7 +265,7 @@ it('offers the command palette exactly the actions the resolver allows', functio
     $receptionist = dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]));
     $nobody = dynamicDashboard(dynamicMember());
 
-    expect($receptionist['actions'])->toBe(['new_case', 'repeat_case', 'new_appointment'])
+    expect($receptionist['actions'])->toBe(['new_case', 'repeat_case', 'new_appointment', 'request_leave'])
         ->and($nobody['actions'])->toBe([]);
 });
 

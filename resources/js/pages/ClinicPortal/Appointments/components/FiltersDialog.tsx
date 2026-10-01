@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/clinic/ui/Button';
 import { statusStyle } from '../lib/status';
 import type { CalendarProps, Filters, StatusValue } from '../lib/types';
-import { Field, Modal, selectClass } from './Modal';
+import { Field, Modal, selectClass } from '@/clinic/ui/Modal';
 
 /** Narrow the calendar by status and service. Provider has its own control. */
 export function FiltersDialog({

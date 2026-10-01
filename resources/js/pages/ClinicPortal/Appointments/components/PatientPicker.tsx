@@ -3,7 +3,7 @@ import { Search, X } from 'lucide-react';
 import { ERROR_COPY, errorKind, requestJson } from '@/clinic/http';
 import { Spinner } from '@/clinic/ui/Spinner';
 import type { PatientHit } from '../lib/types';
-import { inputClass } from './Modal';
+import { inputClass } from '@/clinic/ui/Modal';
 
 export interface PickedPatient {
   id: number;

@@ -58,7 +58,7 @@ it('can store a new employee', function () {
         'roles' => [],
     ]);
 
-    $response->assertRedirect(route('admin.employees.index'));
+    $response->assertRedirect(route('admin.employees.show', ClinicEmployee::withoutGlobalScopes()->latest('id')->first()));
     expect(ClinicEmployee::where('email', 'john.doe@example.com')->exists())->toBeTrue();
 });
 
@@ -102,7 +102,7 @@ it('can update an employee\'s branches and roles', function () {
         'roles' => [$role->id],
     ]);
 
-    $response->assertRedirect(route('admin.employees.index'));
+    $response->assertRedirect(route('admin.employees.show', ClinicEmployee::withoutGlobalScopes()->latest('id')->first()));
 
     $employee->refresh();
     expect($employee->name)->toBe('Updated Name')
@@ -131,12 +131,12 @@ it('employee index and edit expose the employee\'s active pending invitation', f
     ]);
 
     $this->actingAs($user)->get(route('admin.employees.index'))->assertInertia(fn ($page) => $page
-        ->component('Clinic/Admin/Employees/Index')
-        ->where('employees.0.invitations.0.email', 'invited.person@example.com')
+        ->component('ClinicPortal/Staff/Index')
+        ->where('employees.0.invitation_pending', true)
     );
 
-    $this->actingAs($user)->get(route('admin.employees.edit', $employee->id))->assertInertia(fn ($page) => $page
-        ->component('Clinic/Admin/Employees/Edit')
-        ->where('employee.invitations.0.email', 'invited.person@example.com')
+    $this->actingAs($user)->get(route('admin.employees.show', $employee->id))->assertInertia(fn ($page) => $page
+        ->component('ClinicPortal/Staff/Show')
+        ->where('employee.invitation.email', 'invited.person@example.com')
     );
 });

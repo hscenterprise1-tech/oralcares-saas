@@ -40,21 +40,27 @@ class AppointmentAvailabilityService
     ) {}
 
     /**
-     * The providers bookable at this branch: active staff with a practitioner
-     * profile, placed at the branch (no placement means every branch).
+     * The providers bookable at this branch: active staff with an active
+     * practitioner profile, placed at the branch with an active placement (no
+     * placement at all means every branch). Given a service, only those who
+     * provide it: a provider with services configured is limited to them; one
+     * with none configured is not restricted yet.
      *
      * @return Collection<int, ClinicEmployee>
      */
-    public function providers(Clinic $clinic, Branch $branch): Collection
+    public function providers(Clinic $clinic, Branch $branch, ?int $serviceId = null): Collection
     {
         return ClinicEmployee::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->where('status', 'active')
-            ->whereHas('practitionerProfile', fn ($query) => $query->withoutGlobalScopes())
+            ->whereHas('practitionerProfile', fn ($query) => $query->withoutGlobalScopes()->where('is_active', true))
             ->where(fn ($query) => $query
                 ->whereDoesntHave('branches')
-                ->orWhereHas('branches', fn ($branches) => $branches->whereKey($branch->id)))
-            ->with(['practitionerProfile' => fn ($query) => $query->withoutGlobalScopes()])
+                ->orWhereHas('branches', fn ($branches) => $branches->whereKey($branch->id)->where('clinic_employee_branches.is_active', true)))
+            ->when($serviceId, fn ($query, $id) => $query->where(fn ($eligible) => $eligible
+                ->whereDoesntHave('services')
+                ->orWhereHas('services', fn ($services) => $services->whereKey($id))))
+            ->with(['practitionerProfile' => fn ($query) => $query->withoutGlobalScopes(), 'services:id'])
             ->orderBy('name')
             ->limit(200)
             ->get();

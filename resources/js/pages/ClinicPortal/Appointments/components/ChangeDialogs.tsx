@@ -4,7 +4,7 @@ import type { RequestPayload } from '@inertiajs/core';
 import { Button } from '@/clinic/ui/Button';
 import { shortDate, timeOf } from '../lib/dates';
 import { personName, type AppointmentItem, type CalendarProps, type EditScope, type Slot } from '../lib/types';
-import { Field, inputClass, Modal, selectClass, textareaClass } from './Modal';
+import { Field, inputClass, Modal, selectClass, textareaClass } from '@/clinic/ui/Modal';
 import { SlotPicker } from './SlotPicker';
 
 const SCOPES: { value: EditScope; label: string }[] = [

@@ -45,6 +45,13 @@ enum ClinicPermission: string
     case SettingsManage = 'settings.manage';
     case ReportsView = 'reports.view';
 
+    // Staff documents and leave. Verifying a document and deciding leave are
+    // their own grants: managing staff details is not enough for either, and
+    // requesting leave must not need staff management at all.
+    case StaffDocumentsVerify = 'staff.documents.verify';
+    case LeaveRequest = 'leave.request';
+    case LeaveApprove = 'leave.approve';
+
     /**
      * Get all permission values.
      *
@@ -80,6 +87,7 @@ enum ClinicPermission: string
                 self::BillingCreate->value,
                 self::PaymentCollect->value,
                 self::DocumentsManage->value,
+                self::LeaveRequest->value,
             ],
             'Practitioner' => [
                 self::PatientView->value,
@@ -92,6 +100,7 @@ enum ClinicPermission: string
                 self::PrescriptionManage->value,
                 self::DocumentsManage->value,
                 self::BillingView->value,
+                self::LeaveRequest->value,
             ],
             'Billing' => [
                 self::PatientView->value,
@@ -101,10 +110,12 @@ enum ClinicPermission: string
                 self::PaymentCollect->value,
                 self::DiscountApply->value,
                 self::ReportsView->value,
+                self::LeaveRequest->value,
             ],
             'Staff' => [
                 self::PatientView->value,
                 self::AppointmentView->value,
+                self::LeaveRequest->value,
             ],
         ];
     }

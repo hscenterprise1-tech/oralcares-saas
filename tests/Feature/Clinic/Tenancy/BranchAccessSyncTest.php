@@ -57,7 +57,7 @@ it('gives a member with no branch access no branch, no branch figures, and refus
 });
 
 it('moves a member\'s branch access when an admin changes their staff branches', function () {
-    ($this->updateEmployee)([$this->main->id, $this->east->id])->assertRedirect(route('admin.employees.index'));
+    ($this->updateEmployee)([$this->main->id, $this->east->id])->assertRedirect(route('admin.employees.show', $this->employee->id));
     expect($this->staffMembership->assignedBranches()->pluck('branches.id')->sort()->values()->all())
         ->toBe(collect([$this->main->id, $this->east->id])->sort()->values()->all());
 

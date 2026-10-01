@@ -23,12 +23,23 @@ class ClinicEmployee extends Model
         'phone',
         'status',
         'reports_to_id',
+        'staff_type',
+        'primary_branch_id',
+        'photo_path',
+        'date_of_birth',
+        'gender',
+        'joining_date',
+        'notes',
+        'status_changed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'status' => EmploymentStatus::class,
+            'date_of_birth' => 'date',
+            'joining_date' => 'date',
+            'status_changed_at' => 'datetime',
         ];
     }
 
@@ -86,12 +97,60 @@ class ClinicEmployee extends Model
     public function branches(): BelongsToMany
     {
         return $this->belongsToMany(Branch::class, 'clinic_employee_branches', 'clinic_employee_id', 'branch_id')
-            ->using(StaffBranchPlacement::class);
+            ->using(StaffBranchPlacement::class)
+            ->withPivot('is_active');
     }
 
     public function departments(): BelongsToMany
     {
         return $this->belongsToMany(ClinicDepartment::class, 'clinic_employee_departments', 'clinic_employee_id', 'clinic_department_id');
+    }
+
+    /**
+     * Whether this person signs in with access that follows their branch
+     * placements, so removing every placement would lock them out.
+     */
+    public function signsInAtPlacedBranches(): bool
+    {
+        if (! $this->user_id) {
+            return false;
+        }
+
+        $membership = ClinicMembership::query()->where('clinic_id', $this->clinic_id)->where('user_id', $this->user_id)->first();
+
+        return $membership !== null && ! $membership->has_all_branches_access && ! $membership->is_primary_owner;
+    }
+
+    public function primaryBranch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'primary_branch_id')->withoutGlobalScopes();
+    }
+
+    /**
+     * The services (catalogue procedures) this practitioner provides. None
+     * configured means not yet restricted: bookable for every service.
+     */
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(ClinicalProcedure::class, 'practitioner_services', 'clinic_employee_id', 'clinical_procedure_id')
+            ->withPivot('clinic_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * @return HasMany<StaffDocument, $this>
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(StaffDocument::class, 'clinic_employee_id');
+    }
+
+    /**
+     * @return HasMany<Leave, $this>
+     */
+    public function leaves(): HasMany
+    {
+        return $this->hasMany(Leave::class, 'employee_id');
     }
 
     public function rooms(): BelongsToMany

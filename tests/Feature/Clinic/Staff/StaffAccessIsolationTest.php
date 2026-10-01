@@ -157,7 +157,7 @@ it('lets only a role holder with roles.manage change what staff may do', functio
 
     $this->actingAs($coordinator)->withSession($session)
         ->put(route('admin.employees.update', $employee->id), ['name' => 'Nurse Renamed', 'email' => 'nurse@clinic.test', 'status' => 'active'])
-        ->assertRedirect(route('admin.employees.index'));
+        ->assertRedirect(route('admin.employees.show', $employee->id));
 
     expect($employee->fresh()->name)->toBe('Nurse Renamed')
         ->and($employee->roles()->count())->toBe(0);
@@ -183,7 +183,7 @@ it('keeps a linked staff member\'s roles in Spatie only, per branch, and shows t
 
     $this->actingAs($admin)->withSession($session)
         ->put(route('admin.employees.update', $employee->id), ['name' => 'Dr. Linked', 'email' => 'linked@clinic.test', 'status' => 'active', 'branches' => [$this->main->id], 'roles' => [$doctorRole->id]])
-        ->assertRedirect(route('admin.employees.index'));
+        ->assertRedirect(route('admin.employees.show', $employee->id));
 
     setPermissionsTeamId($this->main->id);
     expect($doctorUser->fresh()->hasRole(ClinicRole::Doctor->value))->toBeTrue()

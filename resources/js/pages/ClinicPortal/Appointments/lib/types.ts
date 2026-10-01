@@ -57,6 +57,13 @@ export interface Provider {
   name: string;
   specialty: string | null;
   is_me: boolean;
+  /** The services they provide; empty means every service. */
+  service_ids: number[];
+}
+
+/** Whether the provider offers the service (no service: everyone). */
+export function offers(provider: Provider, serviceId: number | null): boolean {
+  return serviceId === null || provider.service_ids.length === 0 || provider.service_ids.includes(serviceId);
 }
 
 export interface Service {

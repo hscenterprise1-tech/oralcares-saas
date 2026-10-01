@@ -11,11 +11,14 @@ use App\Http\Controllers\Clinic\Admin\EmployeeController as ClinicAdminEmployeeC
 use App\Http\Controllers\Clinic\Admin\EmployeeInvitationController as ClinicAdminEmployeeInvitationController;
 use App\Http\Controllers\Clinic\Admin\RoomController as ClinicAdminRoomController;
 use App\Http\Controllers\Clinic\Admin\SettingsController as ClinicAdminSettingsController;
+use App\Http\Controllers\Clinic\Admin\StaffDocumentController;
+use App\Http\Controllers\Clinic\Admin\StaffProfileController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
 use App\Http\Controllers\Clinic\AppointmentSettingsController;
 use App\Http\Controllers\Clinic\BranchSwitchController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
 use App\Http\Controllers\Clinic\DashboardVisibilityController;
+use App\Http\Controllers\Clinic\LeaveController as ClinicLeaveController;
 use App\Http\Controllers\Clinic\OnboardingController as ClinicOnboardingController;
 use App\Http\Controllers\Clinic\OwnerModeController;
 use App\Http\Controllers\Clinic\Patient360Controller;
@@ -1232,6 +1235,23 @@ $clinicRoutes = function () {
         });
 
         // ==========================================
+        // LEAVE: staff request their own; approvers decide
+        // ==========================================
+        // Index and requests check `leave.request` or `leave.approve` in the
+        // controller (either is enough); deciding needs `leave.approve`.
+        Route::prefix('leave')->name('clinic.leave.')->group(function () {
+            Route::get('/', [ClinicLeaveController::class, 'index'])->name('index');
+            Route::post('/', [ClinicLeaveController::class, 'store'])->name('store');
+            Route::post('/{leave}/approve', [ClinicLeaveController::class, 'approve'])
+                ->middleware('clinic_permission:leave.approve')
+                ->name('approve');
+            Route::post('/{leave}/reject', [ClinicLeaveController::class, 'reject'])
+                ->middleware('clinic_permission:leave.approve')
+                ->name('reject');
+            Route::post('/{leave}/cancel', [ClinicLeaveController::class, 'cancel'])->name('cancel');
+        });
+
+        // ==========================================
         // VISITS (Phase 2)
         // ==========================================
         Route::prefix('visits')->name('clinic.visits.')->group(function () {
@@ -1263,7 +1283,35 @@ $clinicRoutes = function () {
         // ==========================================
         Route::prefix('admin')->name('admin.')->group(function () {
             Route::middleware('clinic_permission:staff.manage')->group(function () {
-                Route::resource('employees', ClinicAdminEmployeeController::class)->except('show');
+                Route::resource('employees', ClinicAdminEmployeeController::class);
+                Route::patch('employees/{employee}/status', [ClinicAdminEmployeeController::class, 'updateStatus'])->name('employees.status');
+                Route::get('employees/{employee}/photo', [StaffProfileController::class, 'photo'])->name('employees.photo');
+                Route::post('employees/{employee}/photo', [StaffProfileController::class, 'uploadPhoto'])->name('employees.photo.store');
+                Route::put('employees/{employee}/branches', [StaffProfileController::class, 'branches'])->name('employees.branches');
+
+                // A practitioner's professional record: its own permission.
+                Route::middleware('clinic_permission:practitioner.manage')->group(function () {
+                    Route::put('employees/{employee}/professional', [StaffProfileController::class, 'professional'])->name('employees.professional');
+                    Route::post('employees/{employee}/qualifications', [StaffProfileController::class, 'storeQualification'])->name('employees.qualifications.store');
+                    Route::put('employees/{employee}/qualifications/{qualification}', [StaffProfileController::class, 'updateQualification'])->name('employees.qualifications.update');
+                    Route::delete('employees/{employee}/qualifications/{qualification}', [StaffProfileController::class, 'destroyQualification'])->name('employees.qualifications.destroy');
+                    Route::put('employees/{employee}/services', [StaffProfileController::class, 'services'])->name('employees.services');
+                    Route::put('employees/{employee}/schedule', [StaffProfileController::class, 'schedule'])->name('employees.schedule');
+                });
+
+                // Staff documents: private files, streamed only after the same
+                // checks as the profile. Verifying is its own permission.
+                Route::post('employees/{employee}/documents', [StaffDocumentController::class, 'store'])
+                    ->middleware('throttle:30,1')
+                    ->name('employees.documents.store');
+                Route::get('employees/{employee}/documents/{document}', [StaffDocumentController::class, 'download'])->name('employees.documents.download');
+                Route::middleware('clinic_permission:staff.documents.verify')->group(function () {
+                    Route::post('employees/{employee}/documents/{document}/verify', [StaffDocumentController::class, 'verify'])->name('employees.documents.verify');
+                    Route::post('employees/{employee}/documents/{document}/reject', [StaffDocumentController::class, 'reject'])->name('employees.documents.reject');
+                });
+                Route::get('staff-documents/settings', [StaffDocumentController::class, 'settings'])->name('staff-documents.settings');
+                Route::put('staff-documents/settings', [StaffDocumentController::class, 'updateSettings'])->name('staff-documents.update');
+                Route::post('staff-documents/types', [StaffDocumentController::class, 'storeType'])->name('staff-documents.types.store');
 
                 Route::prefix('invitations')->name('invitations.')->group(function () {
                     Route::post('/', [ClinicAdminEmployeeInvitationController::class, 'store'])->name('store');

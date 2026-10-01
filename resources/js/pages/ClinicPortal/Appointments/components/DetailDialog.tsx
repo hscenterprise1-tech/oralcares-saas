@@ -8,7 +8,7 @@ import { longDate, timeOf } from '../lib/dates';
 import { patientUrl } from '../lib/navigation';
 import { humanize, initials, providerTone, statusStyle } from '../lib/status';
 import { personName, type AppointmentItem, type CalendarProps, type PatientRef, type StatusValue } from '../lib/types';
-import { Modal } from './Modal';
+import { Modal } from '@/clinic/ui/Modal';
 import { PatientPicker } from './PatientPicker';
 
 /**

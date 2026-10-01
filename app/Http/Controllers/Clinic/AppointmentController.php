@@ -121,6 +121,8 @@ class AppointmentController extends Controller
                 'name' => $provider->name,
                 'specialty' => $provider->practitionerProfile?->specialty,
                 'is_me' => $employee?->id === $provider->id,
+                // The services they provide; empty means not restricted.
+                'service_ids' => $provider->services->pluck('id')->map(fn ($id) => (int) $id)->values(),
             ])->values(),
             'services' => $this->services($clinic, $branch),
             'settings' => $settings + ['configured' => $clinic->appointment_config !== null],
@@ -175,16 +177,17 @@ class AppointmentController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:120'],
         ]);
 
-        $providers = $this->availability->providers($clinic, $branch)->keyBy('id');
-        $ids = isset($validated['provider_id'])
-            ? ($providers->has($validated['provider_id']) ? [(int) $validated['provider_id']] : [])
-            : $providers->keys()->map(fn ($id) => (int) $id)->all();
-
         // Moving an appointment: its own length, and its own slot counts as free.
         $moving = isset($validated['appointment_id'])
             ? Appointment::withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('branch_id', $branch->id)->find($validated['appointment_id'])
             : null;
         $service = isset($validated['service_id']) ? $this->service($clinic, $branch, (int) $validated['service_id']) : null;
+
+        // Only providers who offer the service are searched.
+        $providers = $this->availability->providers($clinic, $branch, $service['id'] ?? $moving?->service_id)->keyBy('id');
+        $ids = isset($validated['provider_id'])
+            ? ($providers->has($validated['provider_id']) ? [(int) $validated['provider_id']] : [])
+            : $providers->keys()->map(fn ($id) => (int) $id)->all();
         $duration = $moving?->duration_minutes ?? $service['duration_minutes'] ?? $settings['default_duration_minutes'];
 
         $from = $this->parseDate($validated['from'] ?? null) ?? ClinicClock::today();
@@ -269,6 +272,7 @@ class AppointmentController extends Controller
         }
 
         $provider = ClinicEmployee::withoutGlobalScopes()->where('clinic_id', $clinic->id)->findOrFail($validated['practitioner_id']);
+        $this->assertProvides($clinic, $branch, $provider, $service);
         $employee = $this->clinicContext->currentEmployee();
 
         $appointment = $this->booking->book($clinic, $branch, $patient, $provider, [
@@ -310,6 +314,9 @@ class AppointmentController extends Controller
 
         $provider = ClinicEmployee::withoutGlobalScopes()->where('clinic_id', $clinic->id)
             ->findOrFail($validated['practitioner_id'] ?? $appointment->practitioner_id);
+        if ($appointment->service_id && (int) $provider->id !== (int) $appointment->practitioner_id) {
+            $this->assertProvides($clinic, $branch, $provider, $this->service($clinic, $branch, (int) $appointment->service_id));
+        }
         $scheduledAt = CarbonImmutable::parse($validated['scheduled_at'])->setSecond(0);
 
         $moved = $this->booking->reschedule($clinic, $branch, $appointment, [
@@ -397,6 +404,23 @@ class AppointmentController extends Controller
     {
         if ((int) $appointment->clinic_id !== $clinic->id || (int) $appointment->branch_id !== $branch->id) {
             abort(404);
+        }
+    }
+
+    /**
+     * A provider with services configured is only booked for those services.
+     *
+     * @param  array{id: int, name: string}|null  $service
+     */
+    private function assertProvides(Clinic $clinic, Branch $branch, ClinicEmployee $provider, ?array $service): void
+    {
+        if (! $service) {
+            return;
+        }
+
+        $eligible = $this->availability->providers($clinic, $branch, $service['id'])->contains('id', $provider->id);
+        if (! $eligible) {
+            throw ValidationException::withMessages(['practitioner_id' => "{$provider->name} does not provide {$service['name']}."]);
         }
     }
 

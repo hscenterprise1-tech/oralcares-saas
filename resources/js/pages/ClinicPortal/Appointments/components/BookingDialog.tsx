@@ -3,8 +3,8 @@ import { router } from '@inertiajs/react';
 import { Repeat, UserPlus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/clinic/ui/Button';
-import type { BookingDraft, CalendarProps, PatientRef, Slot } from '../lib/types';
-import { Field, inputClass, Modal, selectClass, textareaClass } from './Modal';
+import { offers, type BookingDraft, type CalendarProps, type PatientRef, type Slot } from '../lib/types';
+import { Field, inputClass, Modal, selectClass, textareaClass } from '@/clinic/ui/Modal';
 import { PatientPicker } from './PatientPicker';
 import { SlotPicker } from './SlotPicker';
 
@@ -197,7 +197,15 @@ export function BookingDialog({
               id="bk-service"
               className={selectClass}
               value={serviceId ?? ''}
-              onChange={(e) => setServiceId(e.target.value ? Number(e.target.value) : null)}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : null;
+                setServiceId(next);
+                // A chosen doctor who does not offer the new service: back to any.
+                const chosen = providers.find((provider) => provider.id === providerId);
+                if (chosen && !offers(chosen, next)) {
+                  setProviderId(null);
+                }
+              }}
             >
               <option value="">General appointment ({settings.default_duration_minutes} min)</option>
               {services.map((service) => (
@@ -216,7 +224,7 @@ export function BookingDialog({
               onChange={(e) => setProviderId(e.target.value ? Number(e.target.value) : null)}
             >
               <option value="">Any available</option>
-              {providers.map((provider) => (
+              {providers.filter((provider) => offers(provider, serviceId)).map((provider) => (
                 <option key={provider.id} value={provider.id}>
                   {provider.name}
                   {provider.specialty ? ` · ${provider.specialty}` : ''}

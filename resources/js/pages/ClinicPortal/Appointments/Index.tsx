@@ -75,6 +75,15 @@ export default function AppointmentsIndex(props: CalendarProps) {
 
   useEffect(() => setPhoneDay(today >= range.start && today <= range.end ? today : range.start), [range.start, range.end, today]);
 
+  // Opened from leave review with `?appointment=ID`: show that appointment.
+  useEffect(() => {
+    const wanted = Number(new URLSearchParams(window.location.search).get('appointment'));
+    if (wanted) {
+      setSelected(appointments.find((appointment) => appointment.id === wanted) ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const go = (next: Partial<{ view: CalendarView; date: string; filters: Filters }>) =>
     visit(links.index, { view: next.view ?? view, date: next.date ?? date, filters: next.filters ?? filters });
 

@@ -72,8 +72,15 @@ class Practitioner extends Model
         'clinic_id',
         'organization_id',
         'clinic_employee_id',
+        'profession',
         'specialty',
+        'primary_specialty_id',
         'registration_number',
+        'registration_authority',
+        'registration_state',
+        'registration_type',
+        'registration_date',
+        'registration_expires_at',
         'qualifications',
         'experience_years',
         'consultation_fee',
@@ -87,6 +94,8 @@ class Practitioner extends Model
             'is_active' => 'boolean',
             'experience_years' => 'integer',
             'consultation_fee' => 'decimal:2',
+            'registration_date' => 'date',
+            'registration_expires_at' => 'date',
         ];
     }
 
@@ -166,7 +175,23 @@ class Practitioner extends Model
     }
 
     /**
-     * Assigned specialty catalog items.
+     * Structured professional qualifications, in display order.
+     */
+    public function qualificationRecords(): HasMany
+    {
+        return $this->hasMany(PractitionerQualification::class, 'doctor_profile_id')->orderBy('position')->orderBy('id');
+    }
+
+    /**
+     * The primary specialty, from the organisation's specialty catalogue.
+     */
+    public function primarySpecialty(): BelongsTo
+    {
+        return $this->belongsTo(ClinicalSpecialty::class, 'primary_specialty_id')->withoutGlobalScopes();
+    }
+
+    /**
+     * Assigned specialty catalog items (the additional specialties).
      */
     public function specialties(): BelongsToMany
     {

@@ -97,7 +97,7 @@ it('gives the owner every destination that exists, and none that does not', func
                 ->where('clinic.roles', ['Owner']);
 
             // Business domains: Reception and Visits are workflows now, not destinations.
-            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments', 'administration', 'staff', 'branches', 'departments', 'rooms', 'settings']);
+            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments', 'administration', 'staff', 'leave', 'branches', 'departments', 'rooms', 'settings']);
         });
 });
 

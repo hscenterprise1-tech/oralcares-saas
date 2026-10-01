@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/clinic/ui/Button';
 import { shortDate } from '../lib/dates';
 import type { AppointmentSettings, CalendarProps } from '../lib/types';
-import { Field, inputClass, Modal, selectClass } from './Modal';
+import { Field, inputClass, Modal, selectClass } from '@/clinic/ui/Modal';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOTS = [5, 10, 15, 20, 30, 60];

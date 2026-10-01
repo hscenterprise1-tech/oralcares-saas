@@ -71,6 +71,7 @@ class ClinicNavigation
             'keywords' => ['admin', 'setup'],
             'children' => [
                 ['key' => 'staff', 'label' => 'Staff', 'icon' => 'staff', 'order' => 10, 'route' => 'admin.employees.index', 'requires' => ['permissions' => ['staff.manage']], 'keywords' => ['team', 'employees', 'doctors', 'invitations']],
+                ['key' => 'leave', 'label' => 'Leave', 'icon' => 'leave', 'order' => 15, 'route' => 'clinic.leave.index', 'requires' => ['permissions' => ['leave.approve']], 'keywords' => ['time off', 'holiday', 'absence', 'approval']],
                 ['key' => 'branches', 'label' => 'Branches', 'icon' => 'branches', 'order' => 20, 'route' => 'admin.branches.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => ['locations']],
                 ['key' => 'departments', 'label' => 'Departments', 'icon' => 'departments', 'order' => 30, 'route' => 'admin.departments.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => []],
                 ['key' => 'rooms', 'label' => 'Rooms', 'icon' => 'rooms', 'order' => 40, 'route' => 'admin.rooms.index', 'requires' => ['permissions' => ['branch.manage']], 'keywords' => ['chairs', 'operatory']],

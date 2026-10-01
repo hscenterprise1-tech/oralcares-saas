@@ -2,7 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/clinic/ui/Button';
 import { shortDate, timeOf } from '../lib/dates';
 import { personName, type AppointmentItem } from '../lib/types';
-import { Modal } from './Modal';
+import { Modal } from '@/clinic/ui/Modal';
 
 /**
  * Upcoming appointments whose provider has since gone on approved leave.

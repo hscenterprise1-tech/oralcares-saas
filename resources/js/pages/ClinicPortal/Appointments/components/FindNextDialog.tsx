@@ -5,8 +5,8 @@ import { Button } from '@/clinic/ui/Button';
 import { Spinner } from '@/clinic/ui/Spinner';
 import { shortDate, timeOf } from '../lib/dates';
 import { humanize, initials, providerTone } from '../lib/status';
-import type { BookingDraft, CalendarProps, Slot } from '../lib/types';
-import { Field, inputClass, Modal, selectClass } from './Modal';
+import { offers, type BookingDraft, type CalendarProps, type Slot } from '../lib/types';
+import { Field, inputClass, Modal, selectClass } from '@/clinic/ui/Modal';
 
 /**
  * Find next available: the earliest free times for a service, with any or a
@@ -99,7 +99,7 @@ export function FindNextDialog({
         <Field label="Doctor / therapist" htmlFor="fn-provider">
           <select id="fn-provider" className={selectClass} value={providerId} onChange={(e) => setProviderId(e.target.value)}>
             <option value="">Any available</option>
-            {providers.map((provider) => (
+            {providers.filter((provider) => offers(provider, serviceId ? Number(serviceId) : null)).map((provider) => (
               <option key={provider.id} value={provider.id}>
                 {provider.name}
               </option>
