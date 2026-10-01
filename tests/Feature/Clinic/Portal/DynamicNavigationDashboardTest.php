@@ -274,9 +274,11 @@ it('offers the command palette exactly the actions the resolver allows', functio
  */
 
 it('resolves only the widgets a receptionist is eligible for', function () {
-    expect(dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]))['widgets'])->toBe([
-        'quick_actions', 'patients_today', 'new_cases', 'repeat_cases', 'appointments_today', 'waiting_now',
-        'collections_today', 'patient_flow', 'todays_appointments', 'payment_breakdown', 'pending_payments',
+    // No lab or imaging in this plan, so no Investigations.
+    expect(dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]))['widgets'])->toEqualCanonicalizing([
+        'patients_today', 'appointments_today', 'waiting_now', 'collections_today',
+        'todays_patients', 'todays_appointments',
+        'quick_actions', 'needs_attention', 'cash_status',
     ]);
 });
 
@@ -293,7 +295,8 @@ it('neither queries nor sends billing figures to someone without billing access'
     DB::disableQueryLog();
 
     expect($data)->toHaveKey('appointments_today')
-        ->and(array_keys($data))->not->toContain('collections_today', 'payment_breakdown', 'pending_payments')
+        ->and(array_keys($data))->not->toContain('collections_today', 'cash_status')
+        ->and(collect($data['needs_attention']['items'] ?? [])->pluck('id'))->not->toContain('pending_payments')
         ->and($queries)->not->toContain('patient_billing');
 });
 
@@ -301,15 +304,18 @@ it('leaves billing widgets out when the plan has no billing', function () {
     dynamicPlan(['patients', 'appointments']);
 
     expect(dynamicDashboard(dynamicMember(owner: true))['widgets'])
-        ->not->toContain('collections_today', 'payment_breakdown', 'pending_payments');
+        ->not->toContain('collections_today', 'cash_status');
 });
 
-it('leaves case widgets out for a specialty that does not register cases', function () {
-    $this->organization->update(['clinic_type' => ClinicType::Physiotherapy]);
+it('names visits as cases only where the specialty registers cases', function () {
+    $patient = Patient::create(['clinic_id' => $this->clinic->id, 'first_name' => 'Case', 'last_name' => 'Type', 'gender' => 'male', 'phone' => '9000000002', 'uhid' => 'UHID-DYN-2']);
+    DB::table('patient_visits')->insert(['clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => $patient->id, 'registration_type' => 'new', 'visit_date' => ClinicClock::today()->toDateString(), 'queue_status' => 'waiting', 'visit_status' => 'open', 'registration_fee_collected' => false, 'created_at' => now(), 'updated_at' => now()]);
+    $owner = dynamicMember(owner: true);
 
-    expect(dynamicDashboard(dynamicMember(owner: true))['widgets'])
-        ->toContain('patients_today')
-        ->not->toContain('new_cases', 'repeat_cases');
+    expect(dynamicWidgetData($owner)['todays_patients']['items'][0]['secondary'])->toStartWith('New case');
+
+    $this->organization->update(['clinic_type' => ClinicType::Physiotherapy]);
+    expect(dynamicWidgetData($owner)['todays_patients']['items'][0]['secondary'])->toStartWith('First visit');
 });
 
 it('counts only the active branch, and keeps clinic-wide widgets from branch-limited staff', function () {
@@ -328,8 +334,8 @@ it('counts only the active branch, and keeps clinic-wide widgets from branch-lim
 
     expect($data['appointments_today']['value'])->toBe(1)
         ->and($data['todays_appointments']['total'])->toBe(1)
-        // X-rays carry no branch and staff/branch overviews are clinic-wide.
-        ->and($widgets)->not->toContain('pending_xrays', 'staff_overview', 'branch_activity');
+        // Staff and branch overviews are clinic-wide.
+        ->and($widgets)->not->toContain('staff_overview', 'branch_activity');
 });
 
 it('gives a multi-role user the union of their widgets, each once', function () {
@@ -337,7 +343,7 @@ it('gives a multi-role user the union of their widgets, each once', function () 
 
     $widgets = dynamicDashboard($member)['widgets'];
 
-    expect($widgets)->toContain('patient_flow', 'collections_today', 'my_day', 'my_queue')
+    expect($widgets)->toContain('todays_patients', 'collections_today', 'my_day', 'my_queue')
         ->and($widgets)->toBe(array_values(array_unique($widgets)));
 });
 
@@ -371,7 +377,8 @@ it('keeps the plan in force inside Owner Mode', function () {
 
 it('drives quick actions from permissions, and owner actions from Owner Mode', function () {
     $owner = dynamicMember(owner: true);
-    expect(dynamicDashboard($owner)['actions'])->toContain('invite_staff')->not->toContain('owner_settings');
+    // Staff is Administration, never a quick action.
+    expect(dynamicDashboard($owner)['actions'])->toContain('new_case', 'new_appointment')->not->toContain('owner_settings', 'invite_staff');
 
     actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass']);
     $actions = [];
@@ -415,4 +422,86 @@ it('does not offer a fee on any action', function () {
     foreach (ClinicActions::ACTIONS as $action) {
         expect($action)->not->toHaveKey('fee')->not->toHaveKey('price');
     }
+});
+
+/*
+ * Reception dashboard
+ */
+
+it('gives a receptionist without billing access no billing widgets and runs no billing query', function () {
+    $member = dynamicMember(roles: [ClinicRole::Receptionist]);
+    Role::findByName(ClinicRole::Receptionist->value, 'web')->revokePermissionTo(['billing.view', 'billing.create', 'payment.collect']);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    $widgets = dynamicDashboard($member)['widgets'];
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $data = dynamicWidgetData($member);
+    $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+    DB::disableQueryLog();
+
+    expect($widgets)->toContain('todays_patients', 'todays_appointments')->not->toContain('collections_today', 'cash_status')
+        ->and(collect($data['needs_attention']['items'] ?? [])->pluck('id'))->not->toContain('pending_payments')
+        ->and($queries)->not->toContain('patient_billing');
+});
+
+it('combines lab and imaging into one Investigations summary, only with the capability and permission', function () {
+    $noCapability = dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]))['widgets'];
+
+    dynamicPlan(['patients', 'appointments', 'billing', 'lab', 'xray']);
+    DB::table('lab_orders')->insert([
+        ['clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => Patient::create(['clinic_id' => $this->clinic->id, 'first_name' => 'Lab', 'last_name' => 'One', 'gender' => 'female', 'phone' => '9000000003', 'uhid' => 'UHID-DYN-3'])->id, 'lab_order_number' => 'L-1', 'status' => 'requested', 'created_at' => now(), 'updated_at' => now()],
+    ]);
+    $receptionist = dynamicMember(roles: [ClinicRole::Receptionist]);
+    $billingStaff = dynamicMember(roles: [ClinicRole::BillingStaff]);
+
+    $widgets = dynamicDashboard($receptionist)['widgets'];
+    $stats = collect(dynamicWidgetData($receptionist)['investigations']['stats'])->pluck('value', 'key');
+
+    expect($noCapability)->not->toContain('investigations')
+        ->and($widgets)->toContain('investigations')->not->toContain('pending_lab_orders', 'pending_xrays')
+        ->and($stats->keys()->all())->toBe(['ordered', 'pending', 'due', 'received'])
+        ->and($stats['ordered'])->toBe(1)
+        ->and(dynamicDashboard($billingStaff)['widgets'])->not->toContain('investigations');
+});
+
+it('lets the owner hide a widget from Reception, but never show one Reception may not see', function () {
+    $owner = dynamicMember(owner: true);
+    $receptionist = dynamicMember(roles: [ClinicRole::Receptionist]);
+    $restricted = Role::findByName(ClinicRole::Receptionist->value, 'web');
+
+    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
+    $this->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['cash_status']])->assertRedirect();
+
+    expect(dynamicDashboard($receptionist)['widgets'])->toContain('collections_today')->not->toContain('cash_status');
+
+    // Showing everything cannot give back what permissions take away. (The
+    // owner's session moved to the receptionist above, which ended Owner Mode.)
+    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
+    $this->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => []])->assertRedirect();
+    $restricted->revokePermissionTo(['billing.view', 'billing.create', 'payment.collect']);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    $receptionist['user']->unsetRelation('roles')->unsetRelation('permissions');
+
+    expect(dynamicDashboard($receptionist)['widgets'])->not->toContain('collections_today', 'cash_status');
+});
+
+it('accepts dashboard choices only from the owner in Owner Mode, and only for staff widgets', function () {
+    $owner = dynamicMember(owner: true);
+    $receptionist = dynamicMember(roles: [ClinicRole::Receptionist]);
+
+    actAsDynamic($receptionist)->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['cash_status']])->assertForbidden();
+    actAsDynamic($owner)->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['cash_status']])->assertForbidden();
+
+    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass']);
+    $this->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['owner_plan']])->assertSessionHasErrors('hidden.0');
+
+    expect($this->clinic->fresh()->dashboard_config)->toBeNull();
+});
+
+it('reports a single branch so the shell shows no branch selector', function () {
+    actAsDynamic(dynamicMember(roles: [ClinicRole::Receptionist]))->get('/clinic/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('clinic.accessible_branch_count', 1));
+
+    expect(file_get_contents(resource_path('js/clinic/shell/ClinicPortalShell.tsx')))->toContain('accessible_branch_count > 1');
 });

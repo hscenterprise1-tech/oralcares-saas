@@ -70,7 +70,10 @@ export interface QuickAction extends NavLink {
   tone: Tone;
 }
 
-export type WidgetKind = 'kpi' | 'list' | 'flow' | 'stats' | 'breakdown' | 'trend' | 'facts' | 'actions';
+export type WidgetKind = 'kpi' | 'list' | 'stats' | 'trend' | 'facts' | 'actions';
+
+/** Where a widget sits: compact figures across the top, operational lists, or the side column. */
+export type WidgetZone = 'summary' | 'main' | 'side';
 
 /** A dashboard widget the server resolved for this user (`DashboardWidgets`). Data arrives separately. */
 export interface DashboardWidget {
@@ -80,8 +83,7 @@ export interface DashboardWidget {
   icon: string;
   tone: Tone;
   kind: WidgetKind;
-  /** Columns out of 4 on wide screens. */
-  span: 1 | 2 | 4;
+  zone: WidgetZone;
   empty: string | null;
   action: { label: string; href: string } | null;
 }
@@ -101,6 +103,10 @@ export interface ListItem {
   status?: string | null;
   amount?: number;
   currency?: string;
+  /** How many, for a summarised item (e.g. "Pending payments · 3"). */
+  count?: number;
+  /** Where the row opens, when the user may go there. */
+  href?: string | null;
 }
 
 export interface ListData {
@@ -109,19 +115,9 @@ export interface ListData {
   summary?: { value: number; label: string; format: 'number' | 'currency'; currency?: string; tone?: Tone };
 }
 
-export interface FlowData {
-  stages: { key: string; label: string; count: number; tone: Tone }[];
-}
-
 export interface StatsData {
   currency?: string;
   stats: { key: string; label: string; value: number; tone: Tone; format?: 'number' | 'currency' }[];
-}
-
-export interface BreakdownData {
-  currency: string;
-  total: number;
-  segments: { key: string; label: string; value: number; tone: Tone }[];
 }
 
 export interface TrendData {
@@ -134,13 +130,22 @@ export interface FactsData {
     id?: number;
     label: string;
     value?: string;
+    amount?: number;
+    currency?: string;
     tone?: Tone;
     values?: { label: string; value: number; tone: Tone }[];
   }[];
 }
 
-export type WidgetData =
-  KpiData | ListData | FlowData | StatsData | BreakdownData | TrendData | FactsData | { error: true };
+export type WidgetData = KpiData | ListData | StatsData | TrendData | FactsData | { error: true };
+
+/** The owner's choice of widgets per staff role (Owner Mode only). */
+export interface DashboardVisibilitySettings {
+  action: string;
+  roles: string[];
+  widgets: { key: string; title: string }[];
+  hidden: Record<string, string[]>;
+}
 
 /**
  * Owner Mode as the server sees it on this request. Presentation only: the

@@ -1,10 +1,11 @@
 import { Crown } from 'lucide-react';
 import { DashboardGrid } from '@/clinic/dashboard/DashboardGrid';
+import { VisibilityDialog } from '@/clinic/dashboard/VisibilityDialog';
 import { clinicDisplayName, useClinic, useClinicShared } from '@/clinic/context';
 import { PageHeader, Panel } from '@/clinic/page/PageHeader';
 import { BranchSwitcher, branchLabel } from '@/clinic/shell/BranchSwitcher';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
-import type { DashboardWidget, WidgetData } from '@/clinic/types';
+import type { DashboardVisibilitySettings, DashboardWidget, WidgetData } from '@/clinic/types';
 import { StatePanel } from '@/clinic/ui/StatePanel';
 
 interface HomeProps {
@@ -12,6 +13,8 @@ interface HomeProps {
   widgets: DashboardWidget[];
   /** Each widget's figures, deferred: undefined until they arrive. */
   widgetData?: Record<string, WidgetData>;
+  /** The owner's per-role dashboard choices; only sent in Owner Mode. */
+  visibility: DashboardVisibilitySettings | null;
 }
 
 const HONORIFICS = /^(dr|mr|mrs|ms|miss|prof)\.?$/i;
@@ -40,7 +43,7 @@ function greeting(hour: number): string {
  * this user. One page for every role; it holds no widget list and no
  * navigation of its own.
  */
-export default function Home({ widgets, widgetData }: HomeProps) {
+export default function Home({ widgets, widgetData, visibility }: HomeProps) {
   const clinic = useClinic();
   const { auth, portalLinks } = useClinicShared();
   const firstName = greetingName(auth.user?.name ?? '');
@@ -98,9 +101,12 @@ export default function Home({ widgets, widgetData }: HomeProps) {
         description={where ? `Here is today at ${where}.` : undefined}
         actions={
           ownerMode ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-clinic-ink px-3.5 py-1.5 text-[12px] font-bold text-white">
-              <Crown className="h-3.5 w-3.5" aria-hidden="true" /> Owner view
-            </span>
+            <>
+              {visibility && <VisibilityDialog settings={visibility} />}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-clinic-ink px-3.5 py-1.5 text-[12px] font-bold text-white">
+                <Crown className="h-3.5 w-3.5" aria-hidden="true" /> Owner view
+              </span>
+            </>
           ) : undefined
         }
       />

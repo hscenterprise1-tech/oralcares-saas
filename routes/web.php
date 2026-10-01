@@ -14,6 +14,7 @@ use App\Http\Controllers\Clinic\Admin\SettingsController as ClinicAdminSettingsC
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
 use App\Http\Controllers\Clinic\BranchSwitchController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
+use App\Http\Controllers\Clinic\DashboardVisibilityController;
 use App\Http\Controllers\Clinic\OnboardingController as ClinicOnboardingController;
 use App\Http\Controllers\Clinic\OwnerModeController;
 use App\Http\Controllers\Clinic\Patient360Controller;
@@ -1136,6 +1137,11 @@ $clinicRoutes = function () {
             ->middleware('throttle:clinic-owner-mode')
             ->name('clinic.owner-mode.store');
         Route::delete('/owner-mode', [OwnerModeController::class, 'destroy'])->name('clinic.owner-mode.destroy');
+
+        // The owner choosing what each staff role's dashboard shows.
+        Route::put('/dashboard/visibility', [DashboardVisibilityController::class, 'update'])
+            ->middleware('clinic_owner_mode')
+            ->name('clinic.dashboard.visibility');
 
         // ==========================================
         // RECEPTION COMMAND CENTER (Phase 2)

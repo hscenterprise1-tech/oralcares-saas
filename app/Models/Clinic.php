@@ -34,6 +34,7 @@ class Clinic extends Model
         'patient_field_config',
         'case_number_config',
         'patient_flow_config',
+        'dashboard_config',
     ];
 
     /**
@@ -49,6 +50,7 @@ class Clinic extends Model
             'patient_field_config' => 'array',
             'case_number_config' => 'array',
             'patient_flow_config' => 'array',
+            'dashboard_config' => 'array',
         ];
     }
 

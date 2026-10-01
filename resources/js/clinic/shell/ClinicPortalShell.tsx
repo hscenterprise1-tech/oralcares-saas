@@ -6,6 +6,7 @@ import { ChevronDown, Menu as MenuIcon, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clinicDisplayName, isCurrent, useClinicShared } from '../context';
 import type { NavDestination, NavLink } from '../types';
+import { toolButton } from '../ui/Button';
 import { iconFor } from '../ui/visuals';
 import { AccountMenu } from './AccountMenu';
 import { BranchSwitcher } from './BranchSwitcher';
@@ -16,6 +17,12 @@ import { PortalErrorBoundary } from './PortalErrorBoundary';
 import { FlashNotices, OfflineBanner, PlanBanner } from './StatusBanners';
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong';
+
+/** The Company CRM's navigation pill, in the clinic palette. */
+const PILL =
+  'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-semibold motion-safe:transition-colors';
+const PILL_ACTIVE = 'bg-clinic-ink text-white';
+const PILL_IDLE = 'text-clinic-secondary hover:bg-white/70 hover:text-clinic-ink';
 
 /**
  * The Clinic Portal's one frame: the clinic's identity, the branch it is
@@ -66,75 +73,68 @@ export function ClinicPortalShell({ title, children }: { title: string; children
         <OfflineBanner />
         <PlanBanner window={subscriptionWindow} />
 
-        <header className="sticky top-0 z-40 border-b border-clinic-border bg-clinic-surface/95 backdrop-blur supports-[backdrop-filter]:bg-clinic-surface/85">
-          <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-2 px-4 sm:gap-3 lg:px-8">
+        {/* The Company CRM's header, in the clinic's palette: one row over the canvas, the
+            navigation as a pill group, round tool buttons. */}
+        <header className="sticky top-0 z-40 bg-clinic-canvas/80 px-4 py-3 backdrop-blur-xl supports-[backdrop-filter]:bg-clinic-canvas/70 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-[1440px] items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
-              className={cn(
-                '-ml-1.5 flex h-11 w-11 items-center justify-center rounded-full text-clinic-ink hover:bg-clinic-inset lg:hidden',
-                FOCUS_RING,
-              )}
+              className={cn(toolButton, 'lg:hidden')}
             >
-              <MenuIcon className="h-5 w-5" aria-hidden="true" />
+              <MenuIcon className="h-4 w-4" aria-hidden="true" />
             </button>
 
             <Link
               href={portalLinks.dashboard}
-              className={cn('flex min-w-0 items-center gap-2.5 rounded-xl py-1 pr-1', FOCUS_RING)}
+              className={cn('flex min-w-0 shrink items-center gap-2.5 rounded-[14px] py-1 pr-1', FOCUS_RING)}
               aria-label={`${name}, home`}
             >
               <ClinicMark name={name} logoUrl={clinic.logo_url} size="md" />
               {/* Two lines on a phone rather than "Sunri…": the clinic's name is the page's identity. */}
-              <span className="line-clamp-2 text-[15px] font-bold leading-[1.15] tracking-tight text-clinic-ink sm:line-clamp-1 sm:text-[17px]">
+              <span className="line-clamp-2 text-[15px] font-bold leading-[1.15] tracking-[-0.02em] text-clinic-ink sm:line-clamp-1 lg:max-w-[260px] xl:max-w-[300px]">
                 {name}
               </span>
             </Link>
 
             {multiBranch && (
-              <div className="hidden min-w-0 items-center gap-3 sm:flex">
-                <span aria-hidden="true" className="h-6 w-px bg-clinic-border" />
+              <div className="hidden min-w-0 sm:flex">
                 <BranchSwitcher clinic={clinic} links={portalLinks} />
               </div>
             )}
 
-            <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+            {domains.length > 0 && (
+              <nav
+                aria-label="Main"
+                className="mx-auto hidden rounded-full border border-white/70 bg-white/70 p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] lg:block"
+              >
+                <div className="flex items-center gap-0.5">
+                  {domains.map((domain) =>
+                    domain.children.length > 0 ? (
+                      <DomainMenu key={domain.key} domain={domain} currentUrl={url} />
+                    ) : (
+                      <NavPill key={domain.key} item={domain} current={isCurrent(domain.href, url)} />
+                    ),
+                  )}
+                </div>
+              </nav>
+            )}
+
+            <div className="ml-auto flex shrink-0 items-center gap-2 lg:ml-0">
               <button
                 type="button"
                 onClick={openPalette}
                 aria-label="Go to a page (Ctrl+K)"
                 aria-keyshortcuts="Control+K Meta+K"
-                className={cn(
-                  'flex h-10 items-center gap-2 rounded-full text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
-                  'w-10 justify-center [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 md:w-56 md:[@media(pointer:coarse)]:w-56 md:justify-start md:border md:border-clinic-border md:bg-clinic-canvas md:px-3.5 md:hover:bg-clinic-surface',
-                  FOCUS_RING,
-                )}
+                className={toolButton}
               >
-                <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="hidden flex-1 text-left text-[13px] md:inline">Go to…</span>
-                <kbd className="hidden rounded-md border border-clinic-border bg-clinic-surface px-1.5 text-[11px] font-semibold md:inline">
-                  Ctrl K
-                </kbd>
+                <Search className="h-4 w-4" aria-hidden="true" />
               </button>
               <NotificationsMenu links={portalLinks} />
               <AccountMenu user={auth.user} clinic={clinic} links={portalLinks} />
             </div>
           </div>
-
-          {domains.length > 0 && (
-            <nav aria-label="Main" className="hidden border-t border-clinic-border lg:block">
-              <div className="mx-auto flex max-w-[1440px] items-center gap-0.5 overflow-x-auto px-6 lg:px-8">
-                {domains.map((domain) =>
-                  domain.children.length > 0 ? (
-                    <DomainMenu key={domain.key} domain={domain} currentUrl={url} />
-                  ) : (
-                    <NavTab key={domain.key} item={domain} current={isCurrent(domain.href, url)} />
-                  ),
-                )}
-              </div>
-            </nav>
-          )}
         </header>
 
         <MobileMenu open={mobileOpen} onOpenChange={setMobileOpen} domains={domains} currentUrl={url}>
@@ -162,60 +162,49 @@ export function ClinicPortalShell({ title, children }: { title: string; children
   );
 }
 
-function NavTab({ item, current }: { item: NavLink; current: boolean }) {
-  const Icon = iconFor(item.icon);
-
+/** A domain as the CRM shows a pillar: a pill, solid ink when it is the current one. */
+function NavPill({ item, current }: { item: NavLink; current: boolean }) {
   return (
     <Link
       href={item.href}
       aria-current={current ? 'page' : undefined}
-      className={cn(
-        'relative flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-semibold',
-        'after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full',
-        current ? 'text-clinic-ink after:bg-clinic-brand' : 'text-clinic-secondary hover:text-clinic-ink',
-        FOCUS_RING,
-      )}
+      className={cn(PILL, current ? PILL_ACTIVE : PILL_IDLE, FOCUS_RING)}
     >
-      <Icon className={cn('h-4 w-4', current ? 'text-clinic-brand-strong' : 'text-current')} aria-hidden="true" />
       {item.label}
     </Link>
   );
 }
 
-/** A domain with sub-areas (Administration): one tab that opens its children. */
+/** A domain with sub-areas (Administration): a pill that opens the CRM's glass menu. */
 function DomainMenu({ domain, currentUrl }: { domain: NavDestination; currentUrl: string }) {
-  const Icon = iconFor(domain.icon);
   const active = domain.children.some((item) => isCurrent(item.href, currentUrl));
 
   return (
     <Menu.Root>
       <Menu.Trigger
         className={cn(
-          'group relative flex h-12 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-3 text-[13px] font-semibold',
-          'after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full',
-          active
-            ? 'text-clinic-ink after:bg-clinic-brand'
-            : 'text-clinic-secondary hover:text-clinic-ink data-[state=open]:text-clinic-ink',
+          'group',
+          PILL,
+          active ? PILL_ACTIVE : cn(PILL_IDLE, 'data-[state=open]:bg-clinic-ink data-[state=open]:text-white'),
           FOCUS_RING,
         )}
       >
-        <Icon
-          className={cn('mr-0.5 h-4 w-4', active ? 'text-clinic-brand-strong' : 'text-current')}
-          aria-hidden="true"
-        />
         {domain.label}
         <ChevronDown
-          className="h-3.5 w-3.5 motion-safe:transition-transform group-data-[state=open]:rotate-180"
+          className="h-3 w-3 motion-safe:transition-transform motion-safe:duration-200 group-data-[state=open]:rotate-180"
           aria-hidden="true"
         />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
-          align="start"
-          sideOffset={4}
+          align="center"
+          sideOffset={10}
           collisionPadding={16}
-          className="z-50 min-w-[220px] rounded-2xl border border-clinic-border bg-clinic-surface p-1.5 shadow-[0_16px_40px_-12px_rgba(16,24,40,0.25)]"
+          className="z-50 w-[280px] rounded-[26px] border border-white/70 bg-white/[0.86] p-3 shadow-[0_2px_6px_rgba(11,11,15,0.05),0_20px_44px_-20px_rgba(11,11,15,0.20)] backdrop-blur-2xl"
         >
+          <p className="px-2 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-clinic-secondary">
+            {domain.label}
+          </p>
           {domain.children.map((item) => {
             const current = isCurrent(item.href, currentUrl);
             const ChildIcon = iconFor(item.icon);
@@ -226,12 +215,19 @@ function DomainMenu({ domain, currentUrl }: { domain: NavDestination; currentUrl
                   href={item.href}
                   aria-current={current ? 'page' : undefined}
                   className={cn(
-                    'flex min-h-10 items-center gap-2.5 rounded-xl px-3 text-[13px] text-clinic-ink outline-none data-[highlighted]:bg-clinic-inset',
-                    current && 'font-semibold',
+                    'flex items-center gap-2.5 rounded-[24px] px-2.5 py-2 text-[13px] font-medium outline-none',
+                    current ? 'bg-clinic-ink text-white' : 'text-clinic-ink data-[highlighted]:bg-white',
                   )}
                 >
-                  <ChildIcon className="h-4 w-4 text-clinic-secondary" aria-hidden="true" />
-                  {item.label}
+                  <span
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+                      current ? 'bg-white/15 text-white' : 'bg-clinic-inset text-clinic-secondary',
+                    )}
+                  >
+                    <ChildIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 </Link>
               </Menu.Item>
             );

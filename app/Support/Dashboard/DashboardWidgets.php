@@ -3,7 +3,6 @@
 namespace App\Support\Dashboard;
 
 use App\Support\ClinicAccess\ClinicAccess;
-use App\Support\ClinicActions;
 use Throwable;
 
 /**
@@ -14,7 +13,8 @@ use Throwable;
  * plan module, capability, specialty, branch scope, Owner Mode, practitioner)
  * and which `DashboardData` source fills it. For a user the dashboard is:
  *
- *   eligible() -> every widget whose requirements hold, in order
+ *   eligible() -> every widget whose requirements hold and that the owner
+ *                 has not hidden for the user's roles, in order
  *   data()     -> the source of each eligible widget, and nothing else
  *
  * A receptionist, a doctor, an admin, an owner, or someone holding several of
@@ -27,154 +27,136 @@ use Throwable;
  */
 class DashboardWidgets
 {
-    /** Specialties that register patients as new and repeat cases. */
-    private const CASE_SPECIALTIES = ClinicActions::CASE_SPECIALTIES;
-
     /**
-     * kind: kpi | list | flow | stats | breakdown | trend | facts | actions
-     * span: 1 (a quarter on wide screens) | 2 (half) | 4 (full width)
+     * kind: kpi | list | stats | facts | trend | actions
+     * zone: summary (compact figures across the top) | main (operational
+     *       lists) | side (actions, attention, status). Within a zone,
+     *       widgets follow `order`; a zone the user has nothing in is not drawn.
      * tone: brand | blue | green | amber | red | violet | slate | ink
      *
-     * @var list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, span: int, order: int, requires: array<string, mixed>, source?: string, action?: array{label: string, route: string, requires?: array<string, mixed>}, empty?: string}>
+     * @var list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, order: int, requires: array<string, mixed>, source?: string, action?: array{label: string, route: string, requires?: array<string, mixed>}, empty?: string}>
      */
     public const WIDGETS = [
-        [
-            'key' => 'quick_actions', 'title' => 'Quick actions', 'description' => 'Start the most common tasks',
-            'icon' => 'bolt', 'tone' => 'brand', 'kind' => 'actions', 'span' => 4, 'order' => 5,
-            'requires' => [],
-        ],
+        // Summary: the day in four figures.
         [
             'key' => 'patients_today', 'title' => "Today's patients", 'description' => 'Visits registered today',
-            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'kpi', 'span' => 1, 'order' => 10,
+            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 10,
             'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients'],
             'source' => 'patientsToday',
-            'action' => ['label' => 'Open visits', 'route' => 'clinic.visits.index', 'requires' => ['permissions' => ['visit.view']]],
-        ],
-        [
-            'key' => 'new_cases', 'title' => 'New cases', 'description' => 'First visits today',
-            'icon' => 'new-case', 'tone' => 'green', 'kind' => 'kpi', 'span' => 1, 'order' => 12,
-            'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients', 'specialties' => self::CASE_SPECIALTIES],
-            'source' => 'newCasesToday',
-        ],
-        [
-            'key' => 'repeat_cases', 'title' => 'Repeat cases', 'description' => 'Returning patients today',
-            'icon' => 'repeat-case', 'tone' => 'violet', 'kind' => 'kpi', 'span' => 1, 'order' => 14,
-            'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients', 'specialties' => self::CASE_SPECIALTIES],
-            'source' => 'repeatCasesToday',
         ],
         [
             'key' => 'appointments_today', 'title' => 'Appointments', 'description' => 'Booked for today',
-            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'kpi', 'span' => 1, 'order' => 16,
+            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 20,
             'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
             'source' => 'appointmentsToday',
-            'action' => ['label' => 'Open calendar', 'route' => 'clinic.appointments.index'],
         ],
         [
-            'key' => 'waiting_now', 'title' => 'Waiting', 'description' => 'In the queue right now',
-            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'kpi', 'span' => 1, 'order' => 18,
+            'key' => 'waiting_now', 'title' => 'Waiting', 'description' => 'In the queue now',
+            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 30,
             'requires' => ['permissions' => ['queue.manage']],
             'source' => 'waitingNow',
-            'action' => ['label' => 'Open reception', 'route' => 'clinic.reception'],
         ],
         [
             'key' => 'collections_today', 'title' => "Today's collection", 'description' => 'Payments received today',
-            'icon' => 'payment', 'tone' => 'green', 'kind' => 'kpi', 'span' => 1, 'order' => 20,
+            'icon' => 'payment', 'tone' => 'green', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 40,
             'requires' => ['permissions' => ['billing.view', 'payment.collect'], 'module' => 'billing'],
             'source' => 'collectionsToday',
         ],
+
+        // Main: compact operational lists.
         [
-            'key' => 'my_day', 'title' => 'Your day', 'description' => 'Your patients today',
-            'icon' => 'doctor', 'tone' => 'violet', 'kind' => 'stats', 'span' => 2, 'order' => 25,
-            'requires' => ['practitioner' => true, 'permissions' => ['patient.view']],
-            'source' => 'myDay',
-            'action' => ['label' => 'My patients', 'route' => 'clinic.patients.index'],
-        ],
-        [
-            'key' => 'my_queue', 'title' => 'Your queue', 'description' => 'Patients waiting for you',
-            'icon' => 'waiting', 'tone' => 'violet', 'kind' => 'list', 'span' => 2, 'order' => 26,
-            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view', 'queue.manage']],
-            'source' => 'myQueue',
-            'empty' => 'No one is waiting for you right now.',
-        ],
-        [
-            'key' => 'patient_flow', 'title' => "Today's patient flow", 'description' => 'Where today’s patients are',
-            'icon' => 'flow', 'tone' => 'amber', 'kind' => 'flow', 'span' => 2, 'order' => 30,
-            'requires' => ['permissions' => ['queue.manage']],
-            'source' => 'patientFlow',
-            'action' => ['label' => 'Open reception', 'route' => 'clinic.reception'],
+            'key' => 'todays_patients', 'title' => "Today's patients", 'description' => 'Registered today, latest first',
+            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'list', 'zone' => 'main', 'order' => 10,
+            'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients'],
+            'source' => 'todaysPatients',
+            'action' => ['label' => 'View all', 'route' => 'clinic.visits.index', 'requires' => ['permissions' => ['visit.view']]],
+            'empty' => 'No patients registered yet today.',
         ],
         [
             'key' => 'todays_appointments', 'title' => "Today's appointments", 'description' => 'Next on the calendar',
-            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'list', 'span' => 2, 'order' => 32,
+            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'list', 'zone' => 'main', 'order' => 20,
             'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
             'source' => 'todaysAppointments',
             'action' => ['label' => 'View all', 'route' => 'clinic.appointments.index'],
             'empty' => 'No appointments booked for today.',
         ],
         [
-            'key' => 'payment_breakdown', 'title' => 'Collection by mode', 'description' => 'Cash, UPI and card today',
-            'icon' => 'wallet', 'tone' => 'green', 'kind' => 'breakdown', 'span' => 2, 'order' => 40,
-            'requires' => ['permissions' => ['billing.view', 'payment.collect'], 'module' => 'billing'],
-            'source' => 'paymentBreakdown',
-            'empty' => 'No payments recorded today.',
+            'key' => 'my_day', 'title' => 'Your day', 'description' => 'Your patients today',
+            'icon' => 'doctor', 'tone' => 'violet', 'kind' => 'stats', 'zone' => 'main', 'order' => 30,
+            'requires' => ['practitioner' => true, 'permissions' => ['patient.view']],
+            'source' => 'myDay',
+            'action' => ['label' => 'My patients', 'route' => 'clinic.patients.index'],
         ],
         [
-            'key' => 'pending_payments', 'title' => 'Pending payments', 'description' => 'Bills with a balance due',
-            'icon' => 'pending', 'tone' => 'amber', 'kind' => 'list', 'span' => 2, 'order' => 42,
-            'requires' => ['permissions' => ['billing.view'], 'module' => 'billing'],
-            'source' => 'pendingPayments',
-            'empty' => 'Nothing outstanding.',
-        ],
-        [
-            'key' => 'pending_lab_orders', 'title' => 'Lab work in progress', 'description' => 'Open dental lab cases',
-            'icon' => 'lab', 'tone' => 'violet', 'kind' => 'list', 'span' => 2, 'order' => 50,
-            'requires' => ['permissions' => ['clinical.view'], 'capabilities' => ['lab']],
-            'source' => 'pendingLabOrders',
-            'empty' => 'No lab cases open.',
-        ],
-        [
-            'key' => 'pending_xrays', 'title' => 'X-rays to complete', 'description' => 'Requested, scheduled or awaiting review',
-            'icon' => 'xray', 'tone' => 'violet', 'kind' => 'list', 'span' => 2, 'order' => 52,
-            // X-ray records have no branch, so only clinic-wide users may see them.
-            'requires' => ['permissions' => ['clinical.view'], 'capabilities' => ['xray'], 'branch' => 'clinic_wide'],
-            'source' => 'pendingXrays',
-            'empty' => 'No X-rays waiting.',
-        ],
-        [
-            'key' => 'staff_overview', 'title' => 'Team', 'description' => 'Staff across the clinic',
-            'icon' => 'staff', 'tone' => 'brand', 'kind' => 'stats', 'span' => 2, 'order' => 60,
-            'requires' => ['permissions' => ['staff.manage'], 'branch' => 'clinic_wide'],
-            'source' => 'staffOverview',
-            'action' => ['label' => 'Manage staff', 'route' => 'admin.employees.index'],
+            'key' => 'my_queue', 'title' => 'Your queue', 'description' => 'Patients waiting for you',
+            'icon' => 'waiting', 'tone' => 'violet', 'kind' => 'list', 'zone' => 'main', 'order' => 40,
+            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view', 'queue.manage']],
+            'source' => 'myQueue',
+            'empty' => 'No one is waiting for you right now.',
         ],
         [
             'key' => 'branch_activity', 'title' => 'Branches today', 'description' => 'Activity at each branch',
-            'icon' => 'branches', 'tone' => 'blue', 'kind' => 'facts', 'span' => 2, 'order' => 62,
+            'icon' => 'branches', 'tone' => 'blue', 'kind' => 'facts', 'zone' => 'main', 'order' => 50,
             'requires' => ['permissions' => ['branch.manage'], 'branch' => 'clinic_wide', 'multi_branch' => true],
             'source' => 'branchActivity',
             'action' => ['label' => 'Manage branches', 'route' => 'admin.branches.index'],
         ],
         [
             'key' => 'owner_performance', 'title' => 'Clinic performance', 'description' => 'Last 7 days, all branches',
-            'icon' => 'trend', 'tone' => 'ink', 'kind' => 'trend', 'span' => 2, 'order' => 70,
+            'icon' => 'trend', 'tone' => 'ink', 'kind' => 'trend', 'zone' => 'main', 'order' => 60,
             'requires' => ['owner_mode' => true, 'permissions' => ['patient.view', 'appointment.view'], 'branch' => 'clinic_wide'],
             'source' => 'ownerPerformance',
         ],
+
+        // Side: what to start, what needs attention, where the cash stands.
+        [
+            'key' => 'quick_actions', 'title' => 'Quick actions', 'description' => 'Start a task',
+            'icon' => 'bolt', 'tone' => 'brand', 'kind' => 'actions', 'zone' => 'side', 'order' => 10,
+            'requires' => [],
+        ],
+        [
+            'key' => 'needs_attention', 'title' => 'Needs attention', 'description' => 'Waiting on someone',
+            'icon' => 'pending', 'tone' => 'amber', 'kind' => 'list', 'zone' => 'side', 'order' => 20,
+            // Shown to anyone who can see at least one kind of item; each item
+            // inside checks its own access (see `DashboardData::needsAttention`).
+            'requires' => ['permissions' => ['billing.view', 'appointment.view', 'clinical.view', 'queue.manage']],
+            'source' => 'needsAttention',
+            'empty' => 'Nothing needs attention right now.',
+        ],
+        [
+            'key' => 'investigations', 'title' => 'Investigations', 'description' => 'Lab and imaging work',
+            'icon' => 'lab', 'tone' => 'violet', 'kind' => 'stats', 'zone' => 'side', 'order' => 30,
+            'requires' => ['permissions' => ['clinical.view', 'queue.manage'], 'capabilities' => ['lab', 'xray']],
+            'source' => 'investigations',
+        ],
+        [
+            'key' => 'cash_status', 'title' => 'Cash today', 'description' => 'For daily closing',
+            'icon' => 'wallet', 'tone' => 'green', 'kind' => 'facts', 'zone' => 'side', 'order' => 40,
+            'requires' => ['permissions' => ['billing.view', 'payment.collect'], 'module' => 'billing'],
+            'source' => 'cashStatus',
+        ],
+        [
+            'key' => 'staff_overview', 'title' => 'Team', 'description' => 'Staff across the clinic',
+            'icon' => 'staff', 'tone' => 'brand', 'kind' => 'stats', 'zone' => 'side', 'order' => 50,
+            'requires' => ['permissions' => ['staff.manage'], 'branch' => 'clinic_wide'],
+            'source' => 'staffOverview',
+            'action' => ['label' => 'Manage staff', 'route' => 'admin.employees.index'],
+        ],
         [
             'key' => 'owner_revenue', 'title' => 'Revenue', 'description' => 'All branches',
-            'icon' => 'payment', 'tone' => 'green', 'kind' => 'stats', 'span' => 2, 'order' => 72,
+            'icon' => 'payment', 'tone' => 'green', 'kind' => 'stats', 'zone' => 'side', 'order' => 60,
             'requires' => ['owner_mode' => true, 'permissions' => ['billing.view'], 'module' => 'billing', 'branch' => 'clinic_wide'],
             'source' => 'ownerRevenue',
         ],
         [
             'key' => 'owner_plan', 'title' => 'Plan & usage', 'description' => 'Your OralCares subscription',
-            'icon' => 'plan', 'tone' => 'ink', 'kind' => 'facts', 'span' => 2, 'order' => 74,
+            'icon' => 'plan', 'tone' => 'ink', 'kind' => 'facts', 'zone' => 'side', 'order' => 70,
             'requires' => ['owner_mode' => true],
             'source' => 'ownerPlan',
         ],
         [
             'key' => 'owner_security', 'title' => 'Security', 'description' => 'Sign-in and Owner Mode checks',
-            'icon' => 'shield', 'tone' => 'red', 'kind' => 'list', 'span' => 2, 'order' => 76,
+            'icon' => 'shield', 'tone' => 'red', 'kind' => 'list', 'zone' => 'side', 'order' => 80,
             'requires' => ['owner_mode' => true],
             'source' => 'ownerSecurity',
             'empty' => 'No security events in the last 7 days.',
@@ -188,12 +170,17 @@ class DashboardWidgets
      * @param  list<array<string, mixed>>  $actions  the user's resolved quick actions
      * @param  array<string, string>  $routeParameters
      * @param  list<array<string, mixed>>|null  $widgets  defaults to `WIDGETS`
-     * @return list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, span: int, empty: string|null, action: array{label: string, href: string}|null, source: string|null}>
+     * @return list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, empty: string|null, action: array{label: string, href: string}|null, source: string|null}>
      */
     public static function eligible(ClinicAccess $access, array $actions, array $routeParameters = [], ?array $widgets = null): array
     {
         $widgets ??= self::WIDGETS;
         usort($widgets, fn (array $a, array $b) => $a['order'] <=> $b['order']);
+
+        $visibility = app(DashboardVisibility::class);
+        $clinic = $access->clinic();
+        // The owner's choices narrow what staff see; the owner's own view is never narrowed.
+        $roles = $access->isOwner() ? [] : $access->roles();
 
         $eligible = [];
         foreach ($widgets as $widget) {
@@ -201,7 +188,13 @@ class DashboardWidgets
                 continue;
             }
 
+            // Access first: plan, permission, capability, specialty, branch, Owner Mode.
             if (! $access->allows($widget['requires'])) {
+                continue;
+            }
+
+            // Then the owner's dashboard choice, which can hide but never grant.
+            if ($clinic && $visibility->hides($clinic, $roles, $widget['key'])) {
                 continue;
             }
 
@@ -217,7 +210,7 @@ class DashboardWidgets
                 'icon' => $widget['icon'],
                 'tone' => $widget['tone'],
                 'kind' => $widget['kind'],
-                'span' => $widget['span'],
+                'zone' => $widget['zone'],
                 'empty' => $widget['empty'] ?? null,
                 'action' => $action,
                 'source' => $widget['source'] ?? null,

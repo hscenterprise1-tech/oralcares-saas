@@ -64,12 +64,6 @@ class ClinicActions
             'keywords' => ['crown', 'prosthetic'],
         ],
         [
-            'key' => 'invite_staff', 'label' => 'Add Staff', 'description' => 'Add a doctor or team member',
-            'icon' => 'staff', 'tone' => 'slate', 'order' => 70, 'route' => 'admin.employees.create',
-            'requires' => ['permissions' => ['staff.manage']],
-            'keywords' => ['employee', 'invite', 'doctor'],
-        ],
-        [
             'key' => 'owner_settings', 'label' => 'Clinic Settings', 'description' => 'Owner-level clinic configuration',
             'icon' => 'owner', 'tone' => 'ink', 'order' => 80, 'route' => 'admin.settings.index',
             'requires' => ['permissions' => ['settings.manage'], 'owner_mode' => true],

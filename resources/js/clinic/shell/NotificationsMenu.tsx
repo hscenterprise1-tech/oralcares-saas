@@ -5,6 +5,7 @@ import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ERROR_COPY, errorKind, requestJson, type ClinicHttpErrorKind } from '../http';
 import type { NotificationItem, Paginated, PortalLinks } from '../types';
+import { toolButton } from '../ui/Button';
 import { LoadingPanel, StatePanel } from '../ui/StatePanel';
 
 const PAGE_SIZE = 10;
@@ -133,10 +134,7 @@ export function NotificationsMenu({ links }: { links: PortalLinks }) {
 
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger
-        aria-label={badge ? `Notifications, ${unread} unread` : 'Notifications'}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full text-clinic-secondary [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 hover:bg-clinic-inset hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong data-[state=open]:bg-clinic-inset data-[state=open]:text-clinic-ink"
-      >
+      <Popover.Trigger aria-label={badge ? `Notifications, ${unread} unread` : 'Notifications'} className={toolButton}>
         <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
         {badge && (
           <span

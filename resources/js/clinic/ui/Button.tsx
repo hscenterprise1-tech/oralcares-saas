@@ -96,3 +96,11 @@ export function ButtonLink({
     </Link>
   );
 }
+
+/** The Company CRM's round header tool button (search, notifications, menu), in the clinic palette. */
+export const toolButton = cn(
+  'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full',
+  'border border-white/70 bg-white/[0.86] text-clinic-secondary backdrop-blur hover:bg-clinic-surface hover:text-clinic-ink',
+  'motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
+  'data-[state=open]:bg-clinic-surface data-[state=open]:text-clinic-ink',
+);

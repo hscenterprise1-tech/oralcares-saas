@@ -40,7 +40,7 @@ export function AccountMenu({
       <Menu.Root>
         <Menu.Trigger
           aria-label={inOwnerMode ? `Account: ${user.name}, Owner Mode active` : `Account: ${user.name}`}
-          className="flex h-10 items-center gap-2 rounded-full p-1 [@media(pointer:coarse)]:h-11 hover:bg-clinic-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong data-[state=open]:bg-clinic-inset"
+          className="flex h-11 items-center gap-2 rounded-full border border-white/70 bg-white/[0.86] p-1 backdrop-blur hover:bg-clinic-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong data-[state=open]:bg-clinic-surface"
         >
           {inOwnerMode && (
             <span className="hidden items-center gap-1 rounded-full bg-clinic-ink px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-white sm:inline-flex">

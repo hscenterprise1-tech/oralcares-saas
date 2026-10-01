@@ -1,10 +1,9 @@
 import { RefreshCw } from 'lucide-react';
 import { router } from '@inertiajs/react';
+import { cn } from '@/lib/utils';
 import type {
-  BreakdownData,
   DashboardWidget,
   FactsData,
-  FlowData,
   KpiData,
   ListData,
   QuickAction,
@@ -13,23 +12,19 @@ import type {
   WidgetData,
 } from '../types';
 import { Skeleton } from '../ui/Spinner';
-import {
-  ActionsBody,
-  BreakdownBody,
-  FactsBody,
-  FlowBody,
-  KpiBody,
-  ListBody,
-  StatsBody,
-  TrendBody,
-} from './WidgetBodies';
-import { WidgetCard } from './WidgetCard';
+import { ActionsBody, FactsBody, KpiBody, ListBody, StatsBody, TrendBody } from './WidgetBodies';
+import { KpiCard, WidgetCard } from './WidgetCard';
 
 /**
  * The dashboard engine's renderer. It draws exactly the widgets the server
- * resolved, in the server's order, each by its kind. There is no list of
- * widgets here and no knowledge of roles: a widget the server did not send
- * cannot appear, and its space is never reserved.
+ * resolved, in the server's order, each by its kind, in its zone:
+ *
+ *   summary  compact figures across the top
+ *   main     operational lists (left, wider)
+ *   side     quick actions, attention, status (right)
+ *
+ * There is no list of widgets here and no knowledge of roles: a widget the
+ * server did not send cannot appear, and an empty zone takes no space.
  */
 export function DashboardGrid({
   widgets,
@@ -41,11 +36,57 @@ export function DashboardGrid({
   data: Record<string, WidgetData> | undefined;
   actions: QuickAction[];
 }) {
+  const summary = widgets.filter((widget) => widget.zone === 'summary');
+  const main = widgets.filter((widget) => widget.zone === 'main');
+  const side = widgets.filter((widget) => widget.zone === 'side');
+  // On a phone or tablet the quick actions lead, before the lists; on a wide
+  // screen they head the side column.
+  const quickActions = side.find((widget) => widget.kind === 'actions');
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      {widgets.map((widget) => (
-        <WidgetSlot key={widget.key} widget={widget} data={data} actions={actions} />
-      ))}
+    <div className="space-y-4">
+      {summary.length > 0 && (
+        <div className={cn('grid grid-cols-2 gap-3', summary.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3')}>
+          {summary.map((widget) => (
+            <KpiCard key={widget.key} widget={widget}>
+              <WidgetContent widget={widget} data={data} actions={actions} />
+            </KpiCard>
+          ))}
+        </div>
+      )}
+
+      {quickActions && main.length > 0 && (
+        <div className="lg:hidden">
+          <WidgetSlot widget={quickActions} data={data} actions={actions} />
+        </div>
+      )}
+
+      {(main.length > 0 || side.length > 0) && (
+        <div
+          className={cn('grid grid-cols-1 items-start gap-4', main.length > 0 && side.length > 0 && 'lg:grid-cols-3')}
+        >
+          {main.length > 0 && (
+            <div className={cn('grid min-w-0 gap-4', side.length > 0 && 'lg:col-span-2')}>
+              {main.map((widget) => (
+                <WidgetSlot key={widget.key} widget={widget} data={data} actions={actions} />
+              ))}
+            </div>
+          )}
+          {side.length > 0 && (
+            <div className={cn('grid min-w-0 gap-4', main.length === 0 && 'md:grid-cols-2')}>
+              {side.map((widget) =>
+                widget === quickActions && main.length > 0 ? (
+                  <div key={widget.key} className="hidden lg:block">
+                    <WidgetSlot widget={widget} data={data} actions={actions} />
+                  </div>
+                ) : (
+                  <WidgetSlot key={widget.key} widget={widget} data={data} actions={actions} />
+                ),
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -59,76 +100,61 @@ function WidgetSlot({
   data: Record<string, WidgetData> | undefined;
   actions: QuickAction[];
 }) {
-  if (widget.kind === 'actions') {
-    return (
-      <WidgetCard widget={widget}>
-        <ActionsBody actions={actions} />
-      </WidgetCard>
-    );
-  }
-
   const value = data?.[widget.key];
-
-  if (data === undefined) {
-    return (
-      <WidgetCard widget={widget}>
-        <div role="status" aria-label={`Loading ${widget.title}`} className="mt-auto space-y-2.5">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-4 w-full" />
-          {widget.span > 1 && <Skeleton className="h-4 w-2/3" />}
-        </div>
-      </WidgetCard>
-    );
-  }
-
-  if (value === undefined || 'error' in value) {
-    return (
-      <WidgetCard widget={widget}>
-        <div role="alert" className="my-auto flex flex-col items-start gap-2 rounded-2xl bg-rose-50/70 px-4 py-3.5">
-          <p className="text-[13px] font-semibold text-rose-700">These figures could not load.</p>
-          <button
-            type="button"
-            onClick={() => router.reload({ only: ['widgetData'] })}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full text-[12.5px] font-semibold text-rose-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 sm:min-h-0"
-          >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Try again
-          </button>
-        </div>
-      </WidgetCard>
-    );
-  }
 
   return (
     <WidgetCard widget={widget} aside={listTotal(widget, value)}>
-      <Body widget={widget} value={value} />
+      <WidgetContent widget={widget} data={data} actions={actions} />
     </WidgetCard>
   );
 }
 
-function listTotal(widget: DashboardWidget, value: WidgetData) {
-  if (widget.kind !== 'list' || !('total' in value) || typeof value.total !== 'number') {
-    return undefined;
+function WidgetContent({
+  widget,
+  data,
+  actions,
+}: {
+  widget: DashboardWidget;
+  data: Record<string, WidgetData> | undefined;
+  actions: QuickAction[];
+}) {
+  if (widget.kind === 'actions') {
+    return <ActionsBody actions={actions} />;
   }
 
-  return (
-    <span className="rounded-full bg-clinic-inset px-2.5 py-1 text-[12px] font-bold tabular-nums text-clinic-ink">
-      {value.total}
-    </span>
-  );
-}
+  if (data === undefined) {
+    return (
+      <div role="status" aria-label={`Loading ${widget.title}`} className="space-y-2">
+        <Skeleton className={widget.kind === 'kpi' ? 'h-7 w-16' : 'h-9 w-full'} />
+        {widget.kind !== 'kpi' && <Skeleton className="h-9 w-full" />}
+      </div>
+    );
+  }
 
-function Body({ widget, value }: { widget: DashboardWidget; value: WidgetData }) {
+  const value = data[widget.key];
+
+  if (value === undefined || 'error' in value) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
+        <span className="font-semibold text-rose-700">Could not load.</span>
+        <button
+          type="button"
+          onClick={() => router.reload({ only: ['widgetData'] })}
+          className="inline-flex min-h-11 items-center gap-1 rounded-full font-semibold text-rose-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 sm:min-h-0"
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Retry
+        </button>
+      </div>
+    );
+  }
+
   switch (widget.kind) {
     case 'kpi':
       return <KpiBody data={value as KpiData} />;
     case 'list':
       return <ListBody data={value as ListData} empty={widget.empty} />;
-    case 'flow':
-      return <FlowBody data={value as FlowData} />;
     case 'stats':
       return <StatsBody data={value as StatsData} />;
-    case 'breakdown':
-      return <BreakdownBody data={value as BreakdownData} empty={widget.empty} />;
     case 'trend':
       return <TrendBody data={value as TrendData} />;
     case 'facts':
@@ -136,4 +162,16 @@ function Body({ widget, value }: { widget: DashboardWidget; value: WidgetData })
     default:
       return null;
   }
+}
+
+function listTotal(widget: DashboardWidget, value: WidgetData | undefined) {
+  if (widget.kind !== 'list' || !value || !('total' in value) || typeof value.total !== 'number' || value.total === 0) {
+    return undefined;
+  }
+
+  return (
+    <span className="rounded-full bg-clinic-inset px-2 py-0.5 text-[11.5px] font-bold tabular-nums text-clinic-ink">
+      {value.total}
+    </span>
+  );
 }

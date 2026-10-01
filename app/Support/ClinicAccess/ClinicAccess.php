@@ -3,6 +3,8 @@
 namespace App\Support\ClinicAccess;
 
 use App\ClinicPermission;
+use App\ClinicRole;
+use App\Models\Clinic;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\OwnerMode\OwnerMode;
@@ -156,7 +158,22 @@ class ClinicAccess
     }
 
     /**
-     * @return array{permissions: list<string>, is_owner: bool, owner_mode: bool, entitlement: array{has_subscription: bool, modules: list<string>}, specialties: list<string>, capabilities: list<string>, has_active_branch: bool, clinic_wide: bool, branch_count: int, practitioner: bool}
+     * The clinic staff roles the user holds at the active branch.
+     *
+     * @return list<string>
+     */
+    public function roles(): array
+    {
+        return $this->state()['roles'];
+    }
+
+    public function clinic(): ?Clinic
+    {
+        return $this->context->clinic();
+    }
+
+    /**
+     * @return array{permissions: list<string>, roles: list<string>, is_owner: bool, owner_mode: bool, entitlement: array{has_subscription: bool, modules: list<string>}, specialties: list<string>, capabilities: list<string>, has_active_branch: bool, clinic_wide: bool, branch_count: int, practitioner: bool}
      */
     private function state(): array
     {
@@ -176,6 +193,9 @@ class ClinicAccess
 
         $state = [
             'permissions' => $user instanceof User ? $this->resolvePermissions($user, $isOwner) : [],
+            'roles' => $user instanceof User
+                ? array_values(array_intersect($user->getRoleNames()->all(), array_column(ClinicRole::cases(), 'value')))
+                : [],
             'is_owner' => $isOwner,
             'owner_mode' => $isOwner && $this->ownerMode->isActive(),
             'entitlement' => $entitlement,

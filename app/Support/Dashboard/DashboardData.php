@@ -5,6 +5,8 @@ namespace App\Support\Dashboard;
 use App\Models\Clinic;
 use App\Services\ClinicContext;
 use App\Services\Provisioning\EntitlementResolver;
+use App\Support\ClinicAccess\ClinicAccess;
+use App\Support\ClinicActions;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -33,18 +35,13 @@ class DashboardData
     /** Queue statuses that mean the patient is still waiting to be seen. */
     private const WAITING = ['waiting', 'calling', 'called', 'recalled', 'held'];
 
-    /** Lab case statuses that are still in flight. */
-    private const LAB_OPEN = ['requested', 'accepted', 'in_production', 'quality_check', 'ready_for_delivery', 'delivered'];
-
-    /** X-ray statuses still needing someone's attention. */
-    private const XRAY_OPEN = ['requested', 'scheduled', 'captured'];
-
     /** @var array<string, mixed> */
     private array $memo = [];
 
     public function __construct(
         protected ClinicContext $context,
         protected EntitlementResolver $entitlements,
+        protected ClinicAccess $access,
     ) {}
 
     /**
@@ -63,18 +60,6 @@ class DashboardData
         $counts = $this->visitCounts();
 
         return ['value' => array_sum($counts), 'detail' => $this->plural(array_sum($counts), 'visit').' registered today'];
-    }
-
-    /** @return array<string, mixed> */
-    protected function newCasesToday(): array
-    {
-        return ['value' => $this->visitCounts()['new'] ?? 0, 'detail' => 'First visits today'];
-    }
-
-    /** @return array<string, mixed> */
-    protected function repeatCasesToday(): array
-    {
-        return ['value' => $this->visitCounts()['repeat'] ?? 0, 'detail' => 'Returning patients today'];
     }
 
     /* --------------------------------------------------------- appointments */
@@ -128,21 +113,6 @@ class DashboardData
         $waiting = array_sum(array_intersect_key($counts, array_flip(self::WAITING)));
 
         return ['value' => $waiting, 'detail' => ($counts['in_consultation'] ?? 0).' in consultation'];
-    }
-
-    /** @return array<string, mixed> */
-    protected function patientFlow(): array
-    {
-        $counts = $this->queueCounts();
-
-        return [
-            'stages' => [
-                ['key' => 'waiting', 'label' => 'Waiting', 'count' => array_sum(array_intersect_key($counts, array_flip(self::WAITING))), 'tone' => 'amber'],
-                ['key' => 'in_consultation', 'label' => 'In consultation', 'count' => $counts['in_consultation'] ?? 0, 'tone' => 'violet'],
-                ['key' => 'completed', 'label' => 'Completed', 'count' => $counts['completed'] ?? 0, 'tone' => 'green'],
-                ['key' => 'skipped', 'label' => 'Skipped / left', 'count' => ($counts['skipped'] ?? 0) + ($counts['cancelled'] ?? 0), 'tone' => 'slate'],
-            ],
-        ];
     }
 
     /* ------------------------------------------------------ the practitioner */
@@ -225,110 +195,155 @@ class DashboardData
         ];
     }
 
-    /** @return array<string, mixed> */
-    protected function paymentBreakdown(): array
+    /* ------------------------------------------------- reception operations */
+
+    /**
+     * Today's registrations, latest first: who, what kind of visit, which
+     * doctor, where they are. Only names and statuses, never a profile.
+     *
+     * @return array<string, mixed>
+     */
+    protected function todaysPatients(): array
     {
-        $rows = $this->paymentsBetween($this->today()->startOfDay(), $this->today()->endOfDay())
-            ->groupBy('patient_billing_payments.payment_method')
-            ->selectRaw('patient_billing_payments.payment_method as method, SUM(patient_billing_payments.amount) as total')
-            ->get();
-
-        $tones = ['cash' => 'green', 'upi' => 'brand', 'card' => 'blue', 'bank_transfer' => 'violet', 'gateway' => 'violet', 'cheque' => 'slate'];
-
-        return [
-            'currency' => $this->currency(),
-            'total' => (float) $rows->sum('total'),
-            'segments' => $rows->map(fn ($row) => [
-                'key' => (string) $row->method,
-                'label' => $this->paymentLabel((string) $row->method),
-                'value' => (float) $row->total,
-                'tone' => $tones[$row->method] ?? 'slate',
-            ])->sortByDesc('value')->values()->all(),
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    protected function pendingPayments(): array
-    {
-        $query = DB::table('patient_billings')
-            ->leftJoin('patients', 'patients.id', '=', 'patient_billings.patient_id')
-            ->where('patient_billings.clinic_id', $this->clinic()->id)
-            ->whereIn('patient_billings.status', ['pending', 'partially_paid'])
-            ->where('patient_billings.outstanding_balance', '>', 0);
-        $this->applyBranchScope($query, 'patient_billings.branch_id');
+        $query = DB::table('patient_visits')
+            ->leftJoin('patients', 'patients.id', '=', 'patient_visits.patient_id')
+            ->leftJoin('clinic_employees', 'clinic_employees.id', '=', 'patient_visits.doctor_id')
+            ->where('patient_visits.clinic_id', $this->clinic()->id)
+            ->whereDate('patient_visits.visit_date', $this->today()->toDateString());
+        $this->applyBranchScope($query, 'patient_visits.branch_id');
 
         $total = (clone $query)->count();
-        $outstanding = (float) (clone $query)->sum('patient_billings.outstanding_balance');
-        $rows = $query->orderByDesc('patient_billings.outstanding_balance')->limit(5)
-            ->get(['patient_billings.id', 'patient_billings.billing_number', 'patient_billings.outstanding_balance', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name']);
+        $rows = $query->orderByDesc('patient_visits.id')->limit(self::LIST_LIMIT)
+            ->get(['patient_visits.id', 'patient_visits.patient_id', 'patient_visits.registration_type', 'patient_visits.queue_status', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name', 'clinic_employees.name as doctor']);
+
+        // "Case" where the clinic registers cases; a plain visit elsewhere.
+        $cases = array_intersect($this->access->specialties(), ClinicActions::CASE_SPECIALTIES) !== [];
+        $type = fn (?string $value) => match ($value) {
+            'new' => $cases ? 'New case' : 'First visit',
+            'repeat' => $cases ? 'Repeat case' : 'Follow-up',
+            default => 'Visit',
+        };
+        $canOpen = $this->access->allows(['route' => 'clinic.patients.show', 'permissions' => ['patient.view'], 'module' => 'patients']);
 
         return [
             'total' => $total,
-            'summary' => ['value' => $outstanding, 'format' => 'currency', 'currency' => $this->currency(), 'label' => 'Outstanding'],
             'items' => $rows->map(fn ($row) => [
                 'id' => $row->id,
-                'time' => $row->billing_number,
                 'primary' => $this->patientName($row),
-                'secondary' => null,
-                'amount' => (float) $row->outstanding_balance,
-                'currency' => $this->currency(),
-                'status' => 'pending',
-            ])->values()->all(),
-        ];
-    }
-
-    /* --------------------------------------------------------------- orders */
-
-    /** @return array<string, mixed> */
-    protected function pendingLabOrders(): array
-    {
-        $query = DB::table('lab_orders')
-            ->where('clinic_id', $this->clinic()->id)
-            ->whereIn('status', self::LAB_OPEN);
-        $this->applyBranchScope($query, 'branch_id');
-
-        $today = $this->today()->toDateString();
-        $total = (clone $query)->count();
-        $overdue = (clone $query)->whereNotNull('delivery_due_date')->whereDate('delivery_due_date', '<', $today)->count();
-        $rows = $query->orderByRaw('delivery_due_date is null')->orderBy('delivery_due_date')->limit(5)
-            ->get(['id', 'lab_order_number', 'laboratory_name', 'status', 'delivery_due_date']);
-
-        return [
-            'total' => $total,
-            'summary' => ['value' => $overdue, 'format' => 'number', 'label' => 'Overdue', 'tone' => $overdue > 0 ? 'red' : 'green'],
-            'items' => $rows->map(fn ($row) => [
-                'id' => $row->id,
-                'time' => $row->lab_order_number,
-                'primary' => $row->laboratory_name ?: 'In-house lab',
-                'secondary' => $row->delivery_due_date ? 'Due '.CarbonImmutable::parse($row->delivery_due_date)->format('d M') : null,
-                'status' => ($row->delivery_due_date && $row->delivery_due_date < $today) ? 'overdue' : $row->status,
+                'secondary' => $type($row->registration_type).($row->doctor ? ' · '.$row->doctor : ''),
+                'status' => $row->queue_status ?: 'waiting',
+                'href' => $canOpen && $row->patient_id ? route('clinic.patients.show', $row->patient_id, false) : null,
             ])->values()->all(),
         ];
     }
 
     /**
-     * X-ray records carry no branch, so this source is clinic-wide and only
-     * widgets requiring clinic-wide access may use it.
+     * Investigations as one operational summary: lab work and imaging,
+     * counted by where they stand. Imaging records carry no branch, so they
+     * are counted only for someone who sees the whole clinic.
      *
      * @return array<string, mixed>
      */
-    protected function pendingXrays(): array
+    protected function investigations(): array
     {
-        $query = DB::table('xray_records')->where('clinic_id', $this->clinic()->id)->whereIn('status', self::XRAY_OPEN);
+        $today = $this->today()->toDateString();
+        $counts = ['ordered' => 0, 'pending' => 0, 'due' => 0, 'received' => 0];
 
-        $byStatus = (clone $query)->groupBy('status')->selectRaw('status, count(*) as total')->pluck('total', 'status')->all();
-        $rows = $query->orderByDesc('created_at')->limit(5)->get(['id', 'xray_number', 'status', 'priority', 'requested_region']);
+        if (in_array('lab', $this->access->capabilities(), true)) {
+            $lab = DB::table('lab_orders')->where('clinic_id', $this->clinic()->id);
+            $this->applyBranchScope($lab, 'branch_id');
+
+            $counts['ordered'] += (clone $lab)->whereIn('status', ['draft', 'requested'])->count();
+            $counts['pending'] += (clone $lab)->whereIn('status', ['accepted', 'in_production', 'quality_check'])->count();
+            $counts['due'] += (clone $lab)->whereIn('status', ['accepted', 'in_production', 'quality_check'])
+                ->whereNotNull('delivery_due_date')->whereDate('delivery_due_date', '<=', $today)->count();
+            $counts['received'] += (clone $lab)->whereIn('status', ['ready_for_delivery', 'delivered'])->count();
+        }
+
+        if (in_array('xray', $this->access->capabilities(), true) && $this->access->clinicWide()) {
+            $xray = DB::table('xray_records')->where('clinic_id', $this->clinic()->id);
+
+            $counts['ordered'] += (clone $xray)->where('status', 'requested')->count();
+            $counts['pending'] += (clone $xray)->where('status', 'scheduled')->count();
+            $counts['due'] += (clone $xray)->where('status', 'captured')->count();
+            $counts['received'] += (clone $xray)->where('status', 'reviewed')->whereDate('reviewed_at', $today)->count();
+        }
 
         return [
-            'total' => (int) array_sum($byStatus),
-            'summary' => ['value' => (int) ($byStatus['captured'] ?? 0), 'format' => 'number', 'label' => 'Awaiting review', 'tone' => 'amber'],
-            'items' => $rows->map(fn ($row) => [
-                'id' => $row->id,
-                'time' => $row->xray_number,
-                'primary' => $row->requested_region ? $this->humanize($row->requested_region) : 'X-ray',
-                'secondary' => $row->priority ? $this->humanize($row->priority).' priority' : null,
-                'status' => $row->status,
-            ])->values()->all(),
+            'stats' => [
+                ['key' => 'ordered', 'label' => 'Ordered', 'value' => $counts['ordered'], 'tone' => 'blue'],
+                ['key' => 'pending', 'label' => 'Pending', 'value' => $counts['pending'], 'tone' => 'amber'],
+                ['key' => 'due', 'label' => 'Reports due', 'value' => $counts['due'], 'tone' => $counts['due'] > 0 ? 'red' : 'slate'],
+                ['key' => 'received', 'label' => 'Received', 'value' => $counts['received'], 'tone' => 'green'],
+            ],
+        ];
+    }
+
+    /**
+     * What is waiting on someone. Each kind of item is included only when
+     * this user may see it, through the same `ClinicAccess` rules as the
+     * widgets: no permission, no query, no item.
+     *
+     * @return array<string, mixed>
+     */
+    protected function needsAttention(): array
+    {
+        $items = [];
+
+        if ($this->access->allows(['permissions' => ['billing.view'], 'module' => 'billing'])) {
+            $bills = DB::table('patient_billings')->where('clinic_id', $this->clinic()->id)
+                ->whereIn('status', ['pending', 'partially_paid'])->where('outstanding_balance', '>', 0);
+            $this->applyBranchScope($bills, 'branch_id');
+            $count = (clone $bills)->count();
+            if ($count > 0) {
+                $items[] = ['id' => 'pending_payments', 'primary' => 'Pending payments', 'secondary' => $this->plural($count, 'bill').' with a balance due', 'count' => $count, 'amount' => (float) $bills->sum('outstanding_balance'), 'currency' => $this->currency(), 'status' => 'pending'];
+            }
+        }
+
+        if ($this->access->allows(['permissions' => ['clinical.view', 'queue.manage'], 'capabilities' => ['lab', 'xray']])) {
+            $due = collect($this->investigations()['stats'])->firstWhere('key', 'due')['value'];
+            if ($due > 0) {
+                $items[] = ['id' => 'reports_due', 'primary' => 'Reports due', 'secondary' => 'Expected back from the lab or imaging', 'count' => $due, 'status' => 'overdue'];
+            }
+        }
+
+        if ($this->access->allows(['permissions' => ['appointment.view'], 'module' => 'appointments'])) {
+            $late = DB::table('appointments')->where('clinic_id', $this->clinic()->id)
+                ->whereDate('scheduled_at', $this->today()->toDateString())
+                ->where('scheduled_at', '<', ClinicClock::now()->toDateTimeString())
+                ->where('status', 'scheduled');
+            $this->applyBranchScope($late, 'branch_id');
+            $count = $late->count();
+            if ($count > 0) {
+                $items[] = ['id' => 'not_arrived', 'primary' => 'Not arrived yet', 'secondary' => 'Booked earlier today, not checked in', 'count' => $count, 'status' => 'pending'];
+            }
+        }
+
+        return ['total' => (int) array_sum(array_column($items, 'count')), 'items' => $items];
+    }
+
+    /**
+     * Where today's money stands, for the daily closing. A summary only: the
+     * closing itself, and cash handover, are their own workflow.
+     *
+     * @return array<string, mixed>
+     */
+    protected function cashStatus(): array
+    {
+        $byMethod = $this->paymentsBetween($this->today()->startOfDay(), $this->today()->endOfDay())
+            ->groupBy('patient_billing_payments.payment_method')
+            ->selectRaw('patient_billing_payments.payment_method as method, SUM(patient_billing_payments.amount) as total')
+            ->pluck('total', 'method');
+
+        $digital = (float) ($byMethod['upi'] ?? 0) + (float) ($byMethod['card'] ?? 0) + (float) ($byMethod['bank_transfer'] ?? 0) + (float) ($byMethod['gateway'] ?? 0);
+
+        return [
+            'rows' => [
+                ['label' => 'Cash in hand', 'amount' => (float) ($byMethod['cash'] ?? 0), 'currency' => $this->currency(), 'tone' => 'green'],
+                ['label' => 'UPI, card and online', 'amount' => $digital, 'currency' => $this->currency(), 'tone' => 'brand'],
+                // There is no handover record yet, so nothing is claimed.
+                ['label' => 'Cash handover', 'value' => 'Not tracked yet', 'tone' => 'slate'],
+            ],
         ];
     }
 
@@ -589,11 +604,6 @@ class DashboardData
         $name = trim(($row->first_name ?? '').' '.($row->last_name ?? ''));
 
         return $name !== '' ? $name : ($row->patient_name ?? 'Walk-in patient');
-    }
-
-    private function paymentLabel(string $method): string
-    {
-        return ['cash' => 'Cash', 'upi' => 'UPI', 'card' => 'Card', 'bank_transfer' => 'Bank transfer', 'gateway' => 'Online', 'cheque' => 'Cheque'][$method] ?? $this->humanize($method);
     }
 
     private function humanize(string $value): string

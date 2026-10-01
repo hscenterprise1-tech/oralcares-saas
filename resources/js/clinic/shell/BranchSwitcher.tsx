@@ -59,13 +59,14 @@ export function BranchSwitcher({
           'group inline-flex min-w-0 items-center gap-1.5 rounded-full text-[12.5px] font-semibold text-clinic-ink',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
           variant === 'bar'
-            ? 'h-8 max-w-[240px] border border-clinic-border bg-clinic-surface px-3 hover:border-clinic-border-strong [@media(pointer:coarse)]:h-11'
+            ? 'h-11 max-w-[200px] border border-white/70 bg-white/[0.86] px-3.5 backdrop-blur hover:bg-clinic-surface'
             : 'h-11 w-full justify-between rounded-xl bg-clinic-inset px-3',
           !clinic.active_branch && 'border-clinic-warning/40 text-clinic-warning',
         )}
       >
         <MapPin className="h-3.5 w-3.5 shrink-0 text-clinic-secondary" aria-hidden="true" />
-        <span className="truncate">{label}</span>
+        {/* In the bar, between tablet and wide desktop, the pill shows just its icon so the clinic's name keeps its room. */}
+        <span className={cn('truncate', variant === 'bar' && 'lg:hidden xl:inline')}>{label}</span>
         <ChevronDown
           className="h-3.5 w-3.5 shrink-0 text-clinic-secondary motion-safe:transition-transform group-data-[state=open]:rotate-180"
           aria-hidden="true"
