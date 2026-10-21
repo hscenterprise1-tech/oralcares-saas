@@ -1,10 +1,14 @@
 import {
   BadgeCheck,
+  Bell,
   Banknote,
   Building2,
+  ConciergeBell,
   CalendarDays,
+  CalendarClock,
   CalendarOff,
   ChartColumn,
+  CircleAlert,
   ClipboardCheck,
   ClipboardPlus,
   Crown,
@@ -12,9 +16,13 @@ import {
   FlaskConical,
   HandCoins,
   Hourglass,
+  LifeBuoy,
   LayoutDashboard,
+  FileSignature,
+  MessageCircle,
   Microscope,
   Network,
+  NotebookPen,
   Receipt,
   RotateCcw,
   ScanLine,
@@ -41,6 +49,8 @@ import type { Tone } from '../types';
  */
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
+  'front-desk': ConciergeBell,
+  'command-center': LayoutDashboard,
   patients: Users,
   appointments: CalendarDays,
   leave: CalendarOff,
@@ -66,10 +76,17 @@ const ICONS: Record<string, LucideIcon> = {
   flow: Workflow,
   wallet: Wallet,
   pending: HandCoins,
+  attention: CircleAlert,
+  notes: NotebookPen,
   trend: TrendingUp,
   plan: BadgeCheck,
   shield: ShieldAlert,
   order: ClipboardPlus,
+  whatsapp: MessageCircle,
+  consent: FileSignature,
+  'follow-ups': CalendarClock,
+  notifications: Bell,
+  support: LifeBuoy,
 };
 
 export function iconFor(key: string): LucideIcon {
@@ -152,6 +169,59 @@ export const TONES: Record<
   },
 };
 
+/**
+ * The colour of a part of the product, kept separate from state colours
+ * (`TONES`/`statusTone`): a badge or accent says which area something
+ * belongs to — dental, physiotherapy, clinical work, money, the calendar —
+ * and that area keeps one colour everywhere. Each pairs a tinted surface
+ * with text that passes WCAG AA on it.
+ */
+export type ContextKey = 'dental' | 'physiotherapy' | 'clinical' | 'billing' | 'appointments' | 'general';
+
+export const CONTEXTS: Record<ContextKey, { label: string; chip: string; dot: string; text: string; ring: string }> = {
+  dental: { label: 'Dental', chip: 'bg-cyan-50 text-cyan-800', dot: 'bg-cyan-500', text: 'text-cyan-800', ring: 'ring-cyan-200' },
+  physiotherapy: {
+    label: 'Physiotherapy',
+    chip: 'bg-indigo-50 text-indigo-700',
+    dot: 'bg-indigo-500',
+    text: 'text-indigo-700',
+    ring: 'ring-indigo-200',
+  },
+  clinical: {
+    label: 'Clinical',
+    chip: 'bg-emerald-50 text-emerald-800',
+    dot: 'bg-emerald-500',
+    text: 'text-emerald-800',
+    ring: 'ring-emerald-200',
+  },
+  billing: { label: 'Billing', chip: 'bg-amber-50 text-amber-800', dot: 'bg-amber-500', text: 'text-amber-800', ring: 'ring-amber-200' },
+  appointments: {
+    label: 'Appointments',
+    chip: 'bg-blue-50 text-blue-700',
+    dot: 'bg-blue-500',
+    text: 'text-blue-700',
+    ring: 'ring-blue-200',
+  },
+  general: { label: 'General', chip: 'bg-slate-100 text-slate-700', dot: 'bg-slate-400', text: 'text-slate-700', ring: 'ring-slate-200' },
+};
+
+/** A specialty registry key (`dental`, `orthodontics`, `physiotherapy`, …) as its product area. */
+export function contextForSpecialty(key: string | null | undefined): ContextKey {
+  switch (key) {
+    case 'dental':
+    case 'orthodontics':
+      return 'dental';
+    case 'physiotherapy':
+      return 'physiotherapy';
+    case null:
+    case undefined:
+    case '':
+      return 'general';
+    default:
+      return 'clinical';
+  }
+}
+
 export function toneFor(tone: string | undefined): (typeof TONES)[Tone] {
   return TONES[(tone as Tone) ?? 'slate'] ?? TONES.slate;
 }
@@ -159,12 +229,14 @@ export function toneFor(tone: string | undefined): (typeof TONES)[Tone] {
 /** The tone a status word carries wherever it appears. */
 export function statusTone(status: string | null | undefined): Tone {
   switch (status) {
+    case 'active':
     case 'completed':
     case 'paid':
     case 'delivered':
     case 'fitted':
     case 'reviewed':
       return 'green';
+    case 'merged':
     case 'arrived':
     case 'checked_in':
     case 'in_consultation':
@@ -176,6 +248,7 @@ export function statusTone(status: string | null | undefined): Tone {
     case 'accepted':
     case 'info':
       return 'blue';
+    case 'archived':
     case 'waiting':
     case 'calling':
     case 'called':
@@ -210,4 +283,43 @@ export function formatMoney(value: number, currency = 'INR'): string {
   } catch {
     return formatNumber(Math.round(value));
   }
+}
+
+/**
+ * Today as YYYY-MM-DD on this device's calendar, for date inputs and
+ * "is it past" checks. `toISOString()` gives the UTC date, a day behind in
+ * India until 05:30, which the server then rejects as past.
+ */
+export function localDateKey(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Accent colours for what is drawn with an inline colour rather than a class
+ * (a gradient, a section's icon chip). Decorative only; states use `TONES`.
+ */
+export const ACCENT_HEX = {
+  slate: '#6B7488',
+  blue: '#2563EB',
+  violet: '#8B7FE8',
+  teal: '#4A9DAB',
+  amber: '#F5A623',
+  green: '#3DDC84',
+  coral: '#E8593C',
+} as const;
+
+export type AccentHue = keyof typeof ACCENT_HEX;
+
+const NAME_HUES: AccentHue[] = ['blue', 'teal', 'violet', 'green', 'coral', 'slate'];
+
+/** The same colour for the same name, every time (a clinic's or a person's). */
+export function hueForName(name: string): string {
+  const source = name || '?';
+  let hash = 0;
+  for (let index = 0; index < source.length; index++) {
+    hash = (hash << 5) - hash + source.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return ACCENT_HEX[NAME_HUES[Math.abs(hash) % NAME_HUES.length]];
 }

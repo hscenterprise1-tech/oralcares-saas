@@ -3,6 +3,8 @@
 namespace App\Scopes;
 
 use App\Models\User;
+use App\Services\ClinicContext;
+use App\UserType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
@@ -89,6 +91,30 @@ class OrganizationScope implements Scope
     }
 
     /**
+     * The organisation a user's rows belong to right now.
+     *
+     * For a clinic user working in a clinic it is that clinic's organisation:
+     * one login may belong to clinics of different organisations (multi-clinic
+     * invitations), and `users.organization_id` holds only one of them — so in
+     * the second clinic it used to filter by the first one's organisation,
+     * emptying branch lists and showing the first organisation's rows. HQ
+     * users, and a clinic user before a clinic is resolved, keep the
+     * organisation on their user row.
+     */
+    public static function organizationIdFor(?User $user): ?int
+    {
+        if ($user?->user_type === UserType::ClinicUser && app()->bound(ClinicContext::class)) {
+            $clinic = app(ClinicContext::class)->clinic();
+
+            if ($clinic) {
+                return $clinic->organization_id;
+            }
+        }
+
+        return $user?->organization_id;
+    }
+
+    /**
      * Apply the scope to a given Eloquent query builder.
      */
     public function apply(Builder $builder, Model $model): void
@@ -132,7 +158,7 @@ class OrganizationScope implements Scope
             return;
         }
 
-        $organizationId = $user?->organization_id;
+        $organizationId = static::organizationIdFor($user);
 
         if ($organizationId) {
             $builder->where($model->getTable().'.organization_id', $organizationId);

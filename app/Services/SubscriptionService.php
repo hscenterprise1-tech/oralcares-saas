@@ -33,6 +33,8 @@ class SubscriptionService
                 'mrr' => $subData['mrr'] ?? app(MrrService::class)->snapshotValueFor($plan),
                 'max_users' => $plan->max_users ?? 5,
                 'max_doctors' => $plan->max_doctors ?? 3,
+                // No default: a plan without a staff sub-cap gives the subscription none.
+                'max_staff' => $plan->max_staff,
                 'max_branches' => $plan->max_branches ?? 1,
                 'storage_limit_gb' => $plan->storage_limit_gb ?? 10,
             ] : [];

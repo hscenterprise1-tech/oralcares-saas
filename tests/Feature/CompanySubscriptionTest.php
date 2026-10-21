@@ -9,6 +9,7 @@ use App\Services\PlanService;
 use App\Services\SubscriptionService;
 use App\SubscriptionStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 
 uses(RefreshDatabase::class);
 
@@ -115,4 +116,32 @@ test('addons can be purchased on subscription', function () {
         ->and((float) $addon->price)->toBe(50.00)
         ->and($addon->is_active)->toBeTrue()
         ->and($addon->subscription->id)->toBe($sub->id);
+});
+
+test('a new subscription copies the plan\'s staff cap as it is: a number, zero, or none', function (?int $planStaff) {
+    $plan = CompanyPlan::factory()->create(['max_staff' => $planStaff]);
+
+    $sub = app(SubscriptionService::class)->createSubscription([
+        'clinic_id' => Clinic::factory()->create()->id,
+        'status' => SubscriptionStatus::Draft,
+    ], $plan);
+
+    expect($sub->max_staff)->toBe($planStaff);
+})->with([
+    'three staff logins' => 3,
+    'no staff logins' => 0,
+    'no staff cap' => null,
+]);
+
+test('the add-on subscription index migration adds the index and rolls back only what it added', function () {
+    $migration = require database_path('migrations/2026_10_21_173134_add_subscription_index_to_company_subscription_addons_table.php');
+
+    expect(Schema::hasIndex('company_subscription_addons', ['company_subscription_id']))->toBeTrue();
+
+    $migration->down();
+    expect(Schema::hasIndex('company_subscription_addons', 'co_sub_addons_subscription_idx'))->toBeFalse();
+
+    $migration->up();
+    $migration->up();
+    expect(collect(Schema::getIndexes('company_subscription_addons'))->filter(fn (array $index) => $index['columns'] === ['company_subscription_id'])->count())->toBe(1);
 });

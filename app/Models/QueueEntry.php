@@ -6,6 +6,12 @@ use App\Traits\OrganizationScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @deprecated The first queue model, superseded by `ClinicQueue` / `ClinicQueueItem` and
+ * `QueueStateMachine`. No production path writes or reads it (only
+ * `FrontDeskService`, itself unused, and its tests); its table is empty.
+ * Kept until its tests are retired with approval; build nothing on it.
+ */
 class QueueEntry extends Model
 {
     use OrganizationScoped;

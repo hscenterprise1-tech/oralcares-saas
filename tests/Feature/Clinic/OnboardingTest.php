@@ -51,7 +51,8 @@ it('sends a newly provisioned clinic to its setup checklist and renders it', fun
     $this->actingAs($user)->get(route('clinic.onboarding.index'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('Clinic/Onboarding/Index')
+            // The checklist has a real page, not the Unavailable placeholder.
+            ->component('Clinic/Onboarding/Index', true)
             ->where('currentStep', 'password_setup')
             ->has('steps', 5)
             ->where('steps.0.key', 'password_setup')
@@ -111,10 +112,9 @@ it('finishes onboarding once every required step is done and opens the portal', 
 it('allows a fully-onboarded user to access the dashboard', function () {
     [$user] = createClinicUserWithContext('completed', 'completed');
 
-    // `dashboard` is a bare redirect shim to `clinic.dashboard` (used as the
-    // generic post-login landing name across the app) — completed onboarding
-    // means it's not diverted to the onboarding wizard, and the real
-    // dashboard behind it renders.
+    // `dashboard` is the post-login landing (`ClinicWorkspaces::landing`):
+    // completed onboarding means it's not diverted to the onboarding wizard
+    // but sent on to the one Dashboard.
     $this->actingAs($user)->get(route('dashboard'))->assertRedirect(route('clinic.dashboard'));
 
     $this->actingAs($user)->get(route('clinic.dashboard'))->assertStatus(200);

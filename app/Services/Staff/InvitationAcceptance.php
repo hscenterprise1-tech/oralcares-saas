@@ -6,11 +6,13 @@ use App\ClinicMembershipStatus;
 use App\ClinicRole;
 use App\ClinicStatus;
 use App\EmploymentStatus;
+use App\Exceptions\ResourceLimitExceededException;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicEmployeeInvitation;
 use App\Models\ClinicMembership;
 use App\Models\User;
 use App\Services\ClinicRoleAssignmentService;
+use App\Services\ResourceLimitService;
 use App\Services\Security\SecurityAudit;
 use App\UserType;
 use DomainException;
@@ -39,6 +41,7 @@ class InvitationAcceptance
     public function __construct(
         private readonly ClinicRoleAssignmentService $roles,
         private readonly SecurityAudit $audit,
+        private readonly ResourceLimitService $limits,
     ) {}
 
     /**
@@ -98,6 +101,8 @@ class InvitationAcceptance
     public function acceptAsNewUser(ClinicEmployeeInvitation $invitation, string $password): ClinicMembership
     {
         return DB::transaction(function () use ($invitation, $password) {
+            $this->holdSeat($invitation);
+
             $user = User::create([
                 'name' => $invitation->employee->name,
                 'email' => $invitation->email,
@@ -120,7 +125,28 @@ class InvitationAcceptance
             throw new DomainException('This invitation is for a different account.');
         }
 
-        return DB::transaction(fn () => $this->join($invitation, $user, existingAccount: true));
+        return DB::transaction(function () use ($invitation, $user) {
+            $this->holdSeat($invitation);
+
+            return $this->join($invitation, $user, existingAccount: true);
+        });
+    }
+
+    /**
+     * The seat this login is about to take, checked under the clinic's lock
+     * inside the transaction that creates the membership
+     * (`ResourceLimitService::assertSeatAvailable`):
+     * the page checked too, but another acceptance may have taken the last
+     * seat since. The invitee cannot add seats, so the message sends them
+     * back to whoever invited them.
+     */
+    private function holdSeat(ClinicEmployeeInvitation $invitation): void
+    {
+        try {
+            $this->limits->assertSeatAvailable($invitation->clinic, ClinicRole::takesDoctorSeat($invitation->employee->roles->pluck('name')));
+        } catch (ResourceLimitExceededException) {
+            throw new DomainException("This clinic has reached its plan's login limit. You haven't been added yet — contact the clinic admin who invited you.");
+        }
     }
 
     private function join(ClinicEmployeeInvitation $invitation, User $user, bool $existingAccount): ClinicMembership

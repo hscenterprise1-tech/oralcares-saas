@@ -46,7 +46,17 @@ class SubscriptionActionService
     /**
      * Move a customer onto a different plan.
      *
-     * @param  array{mrr?: float|null, max_users?: int|null, max_branches?: int|null, max_doctors?: int|null, effective_at?: CarbonInterface|null, reason?: string|null}  $options
+     * Three separate acts, never inferred from one another:
+     *
+     * - By default only the plan reference moves. The subscription keeps the
+     *   limits it has, which may be this customer's own negotiated ones.
+     * - `adopt_plan_limits` copies the new plan's limits onto the subscription
+     *   (users, doctors, staff, branches, storage; a plan with no staff cap
+     *   clears the subscription's).
+     * - A limit named explicitly (`max_users`, …) is that override, and wins
+     *   over an adopted one.
+     *
+     * @param  array{mrr?: float|null, max_users?: int|null, max_branches?: int|null, max_doctors?: int|null, max_staff?: int|null, adopt_plan_limits?: bool, effective_at?: CarbonInterface|null, reason?: string|null}  $options
      */
     public function changePlan(
         CompanySubscription $subscription,
@@ -55,10 +65,27 @@ class SubscriptionActionService
         array $options = [],
     ): CompanySubscription {
         $from = $subscription->company_plan_id;
+        $adopt = (bool) ($options['adopt_plan_limits'] ?? false);
 
-        if ($from === $plan->id && ! $this->touchesLimits($options)) {
+        if ($from === $plan->id && ! $adopt && ! $this->touchesLimits($options)) {
             throw new InvalidArgumentException('That account is already on this plan.');
         }
+
+        // `false` is how `apply()` writes a null: no staff cap on the plan clears the subscription's.
+        $adopted = $adopt ? [
+            'max_users' => $plan->max_users,
+            'max_doctors' => $plan->max_doctors,
+            'max_staff' => $plan->max_staff ?? false,
+            'max_branches' => $plan->max_branches,
+            'storage_limit_gb' => $plan->storage_limit_gb,
+        ] : [];
+
+        $overrides = array_filter([
+            'max_users' => $options['max_users'] ?? null,
+            'max_branches' => $options['max_branches'] ?? null,
+            'max_doctors' => $options['max_doctors'] ?? null,
+            'max_staff' => $options['max_staff'] ?? null,
+        ], fn ($value) => $value !== null);
 
         return $this->apply(
             $subscription,
@@ -70,18 +97,18 @@ class SubscriptionActionService
             attributes: array_filter([
                 'company_plan_id' => $plan->id,
                 'mrr' => $options['mrr'] ?? null,
-                'max_users' => $options['max_users'] ?? null,
-                'max_branches' => $options['max_branches'] ?? null,
-                'max_doctors' => $options['max_doctors'] ?? null,
+                ...$adopted,
+                ...$overrides,
                 'starts_at' => $options['effective_at'] ?? null,
             ], fn ($value) => $value !== null),
+            extraChanges: $adopt ? ['adopted_plan_limits' => true] : [],
         );
     }
 
     /**
      * Change what a customer is entitled to without moving them off their plan.
      *
-     * @param  array{max_users?: int|null, max_branches?: int|null, max_doctors?: int|null, mrr?: float|null, reason?: string|null}  $limits
+     * @param  array{max_users?: int|null, max_branches?: int|null, max_doctors?: int|null, max_staff?: int|null, mrr?: float|null, reason?: string|null}  $limits
      */
     public function adjustEntitlements(
         CompanySubscription $subscription,
@@ -101,6 +128,7 @@ class SubscriptionActionService
                 'max_users' => $limits['max_users'] ?? null,
                 'max_branches' => $limits['max_branches'] ?? null,
                 'max_doctors' => $limits['max_doctors'] ?? null,
+                'max_staff' => $limits['max_staff'] ?? null,
                 'mrr' => $limits['mrr'] ?? null,
             ], fn ($value) => $value !== null),
         );
@@ -195,7 +223,7 @@ class SubscriptionActionService
     /** Whether any entitlement limit is named in the options. */
     private function touchesLimits(array $options): bool
     {
-        foreach (['max_users', 'max_branches', 'max_doctors', 'mrr'] as $key) {
+        foreach (['max_users', 'max_branches', 'max_doctors', 'max_staff', 'mrr'] as $key) {
             if (($options[$key] ?? null) !== null) {
                 return true;
             }

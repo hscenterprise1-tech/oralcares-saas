@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/clinic/ui/Button';
 import { offers, type BookingDraft, type CalendarProps, type PatientRef, type Slot } from '../lib/types';
 import { Field, inputClass, Modal, selectClass, textareaClass } from '@/clinic/ui/Modal';
-import { PatientPicker } from './PatientPicker';
+import { PatientPicker } from '@/clinic';
 import { SlotPicker } from './SlotPicker';
 
 type Errors = Record<string, string>;
@@ -185,7 +185,7 @@ export function BookingDialog({
                 </div>
               )}
               <p className="mt-2 text-[11.5px] text-clinic-secondary">
-                Registration, the new case fee and check-in happen when they arrive.
+                Registration and check-in happen when they arrive. Any consultation charge follows your clinic&apos;s billing settings.
               </p>
             </div>
           )}

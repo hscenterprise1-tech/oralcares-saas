@@ -15,7 +15,7 @@ test('clinic login screen renders successfully with clinic context', function ()
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/ClinicLogin')
+        ->component('Clinic/Auth/ClinicLogin', true)
         ->where('clinic', 'sunrise-dental')
         ->where('clinicName', 'Sunrise Dental')
         ->where('clinicLogo', null)
@@ -27,7 +27,7 @@ test('clinic login screen shows no clinic name for a slug that matches no clinic
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/ClinicLogin')
+        ->component('Clinic/Auth/ClinicLogin', true)
         ->where('clinicName', null)
         ->where('clinicLogo', null)
     );
@@ -44,7 +44,7 @@ test('clinic login screen shows the clinic\'s own branding when set', function (
     $response = $this->get('/clinic/login?clinic=branded-dental');
 
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/ClinicLogin')
+        ->component('Clinic/Auth/ClinicLogin', true)
         ->where('clinicName', 'Branded Dental')
         ->where('clinicLogo', fn ($url) => str_contains($url, 'clinics/1/logo.png'))
     );
@@ -68,7 +68,7 @@ test('clinic user with active membership can authenticate and redirects to dashb
         'password' => 'password123',
     ]);
 
-    $response->assertRedirect('/clinic/dashboard');
+    $response->assertRedirect('/clinic/dashboard-redirect');
     $this->assertAuthenticatedAs($user);
 });
 
@@ -198,7 +198,7 @@ test('sign-in works again once the lockout window has passed', function () {
     $this->travel(61)->seconds();
 
     $this->post('/clinic/login', ['email' => $user->email, 'password' => 'password123'])
-        ->assertRedirect('/clinic/dashboard');
+        ->assertRedirect('/clinic/dashboard-redirect');
     $this->assertAuthenticatedAs($user);
 });
 
@@ -215,7 +215,7 @@ test('signing in to a named clinic opens that clinic', function () {
     [$user, $clinic] = clinicUserWithMembership(['slug' => 'named-dental']);
 
     $this->post('/clinic/login?clinic=named-dental', ['email' => $user->email, 'password' => 'password123'])
-        ->assertRedirect('/clinic/dashboard');
+        ->assertRedirect('/clinic/dashboard-redirect');
 
     $this->assertAuthenticatedAs($user);
     expect(session(ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID))
@@ -271,7 +271,7 @@ test('a member of several clinics signs in to the one named, not the first they 
     ]);
 
     $this->post('/clinic/login?clinic=second-dental', ['email' => $user->email, 'password' => 'password123'])
-        ->assertRedirect('/clinic/dashboard');
+        ->assertRedirect('/clinic/dashboard-redirect');
 
     expect(session(ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID))->toBe($secondMembership->id);
 });

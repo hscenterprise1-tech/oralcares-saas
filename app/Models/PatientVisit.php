@@ -20,6 +20,12 @@ class PatientVisit extends Model
         'case_number_id',
         'department_id',
         'doctor_id',
+        'clinic_specialty_id',
+        'practice_area_key',
+        'visit_type_key',
+        'visit_reason',
+        'visit_reason_key',
+        'intake_vitals',
         'registration_type',
         'visit_date',
         'queue_status',
@@ -34,6 +40,7 @@ class PatientVisit extends Model
             'registration_type' => VisitRegistrationType::class,
             'visit_date' => 'date',
             'registration_fee_collected' => 'boolean',
+            'intake_vitals' => 'array',
         ];
     }
 

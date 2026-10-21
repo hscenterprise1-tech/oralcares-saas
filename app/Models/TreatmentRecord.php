@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\ClinicScoped;
+use App\Traits\InheritsClinicOwnership;
 use App\TreatmentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TreatmentRecord extends Model
 {
+    use ClinicScoped, InheritsClinicOwnership;
+
     protected $fillable = [
+        'clinic_id',
         'patient_id',
         'encounter_id',
         'treatment_plan_id',
@@ -17,15 +22,27 @@ class TreatmentRecord extends Model
         'code',
         'description',
         'tooth_number',
+        'surfaces',
         'status',
         'price',
+        'sort_order',
+        'completed_at',
+        'patient_procedure_id',
     ];
 
     protected function casts(): array
     {
         return [
             'status' => TreatmentStatus::class,
+            'surfaces' => 'array',
+            'completed_at' => 'datetime',
         ];
+    }
+
+    /** The procedure recorded in the consultation where this item was done. */
+    public function performedProcedure(): BelongsTo
+    {
+        return $this->belongsTo(PatientProcedure::class, 'patient_procedure_id');
     }
 
     public function patient(): BelongsTo

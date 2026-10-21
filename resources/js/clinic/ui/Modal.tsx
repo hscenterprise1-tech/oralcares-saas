@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useReturnFocus } from './focus';
 
 /**
  * The calendar's centred dialog. On a phone it fills the screen width and
@@ -22,18 +23,25 @@ export function Modal({
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'wide';
 }) {
+  const returnFocus = useReturnFocus();
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-clinic-ink/30 backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0" />
         <Dialog.Content
+          {...returnFocus}
           className={cn(
             'fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-32px)] w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-3xl border border-clinic-border bg-clinic-surface shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)] focus:outline-none',
             size === 'sm' && 'max-w-[440px]',
             size === 'md' && 'max-w-[560px]',
             size === 'lg' && 'max-w-[720px]',
+            // Operational dialogs (Reception's New Case / Repeat Case): near full screen on a phone.
+            size === 'xl' && 'max-w-[880px] max-sm:h-[calc(100dvh-16px)] max-sm:max-h-[calc(100dvh-16px)] max-sm:w-[calc(100vw-16px)] max-sm:rounded-2xl',
+            // Two-column operational dialogs: wide on a desktop, a full-height sheet on a phone.
+            size === 'wide' && 'w-[calc(100vw-32px)] max-w-[1120px] max-sm:inset-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0',
           )}
         >
           <div className="flex items-start justify-between gap-3 border-b border-clinic-border px-5 pb-4 pt-5 sm:px-6">
@@ -66,41 +74,5 @@ export function Modal({
   );
 }
 
-const CONTROL =
-  'w-full rounded-xl border border-clinic-border bg-clinic-surface px-3 text-[13px] text-clinic-ink placeholder:text-clinic-muted focus:border-clinic-brand-strong focus:outline-none focus:ring-2 focus:ring-clinic-brand/25 disabled:bg-clinic-inset disabled:text-clinic-secondary';
-
-export const inputClass = cn(CONTROL, 'h-11');
-export const selectClass = cn(CONTROL, 'h-11 pr-8');
-export const textareaClass = cn(CONTROL, 'min-h-[76px] py-2.5');
-
-export function Field({
-  label,
-  htmlFor,
-  error,
-  hint,
-  children,
-  className,
-}: {
-  label: string;
-  htmlFor?: string;
-  error?: string | null;
-  hint?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn('min-w-0', className)}>
-      <label htmlFor={htmlFor} className="mb-1.5 block text-[12px] font-semibold text-clinic-ink">
-        {label}
-      </label>
-      {children}
-      {error ? (
-        <p role="alert" className="mt-1.5 text-[12px] font-medium text-clinic-danger">
-          {error}
-        </p>
-      ) : hint ? (
-        <p className="mt-1.5 text-[11.5px] text-clinic-secondary">{hint}</p>
-      ) : null}
-    </div>
-  );
-}
+// The form controls live in ./controls; existing imports from here keep working.
+export { Field, inputClass, selectClass, textareaClass } from './controls';

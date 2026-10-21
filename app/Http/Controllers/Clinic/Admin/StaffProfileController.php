@@ -16,6 +16,8 @@ use App\Services\Security\Malware\UploadRejectedException;
 use App\Services\Security\SecurityAudit;
 use App\Services\Staff\PractitionerScheduleEditor;
 use App\Services\Staff\StaffDirectory;
+use App\Support\Specialty\PracticeAreas;
+use App\Support\Specialty\SpecialtyEntitlements;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -127,9 +129,11 @@ class StaffProfileController extends Controller
             'primary_specialty' => ['nullable', 'array'],
             'primary_specialty.id' => ['nullable', 'integer'],
             'primary_specialty.name' => ['nullable', 'string', 'max:120'],
+            'primary_specialty.area' => ['nullable', 'string', 'max:60'],
             'additional_specialties' => ['array', 'max:10'],
             'additional_specialties.*.id' => ['nullable', 'integer'],
             'additional_specialties.*.name' => ['nullable', 'string', 'max:120'],
+            'additional_specialties.*.area' => ['nullable', 'string', 'max:60'],
             'experience_years' => ['nullable', 'integer', 'min:0', 'max:70'],
             'bio' => ['nullable', 'string', 'max:2000'],
             'registration_number' => ['nullable', 'string', 'max:80'],
@@ -166,7 +170,7 @@ class StaffProfileController extends Controller
             $profile->specialties()->sync($additional->pluck('id')->all());
         });
 
-        $this->audit->record('practitioner.profile_updated', $employee);
+        $this->audit->record('practitioner.profile_updated', $employee, ['practice_areas' => $profile->fresh()->practiceAreaKeys()]);
 
         return back()->with('success', 'Professional details saved.');
     }
@@ -272,18 +276,64 @@ class StaffProfileController extends Controller
      *
      * @param  array{id?: int|null, name?: string|null}|null  $entry
      */
+    /**
+     * The catalogue entry for a chosen specialty: a registry practice area
+     * (by key, or by a name that means one) is one entry per organisation,
+     * keyed, and only for a module the clinic's plan sells; anything else is
+     * the clinic's own informational entry.
+     */
     private function specialty(int $organizationId, ?array $entry): ?ClinicalSpecialty
     {
         if (! $entry) {
             return null;
         }
 
-        if (! empty($entry['id'])) {
-            return ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->find($entry['id'])
-                ?? throw ValidationException::withMessages(['primary_specialty' => 'Choose a specialty from this clinic\'s list.']);
+        $areas = app(PracticeAreas::class);
+        $existing = ! empty($entry['id'])
+            ? (ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->find($entry['id'])
+                ?? throw ValidationException::withMessages(['primary_specialty' => 'Choose a specialty from this clinic\'s list.']))
+            : null;
+
+        $name = trim((string) ($entry['name'] ?? $existing?->name ?? ''));
+        $area = ($entry['area'] ?? null) ?: ($existing?->practice_area_key ?: $areas->match($name));
+        if (! empty($entry['area']) && $areas->get($entry['area']) === null) {
+            throw ValidationException::withMessages(['primary_specialty' => 'Choose a practice area from the list.']);
+        }
+        if ($area !== null && $areas->get($area) === null) {
+            $area = null;
         }
 
-        $name = trim((string) ($entry['name'] ?? ''));
+        if ($area !== null) {
+            $definition = $areas->get($area);
+            if (! app(SpecialtyEntitlements::class)->allows($this->context->clinic(), $definition['specialty'])) {
+                throw ValidationException::withMessages(['primary_specialty' => "{$definition['label']} is part of ".$areas->moduleLabel($definition['module']).', which this clinic\'s plan does not include.']);
+            }
+
+            $keyed = ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->where('practice_area_key', $area)->first();
+            if ($keyed) {
+                return $keyed;
+            }
+            // A row recorded before areas existed becomes the area's entry.
+            $adopt = $existing && $existing->practice_area_key === null ? $existing
+                : ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->whereNull('practice_area_key')
+                    ->get()->first(fn (ClinicalSpecialty $specialty) => $areas->match($specialty->name) === $area);
+            if ($adopt) {
+                $adopt->forceFill(['practice_area_key' => $area])->save();
+
+                return $adopt;
+            }
+
+            return ClinicalSpecialty::withoutGlobalScopes()->forceCreate([
+                'organization_id' => $organizationId,
+                'name' => $definition['label'],
+                'practice_area_key' => $area,
+                'is_active' => true,
+            ]);
+        }
+
+        if ($existing) {
+            return $existing;
+        }
         if ($name === '') {
             return null;
         }

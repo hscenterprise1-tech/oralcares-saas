@@ -7,6 +7,7 @@ use App\Models\CompanySubscription;
 use App\Models\OnboardingProgress;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\PatientFieldConfigService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -45,7 +46,7 @@ it('shows the current branding on the settings page', function () {
     $clinic->update(['display_name' => 'Branded Dental']);
 
     $this->actingAs($user)->get(route('admin.settings.index'))->assertInertia(fn ($page) => $page
-        ->component('Clinic/Admin/Settings/Index')
+        ->component('Clinic/Admin/Settings/Index', false)
         ->where('branding.display_name', 'Branded Dental')
         ->where('branding.name', $clinic->name)
         ->where('branding.logo_url', null)
@@ -194,7 +195,7 @@ it('can save which patient-registration fields are required, optional or hidden'
 
     $response->assertRedirect();
     $response->assertSessionHas('success');
-    expect($clinic->fresh()->patient_field_config)->toBe([
+    expect(app(PatientFieldConfigService::class)->resolve($clinic->fresh()))->toMatchArray([
         'last_name' => 'optional',
         'date_of_birth' => 'required',
         'gender' => 'required',

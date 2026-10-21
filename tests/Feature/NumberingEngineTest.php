@@ -4,6 +4,8 @@ use App\Models\Branch;
 use App\Models\Organization;
 use App\Services\Core\NumberingEngine;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 it('generates sequential numbers correctly', function () {
     $organization = Organization::factory()->create();
@@ -69,4 +71,31 @@ it('resets calendar yearly', function () {
     expect($id2)->toBe('INV-0001');
 
     Carbon::setTestNow(); // reset
+});
+
+it('keeps a single organisation-level sequence, so a second one can never be stored', function () {
+    /*
+     * The unique index used to include the nullable branch_id, and NULLs are
+     * distinct, so two concurrent first requests could each create an
+     * organisation-level sequence and issue the same numbers.
+     */
+    $organization = Organization::factory()->create();
+    (new NumberingEngine)->generate('patient', $organization, null, ['prefix' => 'OC-']);
+
+    expect(fn () => DB::table('numbering_sequences')->insert([
+        'organization_id' => $organization->id, 'branch_id' => null, 'entity_type' => 'patient', 'current_number' => 0,
+    ]))->toThrow(QueryException::class);
+});
+
+it('continues the sequence another request already created rather than starting a second one', function () {
+    $organization = Organization::factory()->create();
+    DB::table('numbering_sequences')->insert([
+        'organization_id' => $organization->id, 'branch_id' => null, 'entity_type' => 'patient',
+        'prefix' => 'OC-', 'padding' => 4, 'current_number' => 7,
+    ]);
+
+    $number = (new NumberingEngine)->generate('patient', $organization, null, ['prefix' => 'OC-', 'padding' => 4]);
+
+    expect($number)->toBe('OC-0008')
+        ->and(DB::table('numbering_sequences')->where('organization_id', $organization->id)->count())->toBe(1);
 });

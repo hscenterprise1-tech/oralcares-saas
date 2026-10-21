@@ -51,7 +51,7 @@ it('shows the setup form for a valid token', function () {
     $this->get(route('clinic.password.setup', ['token' => issueSetupToken($user)]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Auth/SetupPassword')
+            ->component('Clinic/Auth/SetupPassword', true)
             ->where('status', 'valid')
             ->where('mode', 'setup')
             ->where('email', 'test-setup@example.com')
@@ -80,7 +80,7 @@ it('shows the invalid-link state for a token that was never issued', function ()
     $this->get(route('clinic.password.setup', ['token' => str_repeat('a', 64)]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Auth/SetupPassword')
+            ->component('Clinic/Auth/SetupPassword', true)
             ->where('status', 'invalid')
             ->missing('email')
         );

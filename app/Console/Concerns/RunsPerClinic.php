@@ -33,18 +33,21 @@ trait RunsPerClinic
             throw new InvalidArgumentException('Name the clinic(s) with --clinic=ID, or pass --all-clinics explicitly.');
         }
 
+        // Streamed in id order, a page at a time, so `--all-clinics` holds one
+        // page of clinics in memory rather than every tenant.
         $clinics = Clinic::query()
             ->where('status', ClinicStatus::Active)
             ->when($ids !== [], fn ($query) => $query->whereIn('id', $ids))
-            ->orderBy('id')
-            ->get();
+            ->lazyById(500);
 
         $context = app(ClinicContext::class);
+        $processed = 0;
 
         foreach ($clinics as $clinic) {
             $context->runForClinic($clinic, null, fn () => $callback($clinic));
+            $processed++;
         }
 
-        return $clinics->count();
+        return $processed;
     }
 }

@@ -190,6 +190,8 @@ class ClinicEmployee extends Model
         return static::withoutGlobalScopes()
             ->where('clinic_id', $clinicId)
             ->where('status', 'active')
+            // Only staff who practise: a receptionist is not a doctor to assign.
+            ->whereHas('practitionerProfile', fn ($profile) => $profile->withoutGlobalScopes())
             ->with('practitionerProfile')
             ->orderBy('name', 'asc')
             ->get(['id', 'name'])

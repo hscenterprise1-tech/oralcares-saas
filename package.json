@@ -13,6 +13,7 @@
         "@types/node": "^26.1.1",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
+        "@types/three": "^0.186.0",
         "@vitejs/plugin-react": "^5.2.0",
         "alpinejs": "^3.4.2",
         "autoprefixer": "^10.4.2",
@@ -74,6 +75,7 @@
         "recharts": "^3.10.1",
         "tailwind-merge": "^3.6.0",
         "tailwindcss-animate": "^1.0.7",
+        "three": "^0.186.1",
         "use-debounce": "^10.1.1",
         "ziggy-js": "^2.6.4",
         "zod": "^4.4.3"

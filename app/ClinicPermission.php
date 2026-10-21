@@ -21,6 +21,11 @@ enum ClinicPermission: string
     case AppointmentCreate = 'appointment.create';
     case AppointmentManage = 'appointment.manage';
     case QueueManage = 'queue.manage';
+    // Running the front office (registration, check-in, the day's patients):
+    // assignable on its own, so a doctor who also covers reception holds it
+    // without becoming a different role. A practitioner's `queue.manage` (to
+    // call their own next patient) is not front-office work.
+    case FrontOffice = 'front_office.operate';
     case VisitView = 'visit.view';
     case VisitCreate = 'visit.create';
 
@@ -28,6 +33,16 @@ enum ClinicPermission: string
     case ClinicalView = 'clinical.view';
     case ClinicalEdit = 'clinical.edit';
     case PrescriptionManage = 'prescription.manage';
+
+    // Treatment engine
+    case TreatmentStart = 'treatment.start';
+    case TreatmentExecute = 'treatment.execute';
+    case CatalogManage = 'catalog.manage';
+    case SpecialtyConfigure = 'specialty.configure';
+
+    // Patient records
+    case ConsentManage = 'consent.manage';
+    case PatientMerge = 'patient.merge';
     case DocumentsManage = 'documents.manage';
 
     // Billing & Financial POS Capabilities
@@ -52,6 +67,13 @@ enum ClinicPermission: string
     case LeaveRequest = 'leave.request';
     case LeaveApprove = 'leave.approve';
 
+    // The clinic's business: spending, and pay. Salaries are visible only to
+    // `payroll.view`; running and paying payroll is `payroll.manage`.
+    case ExpenseManage = 'expense.manage';
+    case ExpenseApprove = 'expense.approve';
+    case PayrollView = 'payroll.view';
+    case PayrollManage = 'payroll.manage';
+
     /**
      * Get all permission values.
      *
@@ -71,7 +93,8 @@ enum ClinicPermission: string
     {
         return [
             'Owner' => self::values(),
-            'Admin' => self::values(),
+            // Which specialties the clinic practises is the owner's decision alone.
+            'Admin' => array_values(array_diff(self::values(), [self::SpecialtyConfigure->value])),
             'Reception' => [
                 self::PatientView->value,
                 self::PatientSearch->value,
@@ -81,12 +104,15 @@ enum ClinicPermission: string
                 self::AppointmentCreate->value,
                 self::AppointmentManage->value,
                 self::QueueManage->value,
+                self::FrontOffice->value,
                 self::VisitView->value,
                 self::VisitCreate->value,
                 self::BillingView->value,
                 self::BillingCreate->value,
                 self::PaymentCollect->value,
                 self::DocumentsManage->value,
+                self::ConsentManage->value,
+                self::PatientMerge->value,
                 self::LeaveRequest->value,
             ],
             'Practitioner' => [
@@ -98,6 +124,9 @@ enum ClinicPermission: string
                 self::ClinicalView->value,
                 self::ClinicalEdit->value,
                 self::PrescriptionManage->value,
+                self::TreatmentStart->value,
+                self::TreatmentExecute->value,
+                self::ConsentManage->value,
                 self::DocumentsManage->value,
                 self::BillingView->value,
                 self::LeaveRequest->value,

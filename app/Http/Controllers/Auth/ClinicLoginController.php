@@ -109,6 +109,8 @@ class ClinicLoginController extends Controller
 
         $request->clearFailedAttempts();
 
+        $this->endPreviousSession($request);
+
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
@@ -118,10 +120,10 @@ class ClinicLoginController extends Controller
         $this->clinicContext->activateMembership($membership);
 
         if (config('app.routing_mode') === 'domain') {
-            return redirect()->intended(route('clinic.dashboard', array_filter(['clinic' => $request->route('clinic')])));
+            return redirect()->intended(route('dashboard', array_filter(['clinic' => $request->route('clinic')])));
         }
 
-        return redirect()->intended(route('clinic.dashboard'));
+        return redirect()->intended(route('dashboard'));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -138,6 +140,26 @@ class ClinicLoginController extends Controller
         }
 
         return redirect()->route('clinic.login');
+    }
+
+    /**
+     * A sign-in replaces whatever session this browser still held (a stale
+     * tab, a sign-out that never reached the server). That session's
+     * account, clinic, branch, Owner Mode and intended page all go with it,
+     * so nothing of the previous sign-in reaches the new account; the clinic
+     * context the middleware resolved for it this request is dropped too.
+     * Reached only after the new credentials and membership were accepted,
+     * so a refused attempt leaves the open session as it was.
+     */
+    private function endPreviousSession(Request $request): void
+    {
+        if (Auth::check()) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+
+        $this->clinicContext->clear();
     }
 
     /**

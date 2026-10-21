@@ -4,15 +4,22 @@ namespace App\Services;
 
 use App\Events\NotificationFailed;
 use App\Events\NotificationQueued;
-use App\Events\NotificationSent;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\ClinicWhatsAppMessage;
 use App\Models\Notification;
 use App\Models\NotificationTemplate;
+use App\Services\Communication\PatientMessaging;
+use App\Services\WhatsApp\ClinicWhatsApp;
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
 {
+    /** Not sent, and never will be on its own: no provider carries the channel. */
+    public const SKIPPED = 'skipped';
+
+    public const NO_PROVIDER_REASON = 'No provider is connected for this channel, so nothing was sent.';
+
     public function __construct(
         protected CommunicationPreferenceService $prefService,
         protected TemplateService $templateService
@@ -59,41 +66,43 @@ class NotificationService
     {
         $notification->update(['status' => 'processing']);
 
-        try {
-            $rendered = $this->templateService->renderTemplate(
-                $notification->template,
-                $notification->metadata['placeholders'] ?? []
-            );
+        // A patient message's channel is decided again now, so a WhatsApp
+        // setting changed since it was queued applies.
+        if ($notification->recipient_type === 'patient' && ($clinic = Clinic::query()->find($notification->clinic_id))) {
+            $code = (string) $notification->template()->withoutGlobalScopes()->value('code');
+            $channel = app(PatientMessaging::class)->channelFor($clinic, $code, (int) $notification->recipient_id);
+            if ($channel !== $notification->channel) {
+                $notification->update(['channel' => $channel]);
+            }
+        }
 
-            // Simulation Layer (Do NOT invoke real third-party integrations like Meta/Twilio)
-            if ($notification->channel === 'whatsapp') {
-                // MANDATORY: Verify that independent clinic WhatsApp configurations are mapped
-                // Verify that no shared company credentials or templates are accessed.
-                $hasCustomSenderConfig = $notification->clinic_id > 0; // Simulated credentials check
-
-                if (! $hasCustomSenderConfig) {
-                    throw new \RuntimeException('Clinic does not have a connected independent WhatsApp Business API account.');
-                }
-
-                Log::info("WhatsApp message sent via clinic-owned business account (Clinic ID: {$notification->clinic_id}). Content: {$rendered['content']}");
-            } else {
-                Log::info("Notification sent via {$notification->channel}. Subject: {$rendered['subject']}, Content: {$rendered['content']}");
+        // WhatsApp is delivered for real, on the clinic's resolved number
+        // (`ClinicWhatsApp`); its send job and delivery callbacks finish the
+        // status. A delivery that cannot go fails here with its reason.
+        if ($notification->channel === 'whatsapp') {
+            $delivery = app(ClinicWhatsApp::class)->deliver($notification);
+            if ($delivery->status === ClinicWhatsAppMessage::SKIPPED) {
+                $notification->update(['status' => 'failed', 'failed_reason' => $delivery->failure_reason, 'retry_count' => $notification->retry_count + 1]);
+                event(new NotificationFailed($notification));
             }
 
-            $notification->update([
-                'status' => 'delivered',
-                'sent_at' => now(),
-            ]);
-
-            event(new NotificationSent($notification));
-        } catch (\Exception $e) {
-            $notification->update([
-                'status' => 'failed',
-                'failed_reason' => $e->getMessage(),
-                'retry_count' => $notification->retry_count + 1,
-            ]);
-
-            event(new NotificationFailed($notification));
+            return;
         }
+
+        // SMS, e-mail and in-app have no provider connected yet, so nothing
+        // leaves the platform: the message is skipped with its reason, never
+        // reported as delivered. The log carries identifiers only — never the
+        // rendered text, which names the patient and their care.
+        $notification->update([
+            'status' => self::SKIPPED,
+            'failed_reason' => self::NO_PROVIDER_REASON,
+        ]);
+
+        Log::info('Patient message skipped: no provider for channel.', [
+            'notification_id' => $notification->id,
+            'clinic_id' => $notification->clinic_id,
+            'channel' => $notification->channel,
+            'event_key' => $notification->event_key,
+        ]);
     }
 }

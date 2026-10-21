@@ -214,6 +214,7 @@ export const COMPANY_MODULES: CompanyPillar[] = [
        * Connecting a number happens in Marketing settings. Health is monitoring.
        */
       { id: 'admin-integrations', label: 'Integrations',     href: '/company/integrations',      icon: Plug,            permission: 'view-integrations',        hue: '#3E93A3', hint: 'Connected systems and their health',             keywords: 'connection webhook api whatsapp instagram' },
+      { id: 'admin-clinic-whatsapp', label: 'Clinic WhatsApp', href: '/company/clinic-whatsapp', icon: MessageSquare,   permission: 'view-integrations',        hue: '#2FA96B', hint: 'Common and clinic-owned patient numbers',        keywords: 'whatsapp clinic number patient messages templates activation' },
     ],
   },
 

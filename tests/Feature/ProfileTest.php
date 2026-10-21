@@ -66,7 +66,12 @@ test('email verification status is unchanged when the email address is unchanged
     $this->assertNotNull($user->refresh()->email_verified_at);
 });
 
-test('user can delete their account', function () {
+/*
+ * Both tests below were inverted on purpose (2026-10-02): a user can no longer
+ * delete their own account from the profile page. Accounts are closed
+ * administratively (see ProfileController::destroy).
+ */
+test('user cannot delete their own account', function () {
     $user = User::factory()->create();
 
     $response = $this
@@ -75,15 +80,13 @@ test('user can delete their account', function () {
             'password' => 'password',
         ]);
 
-    $response
-        ->assertSessionHasNoErrors()
-        ->assertRedirect('/');
+    $response->assertForbidden();
 
-    $this->assertGuest();
-    $this->assertNull($user->fresh());
+    $this->assertAuthenticatedAs($user);
+    $this->assertNotNull($user->fresh());
 });
 
-test('correct password must be provided to delete account', function () {
+test('account deletion is refused before the password is checked', function () {
     $user = User::factory()->create();
 
     $response = $this
@@ -94,8 +97,8 @@ test('correct password must be provided to delete account', function () {
         ]);
 
     $response
-        ->assertSessionHasErrorsIn('userDeletion', 'password')
-        ->assertRedirect('/profile');
+        ->assertForbidden()
+        ->assertSessionHasNoErrors();
 
     $this->assertNotNull($user->fresh());
 });

@@ -17,6 +17,8 @@ class Appointment extends Model
     use Auditable, ClinicScoped, HasFactory;
 
     protected $fillable = [
+        'patient_treatment_id',
+        'patient_treatment_stage_id',
         'organization_id',
         'clinic_id',
         'branch_id',
@@ -97,6 +99,18 @@ class Appointment extends Model
     public function endsAt(): ?Carbon
     {
         return $this->scheduled_at?->copy()->addMinutes($this->duration_minutes ?? 15);
+    }
+
+    /** The treatment this appointment continues, if booked for one (optional). */
+    public function patientTreatment(): BelongsTo
+    {
+        return $this->belongsTo(PatientTreatment::class);
+    }
+
+    /** The treatment stage this appointment is for, if any. */
+    public function patientTreatmentStage(): BelongsTo
+    {
+        return $this->belongsTo(PatientTreatmentStage::class);
     }
 
     public function patient(): BelongsTo

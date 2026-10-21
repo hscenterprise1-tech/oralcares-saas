@@ -97,6 +97,42 @@ export function ButtonLink({
   );
 }
 
+/**
+ * A button that is only an icon. `label` is required: it is the button's
+ * accessible name and its tooltip, so an icon-only control is never silent.
+ */
+export const IconButton = forwardRef<
+  HTMLButtonElement,
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+    icon: LucideIcon;
+    label: string;
+    tone?: 'ghost' | 'secondary' | 'danger';
+    size?: 'sm' | 'md';
+  }
+>(function IconButton({ icon: Icon, label, tone = 'ghost', size = 'md', className, type = 'button', ...rest }, ref) {
+  return (
+    <button
+      ref={ref}
+      type={type}
+      aria-label={label}
+      title={label}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center rounded-full motion-safe:transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
+        'disabled:pointer-events-none disabled:opacity-50 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+        size === 'sm' ? 'h-8 w-8' : 'h-10 w-10',
+        tone === 'ghost' && 'text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
+        tone === 'secondary' && 'border border-clinic-border bg-clinic-surface text-clinic-ink hover:bg-clinic-inset',
+        tone === 'danger' && 'text-clinic-danger hover:bg-clinic-danger-soft',
+        className,
+      )}
+      {...rest}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+    </button>
+  );
+});
+
 /** The Company CRM's round header tool button (search, notifications, menu), in the clinic palette. */
 export const toolButton = cn(
   'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full',

@@ -29,7 +29,10 @@ class ProcessLeadImportJob implements ShouldQueue
         protected array $rows,
         protected ?int $organizationId,
         protected ?int $userId,
-    ) {}
+    ) {
+        // Long-running: its own queue, so it never delays interactive work.
+        $this->onQueue(config('queue.queues.imports'));
+    }
 
     public function handle(LeadImportService $importer): void
     {

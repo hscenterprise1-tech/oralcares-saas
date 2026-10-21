@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\ClinicStatus;
+use App\Services\Patient\ClinicSpecialties;
 use Database\Factories\ClinicFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +37,11 @@ class Clinic extends Model
         'patient_flow_config',
         'dashboard_config',
         'appointment_config',
+        'specialties',
+        'contact_email',
+        'contact_phone',
+        'billing_config',
+        'communication_config',
     ];
 
     /**
@@ -53,6 +59,9 @@ class Clinic extends Model
             'patient_flow_config' => 'array',
             'dashboard_config' => 'array',
             'appointment_config' => 'array',
+            'specialties' => 'array',
+            'billing_config' => 'array',
+            'communication_config' => 'array',
         ];
     }
 
@@ -68,6 +77,30 @@ class Clinic extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    /**
+     * A direct write of the legacy `specialties` JSON (CRM provisioning, older
+     * callers) is mirrored into `clinic_specialties`, the canonical record, so
+     * the two cannot drift while the JSON still has writers.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (Clinic $clinic) {
+            if ($clinic->wasChanged('specialties') || ($clinic->wasRecentlyCreated && filled($clinic->specialties))) {
+                app(ClinicSpecialties::class)->mirrorLegacy($clinic);
+            }
+        });
+    }
+
+    /**
+     * Every specialty the clinic has activated, active or not.
+     *
+     * @return HasMany<ClinicSpecialty, $this>
+     */
+    public function clinicSpecialties(): HasMany
+    {
+        return $this->hasMany(ClinicSpecialty::class);
     }
 
     /**

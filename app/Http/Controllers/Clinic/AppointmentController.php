@@ -134,7 +134,8 @@ class AppointmentController extends Controller
             'can' => [
                 'create' => $canCreate,
                 'manage' => $this->access->allows(['permissions' => ['appointment.manage']]),
-                'check_in' => $this->access->allows(['permissions' => ['queue.manage']]),
+                // Check-in is the Front Desk's intake, opened here for the booking.
+                'check_in' => $this->access->allows(['workspace' => ['front_desk'], 'module' => 'patients']),
                 'settings' => $this->access->allows(['permissions' => ['settings.manage']]),
                 'view_patient' => $this->access->allows(['permissions' => ['patient.view'], 'module' => 'patients']),
                 'register_patient' => $this->access->allows(['permissions' => ['patient.create'], 'module' => 'patients']),
@@ -146,7 +147,6 @@ class AppointmentController extends Controller
                 'patientSearch' => route('clinic.patients.search'),
                 'patient' => route('clinic.patients.show', ['patient' => '__ID__']),
                 'registerPatient' => route('clinic.patients.create'),
-                'checkIn' => route('clinic.reception.check-in'),
                 'settings' => route('clinic.appointments.settings'),
             ],
             // Loaded after the calendar: the side panel, the open times of a

@@ -1,6 +1,6 @@
 import { useForm, usePage } from '@inertiajs/react';
 import { LogIn, MailQuestion, UserPlus } from 'lucide-react';
-import { CrmButton, CrmFormField, CrmInput } from '@/pages/Company/design';
+import { AuthButton, AuthField, AuthInput } from '../components/AuthControls';
 import { AuthNotice } from '../components/AuthNotice';
 import { ClinicPreAuthShell } from '../components/ClinicPreAuthShell';
 import { PasswordInput } from '../components/PasswordInput';
@@ -82,13 +82,13 @@ export default function AcceptInvitation({
     return (
       <ClinicPreAuthShell title="Invitation link" headline="Your clinic invitation">
         <div className="flex flex-col items-center py-2 text-center">
-          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-ovs-crm-accent-coral-soft">
-            <MailQuestion className="h-7 w-7 text-ovs-crm-accent-coral" aria-hidden="true" />
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-clinic-accent-coral-soft">
+            <MailQuestion className="h-7 w-7 text-clinic-accent-coral" aria-hidden="true" />
           </div>
-          <h2 className="text-[20px] font-bold tracking-[-0.022em] text-ovs-crm-text-primary [text-wrap:balance]">
+          <h2 className="text-[20px] font-bold tracking-[-0.022em] text-clinic-ink [text-wrap:balance]">
             {notice.title}
           </h2>
-          <p className="mt-2 max-w-[34ch] text-[13px] leading-relaxed text-ovs-crm-text-secondary">{notice.body}</p>
+          <p className="mt-2 max-w-[34ch] text-[13px] leading-relaxed text-clinic-secondary">{notice.body}</p>
         </div>
       </ClinicPreAuthShell>
     );
@@ -106,7 +106,7 @@ export default function AcceptInvitation({
         subheading={
           <>
             You already have an OralCares account. Enter its password to add this clinic to it as{' '}
-            <span className="font-semibold text-ovs-crm-text-primary">{invitedAs}</span>.
+            <span className="font-semibold text-clinic-ink">{invitedAs}</span>.
           </>
         }
       >
@@ -114,19 +114,19 @@ export default function AcceptInvitation({
           {seatLimitError && <AuthNotice tone="error">{seatLimitError}</AuthNotice>}
 
           {email && (
-            <CrmFormField label="Your sign-in email">
-              <CrmInput
+            <AuthField label="Your sign-in email">
+              <AuthInput
                 type="email"
                 name="email"
                 value={email}
                 autoComplete="username"
                 readOnly
-                className="bg-ovs-crm-surface-inset"
+                className="bg-clinic-inset"
               />
-            </CrmFormField>
+            </AuthField>
           )}
 
-          <CrmFormField
+          <AuthField
             label="Your current password"
             hint={errors.password ? undefined : 'Your password stays as it is.'}
             error={errors.password}
@@ -140,11 +140,11 @@ export default function AcceptInvitation({
               invalid={!!errors.password}
               autoFocus
             />
-          </CrmFormField>
+          </AuthField>
 
-          <CrmButton type="submit" tone="primary" size="lg" icon={LogIn} loading={processing} className="w-full">
+          <AuthButton type="submit" tone="primary" size="lg" icon={LogIn} loading={processing} className="w-full">
             Confirm &amp; join
-          </CrmButton>
+          </AuthButton>
         </form>
       </ClinicPreAuthShell>
     );
@@ -159,7 +159,7 @@ export default function AcceptInvitation({
       subheading={
         <>
           Set a password to finish creating your account as{' '}
-          <span className="font-semibold text-ovs-crm-text-primary">{invitedAs}</span>.
+          <span className="font-semibold text-clinic-ink">{invitedAs}</span>.
         </>
       }
     >
@@ -171,19 +171,19 @@ export default function AcceptInvitation({
          * belongs to, and what a password manager saves it against.
          */}
         {email && (
-          <CrmFormField label="Your sign-in email">
-            <CrmInput
+          <AuthField label="Your sign-in email">
+            <AuthInput
               type="email"
               name="email"
               value={email}
               autoComplete="username"
               readOnly
-              className="bg-ovs-crm-surface-inset"
+              className="bg-clinic-inset"
             />
-          </CrmFormField>
+          </AuthField>
         )}
 
-        <CrmFormField label="Password" hint={errors.password ? undefined : PASSWORD_HINT} error={errors.password}>
+        <AuthField label="Password" hint={errors.password ? undefined : PASSWORD_HINT} error={errors.password}>
           <PasswordInput
             name="password"
             value={data.password}
@@ -193,9 +193,9 @@ export default function AcceptInvitation({
             invalid={!!errors.password}
             autoFocus
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmFormField label="Confirm password" error={errors.password_confirmation}>
+        <AuthField label="Confirm password" error={errors.password_confirmation}>
           <PasswordInput
             name="password_confirmation"
             value={data.password_confirmation}
@@ -204,11 +204,11 @@ export default function AcceptInvitation({
             readOnly={processing}
             invalid={!!errors.password_confirmation}
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmButton type="submit" tone="primary" size="lg" icon={UserPlus} loading={processing} className="w-full">
+        <AuthButton type="submit" tone="primary" size="lg" icon={UserPlus} loading={processing} className="w-full">
           Set password &amp; join
-        </CrmButton>
+        </AuthButton>
       </form>
     </ClinicPreAuthShell>
   );

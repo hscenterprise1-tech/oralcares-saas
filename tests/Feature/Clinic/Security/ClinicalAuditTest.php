@@ -48,7 +48,8 @@ it('records patient changes by field name, never the personal values', function 
 
     expect($entry->clinic_id)->toBe($this->clinic->id)
         ->and($entry->subject_id)->toBe($this->patient->id)
-        ->and($entry->context['personal_fields_changed'])->toEqualCanonicalizing(['phone', 'first_name'])
+        // `name` is the maintained full name, rebuilt when a part of it changes.
+        ->and($entry->context['personal_fields_changed'])->toEqualCanonicalizing(['phone', 'first_name', 'name'])
         ->and($serialized)->not->toContain('9000011111')->not->toContain('9876501234')->not->toContain('Asha M');
     expect(auditedEvents('patient.'))->toBe(['patient.created', 'patient.updated']);
 });

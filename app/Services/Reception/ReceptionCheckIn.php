@@ -18,6 +18,7 @@ use App\Services\QueueStateMachine;
 use App\Support\ClinicClock;
 use App\VisitPriority;
 use App\VisitRegistrationType;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -46,8 +47,9 @@ class ReceptionCheckIn
         ?ClinicEmployee $doctor = null,
         VisitPriority $priority = VisitPriority::Normal,
         ?ClinicEmployee $performer = null,
+        ?VisitContext $context = null,
     ): ClinicQueueItem {
-        return DB::transaction(function () use ($clinic, $branch, $patient, $appointment, $doctor, $priority, $performer) {
+        return DB::transaction(function () use ($clinic, $branch, $patient, $appointment, $doctor, $priority, $performer, $context) {
             Branch::withoutGlobalScopes()->whereKey($branch->id)->lockForUpdate()->first();
 
             $now = ClinicClock::now();
@@ -68,8 +70,8 @@ class ReceptionCheckIn
                 $doctor ??= ClinicEmployee::withoutGlobalScopes()->find($appointment->practitioner_id);
             }
 
-            $doctor ??= $this->defaultDoctor($clinic, $branch, $patient, $queue);
-            $visit = $this->todaysVisit($clinic, $branch, $patient, $doctor, $now->toDateString());
+            $doctor ??= $this->defaultDoctor($clinic, $branch, $patient, $queue, $context?->specialtyKey);
+            $visit = $this->todaysVisit($clinic, $branch, $patient, $doctor, $now->toDateString(), $context ?? new VisitContext);
             $caseNumber = $this->caseNumbers->forVisit($clinic, $visit);
 
             $item = ClinicQueueItem::create([
@@ -93,6 +95,7 @@ class ReceptionCheckIn
                     'case_number' => $caseNumber->case_number,
                     'doctor' => $doctor?->name,
                     'priority' => $priority->value,
+                    'visit_type' => $context?->visitTypeKey,
                     'checked_in_by' => auth()->user()?->name ?? 'Reception',
                 ],
             ]);
@@ -104,17 +107,61 @@ class ReceptionCheckIn
     }
 
     /**
+     * A booking made for someone not registered yet (a prospect), that New
+     * Case may register and check in: this clinic's, at this branch, today,
+     * still checkable and claimed by no patient. Anything else is not found.
+     */
+    public function prospectBooking(Clinic $clinic, Branch $branch, int $appointmentId): Appointment
+    {
+        $appointment = Appointment::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinic->id)->where('branch_id', $branch->id)->whereNull('patient_id')
+            ->findOrFail($appointmentId);
+        if ($appointment->scheduled_at?->toDateString() !== ClinicClock::now()->toDateString() || ! in_array($appointment->status, AppointmentStatus::checkable(), true)) {
+            throw ValidationException::withMessages(['appointment_id' => 'Only today\'s open bookings can be checked in.']);
+        }
+
+        return $appointment;
+    }
+
+    /**
+     * Today's open bookings at this branch for someone not registered yet,
+     * made with this mobile number (last ten digits compared, so spaces and a
+     * country code do not matter). At most five; never another branch's or
+     * clinic's, never a claimed one.
+     *
+     * @return Collection<int, Appointment>
+     */
+    public function prospectBookingsFor(Clinic $clinic, Branch $branch, string $phone): Collection
+    {
+        $digits = substr(preg_replace('/\D/', '', $phone) ?? '', -10);
+        if (strlen($digits) < 10) {
+            return collect();
+        }
+        $today = ClinicClock::now()->toDateString();
+
+        return Appointment::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinic->id)->where('branch_id', $branch->id)->whereNull('patient_id')
+            ->whereIn('status', array_map(fn (AppointmentStatus $status) => $status->value, AppointmentStatus::checkable()))
+            ->whereBetween('scheduled_at', [$today.' 00:00:00', $today.' 23:59:59'])
+            ->whereNotNull('prospect_phone')
+            // One branch's bookings for one day: bounded; numbers are compared as digits, so this filter runs here.
+            ->orderBy('scheduled_at')->limit(500)->get(['id', 'clinic_id', 'branch_id', 'practitioner_id', 'prospect_name', 'prospect_phone', 'scheduled_at', 'status'])
+            ->filter(fn (Appointment $booking) => substr(preg_replace('/\D/', '', (string) $booking->prospect_phone) ?? '', -10) === $digits)
+            ->take(5)->values();
+    }
+
+    /**
      * One reception queue per branch per clinic-local day. A day whose queue
      * `queue:close-day` has already closed takes no more check-ins.
      */
     private function todaysQueue(Clinic $clinic, Branch $branch, string $today): ClinicQueue
     {
-        // `whereDate`, not firstOrCreate: a date cast is stored with a time
+        // A day range, not firstOrCreate: a date cast is stored with a time
         // part on some drivers, so an equality match on "Y-m-d" can miss.
         $queue = ClinicQueue::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->where('branch_id', $branch->id)
-            ->whereDate('queue_date', $today)
+            ->whereOnDate('queue_date', $today)
             ->first()
             ?? ClinicQueue::withoutGlobalScopes()->create([
                 'clinic_id' => $clinic->id,
@@ -147,13 +194,19 @@ class ReceptionCheckIn
     /**
      * The patient's own assigned doctor if they are working today; otherwise
      * the working doctor with the fewest patients still waiting; otherwise
-     * nobody ("any doctor").
+     * nobody ("any doctor"). When the visit's specialty is known, doctors
+     * recorded as practising something else are passed over.
      */
-    private function defaultDoctor(Clinic $clinic, Branch $branch, Patient $patient, ClinicQueue $queue): ?ClinicEmployee
+    private function defaultDoctor(Clinic $clinic, Branch $branch, Patient $patient, ClinicQueue $queue, ?string $specialty): ?ClinicEmployee
     {
         $working = $this->roster->forBranch($clinic, $branch)
             ->filter(fn (array $entry) => in_array($entry['shift'], ['on_shift', 'not_set'], true))
-            ->pluck('employee');
+            ->pluck('employee')
+            ->when($specialty !== null, fn ($doctors) => $doctors->filter(function (ClinicEmployee $doctor) use ($specialty) {
+                $practised = $doctor->practitionerProfile?->specialtyKeys() ?? [];
+
+                return $practised === [] || in_array($specialty, $practised, true);
+            }));
 
         $assigned = $working->firstWhere('id', $patient->current_practitioner_id);
         if ($assigned) {
@@ -169,16 +222,16 @@ class ReceptionCheckIn
         return $working->sortBy(fn (ClinicEmployee $doctor) => [$load[$doctor->id] ?? 0, $doctor->name])->first();
     }
 
-    private function todaysVisit(Clinic $clinic, Branch $branch, Patient $patient, ?ClinicEmployee $doctor, string $today): PatientVisit
+    private function todaysVisit(Clinic $clinic, Branch $branch, Patient $patient, ?ClinicEmployee $doctor, string $today, VisitContext $context): PatientVisit
     {
         $visit = PatientVisit::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->where('patient_id', $patient->id)
-            ->whereDate('visit_date', $today)
+            ->whereOnDate('visit_date', $today)
             ->first();
 
         if ($visit) {
-            $visit->update(['doctor_id' => $doctor?->id ?? $visit->doctor_id, 'queue_status' => QueueItemStatus::Waiting->value, 'visit_status' => 'checked_in']);
+            $visit->update(['doctor_id' => $doctor?->id ?? $visit->doctor_id, 'queue_status' => QueueItemStatus::Waiting->value, 'visit_status' => 'checked_in', ...$context->attributes(), 'practice_area_key' => $context->practiceArea]);
 
             return $visit;
         }
@@ -194,6 +247,7 @@ class ReceptionCheckIn
                 : VisitRegistrationType::New->value,
             'queue_status' => QueueItemStatus::Waiting->value,
             'visit_status' => 'checked_in',
+            ...$context->attributes(),
         ]);
     }
 }

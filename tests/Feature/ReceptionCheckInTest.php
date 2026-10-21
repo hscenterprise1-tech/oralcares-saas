@@ -38,7 +38,7 @@ test('patient check-in generates encounter and fires event', function () {
 
     expect($encounter)->not->toBeNull()
         ->and($encounter->status)->toBe(VisitStatus::CheckedIn)
-        ->and($encounter->encounter_number)->toBe("ENC-{$clinic->id}-00001");
+        ->and($encounter->encounter_number)->toMatch('/^ENC-[0-9]{4}-000001$/');
 
     Event::assertDispatched(PatientCheckedIn::class, function ($event) use ($encounter) {
         return $event->encounter->id === $encounter->id;

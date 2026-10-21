@@ -10,6 +10,7 @@ use App\Models\ClinicOperatingHour;
 use App\Services\ClinicContext;
 use App\Services\ResourceLimitService;
 use App\Services\ResourceService;
+use App\Services\RetainedClinicalHistory;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -117,6 +118,11 @@ class BranchController extends Controller
                 ->update(['is_main' => false]);
         }
 
+        // A name the owner changed is a name they chose; the form resends an unchanged one, which changes nothing.
+        if ($validated['name'] !== $branch->name) {
+            $validated['name_is_default'] = false;
+        }
+
         $branch->update($validated);
         $this->syncOperatingHours($branch, $operatingHours, $resources);
 
@@ -126,7 +132,7 @@ class BranchController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Branch $branch, ClinicContext $context): RedirectResponse
+    public function destroy(Branch $branch, ClinicContext $context, RetainedClinicalHistory $retained): RedirectResponse
     {
         if ($branch->clinic_id !== $context->clinic()->id) {
             abort(403);
@@ -134,6 +140,13 @@ class BranchController extends Controller
 
         if ($branch->is_main) {
             return back()->with('error', 'Cannot delete the main branch. Please set another branch as main first.');
+        }
+
+        // A branch that has served patients keeps its records; it is
+        // deactivated, never deleted (see RetainedClinicalHistory).
+        $history = $retained->forBranch($branch);
+        if ($history !== []) {
+            return back()->with('error', "{$branch->name} has ".implode(', ', $history).' on record and cannot be deleted. Set it to inactive instead.');
         }
 
         $branch->delete();

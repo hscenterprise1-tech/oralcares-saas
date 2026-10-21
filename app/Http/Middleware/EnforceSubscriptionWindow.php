@@ -62,12 +62,13 @@ class EnforceSubscriptionWindow
         /*
          * Shared with every Inertia page so the clinic can show its own banner.
          * Sent for all live states, not just grace — a trial with four days
-         * left is worth saying out loud too.
+         * left is worth saying out loud too. The banner needs the state and
+         * the days only; the plan itself is the owner's to see, in Owner Mode
+         * (`clinic.owner_subscription`), so it is not sent to every member.
          */
         Inertia::share('subscriptionWindow', [
             'state' => $entitlement['window']['state'],
             'days_remaining' => $entitlement['window']['days_remaining'],
-            'plan' => $entitlement['plan']['name'] ?? null,
         ]);
 
         return $next($request);

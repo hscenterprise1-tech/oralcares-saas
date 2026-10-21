@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -15,11 +16,16 @@ use Illuminate\Queue\SerializesModels;
  * The URL is built by `ClinicPasswordResetController`, which is the only
  * place that ever holds the plain token.
  */
-class ClinicPasswordResetMailable extends Mailable implements ShouldQueue
+class ClinicPasswordResetMailable extends Mailable implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public User $user, public string $resetUrl) {}
+    public function __construct(public User $user, public string $resetUrl)
+    {
+        // The reset link is a bearer credential: encrypted in the queue
+        // payload (and in `failed_jobs`), sent ahead of routine work.
+        $this->onQueue(config('queue.queues.critical'));
+    }
 
     public function envelope(): Envelope
     {

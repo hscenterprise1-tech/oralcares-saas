@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Contracts\WhatsAppCredentials;
 use App\WhatsAppNumberPurpose;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Crypt;
 
-class MarketingWhatsAppAccount extends Model
+class MarketingWhatsAppAccount extends Model implements WhatsAppCredentials
 {
     use HasFactory, SoftDeletes;
 
@@ -190,5 +191,25 @@ class MarketingWhatsAppAccount extends Model
     public function scopeForPurposeValue($query, string $purpose)
     {
         return $query->where('purpose', $purpose);
+    }
+
+    public function whatsAppAccessToken(): ?string
+    {
+        return $this->access_token;
+    }
+
+    public function whatsAppPhoneNumberId(): ?string
+    {
+        return $this->phone_number_id;
+    }
+
+    public function whatsAppBusinessAccountId(): ?string
+    {
+        return $this->business_account_id;
+    }
+
+    public function whatsAppLogKey(): string
+    {
+        return 'marketing:'.$this->id;
     }
 }

@@ -3,7 +3,9 @@
 use App\Events\CustomerProvisioned;
 use App\LeadStatus;
 use App\Models\CompanyEmployee;
+use App\Models\CompanyPlan;
 use App\Models\CompanyQuotation;
+use App\Models\CompanySubscription;
 use App\Models\Lead;
 use App\Models\License;
 use App\Models\OnboardingProgress;
@@ -107,6 +109,33 @@ it('calculates correct license limits from approved commercial quotation', funct
     expect($org->license->max_branches)->toBe(3);
     expect($org->license->plan_name)->toBe('Multi-Specialty Group License');
 });
+
+it('copies the purchased plan\'s staff cap onto the new subscription as it is: a number, zero, or none', function (?int $planStaff) {
+    $plan = CompanyPlan::factory()->create(['max_doctors' => 2, 'max_staff' => $planStaff]);
+    $lead = Lead::factory()->create(['organization_id' => null]);
+    CompanyQuotation::create([
+        'organization_id' => $this->organization->id,
+        'quotation_number' => 'QT-2026-7777',
+        'version' => 1,
+        'lead_id' => $lead->id,
+        'prepared_by_id' => $this->companyEmployee->id,
+        'company_plan_id' => $plan->id,
+        'status' => QuotationStatus::Approved,
+        'subtotal' => 30000.00,
+        'grand_total' => 30000.00,
+    ]);
+
+    $org = app(CustomerProvisioningEngine::class)->provision($lead);
+
+    expect(CompanySubscription::query()->where('organization_id', $org->id)->sole())
+        ->company_plan_id->toBe($plan->id)
+        ->max_doctors->toBe(2)
+        ->max_staff->toBe($planStaff);
+})->with([
+    'three staff logins' => 3,
+    'no staff logins' => 0,
+    'no staff cap' => null,
+]);
 
 it('enforces idempotency preventing duplicate provisioning for already provisioned leads', function () {
     $lead = Lead::factory()->create(['organization_id' => null]);

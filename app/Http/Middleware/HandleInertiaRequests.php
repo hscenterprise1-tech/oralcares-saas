@@ -5,11 +5,15 @@ namespace App\Http\Middleware;
 use App\ClinicRole;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\Onboarding\OnboardingGate;
 use App\Services\OwnerMode\OwnerMode;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\ClinicActions;
 use App\Support\ClinicNavigation;
+use App\Support\ClinicOwnerSubscription;
 use App\Support\ClinicPortalErrors;
+use App\Support\ClinicSearch;
+use App\Support\ClinicWorkspaces;
 use App\Support\CrmPermissions;
 use App\Support\CrmScope;
 use App\UserType;
@@ -152,6 +156,8 @@ class HandleInertiaRequests extends Middleware
                  * all — the same defect `success` had.
                  */
                 'warning' => fn () => $request->session()->get('warning'),
+                // Patient registration refused over possible existing patients.
+                'possible_duplicates' => fn () => $request->session()->get('possible_duplicates'),
             ],
         ]);
     }
@@ -238,6 +244,7 @@ class HandleInertiaRequests extends Middleware
         $entitlement = $access->entitlement();
         $isOwner = $access->isOwner();
         $routeParameters = array_filter(['clinic' => $request->route('clinic')], fn ($value) => is_string($value));
+        $onboarding = app(OnboardingGate::class)->pendingFor($user, $clinic, $context->currentEmployee()) !== null;
 
         return [
             'id' => $clinic->id,
@@ -249,6 +256,8 @@ class HandleInertiaRequests extends Middleware
             'active_branch' => $branch ? [
                 'id' => $branch->id,
                 'name' => $branch->name,
+                // Provisioning's fallback name rather than one somebody chose (`branches.name_is_default`).
+                'name_is_default' => (bool) $branch->name_is_default,
                 'slug' => $branch->slug,
                 'is_main' => (bool) $branch->is_main,
                 'display_name' => $branch->display_name,
@@ -276,8 +285,13 @@ class HandleInertiaRequests extends Middleware
              * every route still checks for itself.
              */
             'permissions' => $access->permissions(),
+            // Separately sold modules (`ClinicModules`) and whether each is on here.
+            'clinic_modules' => $access->clinicModules(),
             'specialties' => $access->specialties(),
             'capabilities' => $access->capabilities(),
+            // Specialty extensions available here (odontogram, physio
+            // assessment, …), from the specialty registry and the plan.
+            'extensions' => $access->extensions(),
             'roles' => $isOwner ? ['Owner'] : $this->clinicRoles($user),
             // The staff roles actually held here, owner or not, so an owner
             // who is also a doctor reads as "Doctor · Clinic Owner".
@@ -289,8 +303,19 @@ class HandleInertiaRequests extends Middleware
             // and command palette), and the actions they may start (command
             // palette and the dashboard's quick actions). Labels and links
             // only, never data.
-            'navigation' => ClinicNavigation::for($access, $routeParameters),
-            'actions' => ClinicActions::for($access, $routeParameters),
+            // While onboarding is open every other page redirects back to it,
+            // so the shell offers nothing to navigate to.
+            'onboarding' => $onboarding,
+            'navigation' => $onboarding ? [] : ClinicNavigation::for($access, $routeParameters),
+            'actions' => $onboarding ? [] : ClinicActions::for($access, $routeParameters),
+            // Whether the portal's one New Case / Repeat Case intake may open here.
+            'intake' => $onboarding ? ['available' => false, 'can_register' => false] : ClinicNavigation::intake($access),
+            // What the top bar's search may look in for this user (`ClinicSearch`); the server decides each request again.
+            'searchable' => $onboarding ? [] : app(ClinicSearch::class)->searchable(),
+            // The plan, only for the owner with Owner Mode verified (`ClinicOwnerSubscription`); null for everyone else.
+            'owner_subscription' => $onboarding ? null : ClinicOwnerSubscription::for($access, $access->clinic()),
+            // The role workspaces this user switches between (Command Center, Front Desk, Today, Billing).
+            'workspaces' => $onboarding ? [] : ClinicWorkspaces::for($access, $routeParameters),
         ];
     }
 
@@ -315,9 +340,13 @@ class HandleInertiaRequests extends Middleware
             'signIn' => route('clinic.login', $parameters, false),
             'signOut' => route('clinic.logout', $parameters, false),
             'forgotPassword' => route('clinic.password.request', $parameters, false),
-            'dashboard' => route('clinic.dashboard', $parameters, false),
+            // The logo: where a signed-in user lands (`ClinicWorkspaces::landing`).
+            'dashboard' => route('dashboard', $parameters, false),
             'branches' => route('clinic.branches.index', $parameters, false),
             'branchSwitch' => route('clinic.branches.switch', $parameters, false),
+            'patientSearch' => route('clinic.patients.search', $parameters, false),
+            // GET ?q=: the top bar's search (pages, patients, appointments, support), decided on the server.
+            'search' => route('clinic.search', $parameters, false),
             'ownerMode' => route('clinic.owner-mode.store', $parameters, false),
             'notifications' => route('api.notifications.index', [], false),
             'notificationsUnreadCount' => route('api.notifications.unreadCount', [], false),

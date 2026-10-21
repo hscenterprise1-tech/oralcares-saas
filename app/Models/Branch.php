@@ -17,6 +17,9 @@ class Branch extends Model
     /** @use HasFactory<BranchFactory> */
     use HasFactory, OrganizationScoped;
 
+    /** The name provisioning gives a branch when none was supplied (`name_is_default` marks it). */
+    public const DEFAULT_NAME = 'Main Branch';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -26,9 +29,12 @@ class Branch extends Model
         'organization_id',
         'clinic_id',
         'name',
+        // Whether `name` is provisioning's fallback rather than a name somebody chose.
+        'name_is_default',
         'slug',
         'status',
         'is_main',
+        'specialties',
         'address_line1',
         'address_line2',
         'city',
@@ -53,6 +59,8 @@ class Branch extends Model
         return [
             'status' => BranchStatus::class,
             'is_main' => 'boolean',
+            'name_is_default' => 'boolean',
+            'specialties' => 'array',
         ];
     }
 

@@ -92,40 +92,41 @@ it('gives the owner every destination that exists, and none that does not', func
     portalAs(portalMember(owner: true))->get('/clinic/dashboard')
         ->assertOk()
         ->assertInertia(function (AssertableInertia $page) {
-            $page->component('ClinicPortal/Home')
+            $page->component('ClinicPortal/Dashboard', true)
                 ->where('clinic.permissions', ClinicPermission::values())
                 ->where('clinic.roles', ['Owner']);
 
-            // Business domains: Reception and Visits are workflows now, not destinations.
-            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments', 'administration', 'staff', 'leave', 'branches', 'departments', 'rooms', 'settings']);
+            // Main, then Additional; New Case / Repeat Case are Dashboard quick actions; administration lives in the account menu.
+            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'reports', 'follow_ups', 'notifications', 'support', 'approvals', 'staff', 'branches', 'settings']);
         });
 });
 
-it('never offers Billing, Queue, Clinical, Inventory or Reports before their routes exist', function () {
+it('never offers Clinical or Inventory before their routes exist; the Queue is reached through the Front Desk entry', function () {
     portalAs(portalMember(owner: true))->get('/clinic/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => expect(portalNavKeys($page))
-            ->not->toContain('billing')
-            ->not->toContain('queue')
             ->not->toContain('clinical')
             ->not->toContain('inventory')
-            ->not->toContain('reports'));
+            ->toContain('reports')
+            ->not->toContain('queue'));
+
+    portalAs(portalMember(owner: true))->get('/clinic/reports')->assertOk();
 });
 
 it('shows a receptionist only what the receptionist role grants at this branch', function () {
-    portalAs(portalMember(role: ClinicRole::Receptionist))->get('/clinic/dashboard')
+    portalAs(portalMember(role: ClinicRole::Receptionist))->followingRedirects()->get('/clinic/dashboard')
         ->assertOk()
         ->assertInertia(function (AssertableInertia $page) {
-            $page->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
+            $page->component('ClinicPortal/Dashboard', true)->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
 
-            expect(portalNavKeys($page))->toBe(['dashboard', 'patients', 'appointments'])
+            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'follow_ups', 'notifications', 'support'])
                 ->and($page->toArray()['props']['clinic']['permissions'])->not->toContain('staff.manage');
         });
 });
 
-it('shows a member with no role only the dashboard', function () {
+it('shows a member with no role only the minimal home', function () {
     portalAs(portalMember())->get('/clinic/dashboard')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => expect(portalNavKeys($page))->toBe(['dashboard'])
+        ->assertInertia(fn (AssertableInertia $page) => expect(portalNavKeys($page))->toBe(['dashboard', 'notifications', 'support'])
             ->and($page->toArray()['props']['clinic']['permissions'])->toBe([]));
 });
 
@@ -141,7 +142,7 @@ it('hides a module the clinic plan does not include, even from the owner', funct
             ->not->toContain('appointments'));
 });
 
-it('links only to pages the user can actually open', function () {
+it('links only to pages the user can actually open, and never links an entry with no backend', function () {
     $member = portalMember(owner: true);
     $navigation = [];
     portalAs($member)->get('/clinic/dashboard')
@@ -151,6 +152,11 @@ it('links only to pages the user can actually open', function () {
 
     foreach ($navigation as $domain) {
         foreach ([$domain, ...$domain['children']] as $destination) {
+            if ($destination['href'] === null) {
+                expect($destination['available'])->toBeFalse();
+
+                continue;
+            }
             portalAs($member)->get($destination['href'])->assertOk();
         }
     }
@@ -251,14 +257,14 @@ it('does not open the branch search to a guest', function () {
 it('renders a missing record as the portal 404 page', function () {
     portalAs(portalMember(owner: true))->get('/clinic/patients/999999')
         ->assertNotFound()
-        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error')->where('status', 404)->has('clinic'));
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error', false)->where('status', 404)->has('clinic'));
 });
 
 it('renders a permission refusal as the portal 403 page with its own sentence', function () {
     portalAs(portalMember())->get('/clinic/admin/settings')
         ->assertForbidden()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('ClinicPortal/Error')
+            ->component('ClinicPortal/Error', false)
             ->where('status', 403)
             ->where('message', 'You do not have permission to do this.')
             ->where('reason', null));
@@ -272,7 +278,7 @@ it('says a plan refusal is about the plan', function () {
 
     portalAs(portalMember(owner: true))->get('/clinic/appointments')
         ->assertForbidden()
-        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error')->where('reason', 'plan_unavailable'));
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error', false)->where('reason', 'plan_unavailable'));
 });
 
 it('never shows a server error\'s message or trace', function () {
@@ -281,7 +287,7 @@ it('never shows a server error\'s message or trace', function () {
 
     portalAs(portalMember(owner: true))->get('/clinic/__portal-test-failure')
         ->assertStatus(500)
-        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error')->where('status', 500)->where('message', null))
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error', false)->where('status', 500)->where('message', null))
         ->assertDontSee('secret database detail');
 });
 
@@ -290,7 +296,7 @@ it('renders too many requests as the portal 429 page', function () {
 
     portalAs(portalMember(owner: true))->get('/clinic/__portal-test-throttle')
         ->assertStatus(429)
-        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error')->where('status', 429));
+        ->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Error', false)->where('status', 429));
 });
 
 it('sends an expired form back to sign in, saying why', function () {
@@ -317,7 +323,7 @@ it('still renders the approved sign-in page, with links that keep the clinic', f
     $this->get('/clinic/login?clinic=portal-dental')
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('Clinic/Auth/ClinicLogin')
+            ->component('Clinic/Auth/ClinicLogin', true)
             ->where('portalLinks.forgotPassword', '/clinic/password/forgot?clinic=portal-dental'));
 });
 

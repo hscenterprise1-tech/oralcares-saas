@@ -40,11 +40,13 @@ test('staff without queue permission are refused every reception route', functio
     'call next' => ['POST', '/clinic/queue/call-next'],
 ]);
 
-test('receptionists and doctors can open the live queue', function (ClinicRole $role) {
-    [$user, $session] = $this->f->memberWithRole($role);
+test('receptionists open the Front Desk; a doctor cannot, even before their practitioner record is set up', function () {
+    [$receptionist, $receptionSession] = $this->f->memberWithRole(ClinicRole::Receptionist);
+    [$doctor, $doctorSession] = $this->f->memberWithRole(ClinicRole::Doctor);
 
-    $this->actingAs($user)->withSession($session)->get('/clinic/reception')->assertOk();
-})->with([ClinicRole::Receptionist, ClinicRole::Doctor]);
+    $this->actingAs($receptionist)->withSession($receptionSession)->get('/clinic/reception')->assertOk();
+    $this->actingAs($doctor)->withSession($doctorSession)->get('/clinic/reception')->assertForbidden();
+});
 
 test('another clinic\'s queue item cannot be moved', function () {
     $this->actingAs($this->f->owner)->withSession($this->f->session)
@@ -92,9 +94,9 @@ test('check-in search never returns another clinic\'s patients', function () {
     expect($response->json('patients.*.short_name'))->toBe(['Their L.']);
 });
 
-test('another clinic\'s queue never appears on this live queue', function () {
+test('another clinic\'s queue never appears on this Front Desk', function () {
     $this->actingAs($this->f->owner)->withSession($this->f->session)->get('/clinic/reception')
-        ->assertInertia(fn ($page) => $page->component('Clinic/Reception/Index')->where('board.queue', []));
+        ->assertInertia(fn ($page) => $page->component('ClinicPortal/FrontDesk/Index', false)->where('desk.waiting', [])->where('desk.counts.waiting', 0));
 });
 
 test('an emergency can be marked by queue staff and is logged', function () {

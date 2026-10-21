@@ -232,7 +232,7 @@ it('shows the valid invitation state with the employee and clinic names', functi
     $acceptUrl = URL::temporarySignedRoute('clinic.invitation.accept', now()->addDays(3), ['token' => $token]);
 
     $this->get($acceptUrl)->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/AcceptInvitation')
+        ->component('Clinic/Auth/AcceptInvitation', true)
         ->where('status', 'valid')
         ->where('employeeName', 'Preview Staff')
         ->where('email', 'preview@example.com')
@@ -269,7 +269,7 @@ it('tells the invitee which role they are being invited as', function () {
     $acceptUrl = URL::temporarySignedRoute('clinic.invitation.accept', now()->addDays(3), ['token' => $token]);
 
     $this->get($acceptUrl)->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/AcceptInvitation')
+        ->component('Clinic/Auth/AcceptInvitation', true)
         ->where('roleName', ClinicRole::Receptionist->value)
     );
 });
@@ -326,7 +326,7 @@ it('shows the invalid state for a tampered signature instead of aborting', funct
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/AcceptInvitation')
+        ->component('Clinic/Auth/AcceptInvitation', true)
         ->where('status', 'invalid')
     );
 });
@@ -354,7 +354,7 @@ it('shows the invalid state for an expired invitation', function () {
     $acceptUrl = URL::temporarySignedRoute('clinic.invitation.accept', now()->addDays(3), ['token' => $token]);
 
     $this->get($acceptUrl)->assertInertia(fn ($page) => $page
-        ->component('Clinic/Auth/AcceptInvitation')
+        ->component('Clinic/Auth/AcceptInvitation', true)
         ->where('status', 'invalid')
     );
 });

@@ -6,6 +6,15 @@ use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @deprecated Dead legacy duplicate of `App\Services\Patient\PatientRegistrationService`,
+ * the canonical registration writer. No route, controller, job or binding uses
+ * this class; its only caller is `tests/Feature/PatientRegistrationTest.php`.
+ * It cannot register a patient on the current schema: it never sets
+ * `clinic_id` (NOT NULL), invents a random UHID instead of `UhidGenerator`,
+ * and — despite its name — never runs the duplicate gate (`$force` is unused).
+ * Do not call it. Deletion (with that test) awaits approval.
+ */
 class PatientRegistrationService
 {
     public function __construct(

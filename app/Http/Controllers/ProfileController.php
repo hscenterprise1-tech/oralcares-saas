@@ -3,10 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use App\UserType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
 
@@ -39,41 +37,19 @@ class ProfileController extends Controller
     }
 
     /**
-     * Delete the user's account.
+     * Refuse to delete an account from its own profile.
+     *
+     * No account is closed by the person holding it. A company account carries
+     * assignments, approvals and an audit trail; a clinic account is the
+     * author of clinical records, and deleting the user row cascaded away its
+     * sign-in history and the patients' doctor-assignment history, and let a
+     * clinic's primary owner orphan the clinic. Closing an account is an
+     * administrative act: staff are deactivated by the clinic, memberships
+     * suspended, company users retired by HQ. Refused before the password is
+     * checked, so nothing about the account is confirmed or denied.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(): never
     {
-        /*
-         * Company and HQ accounts are not closed by the person holding them.
-         *
-         * A company account carries assignments, approvals and an audit trail
-         * that other people's records point at, so removing one is an
-         * administrative act rather than a setting. Refused before the password
-         * is even checked, so nothing about the account is confirmed or denied
-         * along the way.
-         *
-         * The route and the form are shared with the clinic portal and are
-         * unchanged for it; only who may use them differs.
-         */
-        $user = $request->user();
-
-        abort_if(
-            $user->isMasterAdmin() || $user->user_type === UserType::CompanyUser,
-            403,
-            'A company account cannot be deleted from the profile page.'
-        );
-
-        $request->validateWithBag('userDeletion', [
-            'password' => ['required', 'current_password'],
-        ]);
-
-        Auth::logout();
-
-        $user->delete();
-
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return Redirect::to('/');
+        abort(403, 'Accounts are closed by an administrator, not from the profile page.');
     }
 }

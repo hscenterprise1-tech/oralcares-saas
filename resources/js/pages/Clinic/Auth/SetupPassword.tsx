@@ -1,6 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { KeyRound, LinkIcon } from 'lucide-react';
-import { CrmButton, CrmFormField, CrmInput } from '@/pages/Company/design';
+import { AuthButton, AuthField, AuthInput } from '../components/AuthControls';
 import { ClinicPreAuthShell } from '../components/ClinicPreAuthShell';
 import { PasswordInput } from '../components/PasswordInput';
 
@@ -70,18 +70,18 @@ export default function SetupPassword({ status, mode, email, clinicName, clinicL
         clinicLogo={clinicLogo}
       >
         <div className="flex flex-col items-center py-2 text-center">
-          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-ovs-crm-accent-coral-soft">
-            <LinkIcon className="h-7 w-7 text-ovs-crm-accent-coral" aria-hidden="true" />
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-clinic-accent-coral-soft">
+            <LinkIcon className="h-7 w-7 text-clinic-accent-coral" aria-hidden="true" />
           </div>
-          <h2 className="text-[20px] font-bold tracking-[-0.022em] text-ovs-crm-text-primary [text-wrap:balance]">
+          <h2 className="text-[20px] font-bold tracking-[-0.022em] text-clinic-ink [text-wrap:balance]">
             This link doesn&apos;t work anymore
           </h2>
-          <p className="mt-2 max-w-[34ch] text-[13px] leading-relaxed text-ovs-crm-text-secondary">{copy.deadBody}</p>
+          <p className="mt-2 max-w-[34ch] text-[13px] leading-relaxed text-clinic-secondary">{copy.deadBody}</p>
 
           {mode === 'reset' && (
             <Link
               href={route('clinic.password.request') + window.location.search}
-              className="mt-6 flex min-h-[44px] items-center rounded text-[13px] font-semibold text-ovs-crm-brand-strong hover:text-ovs-crm-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ovs-crm-ink/25"
+              className="mt-6 flex min-h-[44px] items-center rounded text-[13px] font-semibold text-clinic-brand-strong hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-ink/25"
             >
               Send me a new link
             </Link>
@@ -106,18 +106,18 @@ export default function SetupPassword({ status, mode, email, clinicName, clinicL
          * password with (`autocomplete="username"`), so the saved entry is
          * usable on the login page later.
          */}
-        <CrmFormField label="Account">
-          <CrmInput
+        <AuthField label="Account">
+          <AuthInput
             type="email"
             name="email"
             value={email ?? ''}
             autoComplete="username"
             readOnly
-            className="bg-ovs-crm-surface-inset"
+            className="bg-clinic-inset"
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmFormField label="New password" hint={errors.password ? undefined : PASSWORD_HINT} error={errors.password}>
+        <AuthField label="New password" hint={errors.password ? undefined : PASSWORD_HINT} error={errors.password}>
           <PasswordInput
             name="password"
             value={data.password}
@@ -127,9 +127,9 @@ export default function SetupPassword({ status, mode, email, clinicName, clinicL
             invalid={!!errors.password}
             autoFocus
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmFormField label="Confirm password" error={errors.password_confirmation}>
+        <AuthField label="Confirm password" error={errors.password_confirmation}>
           <PasswordInput
             name="password_confirmation"
             value={data.password_confirmation}
@@ -138,11 +138,11 @@ export default function SetupPassword({ status, mode, email, clinicName, clinicL
             readOnly={processing}
             invalid={!!errors.password_confirmation}
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmButton type="submit" tone="primary" size="lg" icon={KeyRound} loading={processing} className="w-full">
+        <AuthButton type="submit" tone="primary" size="lg" icon={KeyRound} loading={processing} className="w-full">
           {copy.submit}
-        </CrmButton>
+        </AuthButton>
       </form>
     </ClinicPreAuthShell>
   );

@@ -26,7 +26,7 @@ it('issues a prescription with multiple items', function () {
 
     $this->actingAs($user);
 
-    $service = new ClinicalPrescriptionService;
+    $service = app(ClinicalPrescriptionService::class);
 
     $prescription = $service->issuePrescription($encounter, [
         'notes' => 'Take with food',

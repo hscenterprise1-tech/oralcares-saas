@@ -79,7 +79,7 @@ test('appointments index lists scheduled appointments and practitioners', functi
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Appointments/Index')
+        ->component('ClinicPortal/Appointments/Index', true)
         ->has('appointments', 1)
         ->where('appointments.0.patient.name', 'Ritu Saxena')
         ->has('providers', 1)

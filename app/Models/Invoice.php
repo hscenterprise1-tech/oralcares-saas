@@ -3,16 +3,32 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use App\Traits\ClinicScoped;
+use App\Traits\InheritsClinicOwnership;
 use App\Traits\OrganizationScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
+/**
+ * Legacy, read-only (ADR-001 §G). Clinic bills are `PatientBilling`; this
+ * table is kept only so historical rows stay readable, and any write is
+ * refused.
+ */
 class Invoice extends Model
 {
-    use Auditable, OrganizationScoped;
+    use Auditable, ClinicScoped, InheritsClinicOwnership, OrganizationScoped;
+
+    protected static function booted(): void
+    {
+        foreach (['creating', 'updating', 'deleting'] as $event) {
+            static::$event(fn () => throw new LogicException('Legacy invoices are read-only; clinic bills are PatientBilling.'));
+        }
+    }
 
     protected $fillable = [
+        'clinic_id',
         'organization_id',
         'patient_id',
         'encounter_id',

@@ -5,6 +5,7 @@ namespace App\Services\Provisioning;
 use App\Models\Clinic;
 use App\Models\CompanyPlan;
 use App\Models\CompanySubscription;
+use App\Models\CompanySubscriptionAddon;
 use App\Models\License;
 use App\Models\Organization;
 use Carbon\CarbonInterface;
@@ -53,15 +54,14 @@ class EntitlementResolver
         return $this->fromSubscription($subscription, $organization);
     }
 
-    /** The same, resolved from the clinic the portal routes by. */
+    /**
+     * The same, resolved from the clinic the portal routes by: its most
+     * recent subscription, whatever its status
+     * (`ClinicSubscriptionSelector::forAccess`).
+     */
     public function forClinic(Clinic $clinic): array
     {
-        $subscription = CompanySubscription::query()
-            ->where('clinic_id', $clinic->id)
-            ->latest('id')
-            ->first();
-
-        return $this->fromSubscription($subscription, $clinic->organization);
+        return $this->fromSubscription(app(ClinicSubscriptionSelector::class)->forAccess($clinic), $clinic->organization);
     }
 
     /**
@@ -107,7 +107,8 @@ class EntitlementResolver
                 'storage_mb' => $license?->storage_limit_mb ?? $this->planStorageMb($plan),
             ],
 
-            'modules' => $this->modulesFor($plan),
+            // The plan's modules, plus any bought as an add-on ("module:<key>").
+            'modules' => array_values(array_unique([...$this->modulesFor($plan), ...$this->addonModules($subscription)])),
 
             /*
              * No quota column exists on plans, accounts or licences, so this is
@@ -187,6 +188,23 @@ class EntitlementResolver
         $modules = $plan->features()->pluck('key')->all();
 
         return $modules !== [] ? $modules : self::FALLBACK_MODULES;
+    }
+
+    /**
+     * Modules sold on top of the plan: active subscription add-ons of type
+     * "module:<key>".
+     *
+     * @return list<string>
+     */
+    public function addonModules(CompanySubscription $subscription): array
+    {
+        return CompanySubscriptionAddon::query()
+            ->where('company_subscription_id', $subscription->id)
+            ->where('is_active', true)
+            ->where('addon_type', 'like', 'module:%')
+            ->pluck('addon_type')
+            ->map(fn (string $type) => substr($type, strlen('module:')))
+            ->filter()->values()->all();
     }
 
     /**

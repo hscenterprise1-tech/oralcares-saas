@@ -14,11 +14,21 @@ class PatientDentalChart extends Model
     protected $fillable = [
         'clinic_id',
         'patient_id',
+        'encounter_id',
         'tooth_number',
         'status',
+        'surfaces',
         'notes',
         'updated_by_doctor_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'surfaces' => 'array',
+            'tooth_number' => 'integer',
+        ];
+    }
 
     public function clinic(): BelongsTo
     {

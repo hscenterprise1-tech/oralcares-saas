@@ -2,18 +2,25 @@
 
 namespace App\Services;
 
+use App\ClinicDocument;
 use App\Models\BillingReference;
 use App\Models\Clinic;
-use App\Models\ClinicalEncounter;
-use App\Models\LabOrder;
 use App\Models\Patient;
-use App\Models\Prescription;
-use App\Models\XrayRecord;
+use App\Services\Numbering\ClinicDocumentNumbers;
 
+/**
+ * Clinical document numbers for the older clinical services. Every number
+ * here is issued by `ClinicDocumentNumbers` from a locked sequence; it used
+ * to be "count the existing rows + 1", which two concurrent requests both
+ * read as the same number.
+ */
 class ClinicalIdentifierService
 {
+    public function __construct(protected ClinicDocumentNumbers $numbers) {}
+
     /**
-     * Generate unique Patient number.
+     * Legacy `patients.patient_number` (patients are identified by UHID, from
+     * `UhidGenerator`). Kept for the old registration path only.
      */
     public function generatePatientNumber(Clinic $clinic): string
     {
@@ -23,58 +30,29 @@ class ClinicalIdentifierService
         return "PT-{$clinic->id}-{$padded}";
     }
 
-    /**
-     * Generate unique Encounter/Visit number.
-     */
     public function generateVisitNumber(Clinic $clinic): string
     {
-        $count = ClinicalEncounter::where('clinic_id', $clinic->id)->count() + 1;
-        $padded = str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-
-        return "ENC-{$clinic->id}-{$padded}";
+        return $this->numbers->next(ClinicDocument::Encounter, $clinic);
     }
 
-    /**
-     * Generate unique Prescription number.
-     */
     public function generatePrescriptionNumber(Clinic $clinic): string
     {
-        $count = Prescription::whereHas('encounter', function ($q) use ($clinic) {
-            $q->where('clinic_id', $clinic->id);
-        })->count() + 1;
-        $padded = str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-
-        return "RX-{$clinic->id}-{$padded}";
+        return $this->numbers->next(ClinicDocument::Prescription, $clinic);
     }
 
-    /**
-     * Generate unique X-Ray scan number.
-     */
     public function generateXrayNumber(Clinic $clinic): string
     {
-        $count = XrayRecord::whereHas('patient', function ($q) use ($clinic) {
-            $q->where('clinic_id', $clinic->id);
-        })->count() + 1;
-        $padded = str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-
-        return "XR-{$clinic->id}-{$padded}";
+        return $this->numbers->next(ClinicDocument::Imaging, $clinic);
     }
 
-    /**
-     * Generate unique Lab Order number.
-     */
     public function generateLabOrderNumber(Clinic $clinic): string
     {
-        $count = LabOrder::whereHas('patient', function ($q) use ($clinic) {
-            $q->where('clinic_id', $clinic->id);
-        })->count() + 1;
-        $padded = str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-
-        return "LB-{$clinic->id}-{$padded}";
+        return $this->numbers->next(ClinicDocument::LabOrder, $clinic);
     }
 
     /**
-     * Generate unique Billing Reference number.
+     * Legacy treatment-execution billing reference (clinic bills carry their
+     * own invoice numbers). Count-based, kept for that path only.
      */
     public function generateBillingReference(Clinic $clinic): string
     {

@@ -182,15 +182,15 @@ test('treatment planning drafts procedures, prescriptions, labs, and xrays', fun
         ],
     ], 'Take after food.');
 
-    expect($rx->prescription_number)->toBe("RX-{$clinic->id}-00001")
+    expect($rx->prescription_number)->toMatch('/^RX-[0-9]{4}-000001$/')
         ->and($rx->items)->toHaveCount(1);
 
     // 3. X-Ray & Lab Requests
     $xr = $planService->requestXray($encounter, $patient, 'OPG request');
     $lb = $planService->requestLab($encounter, $patient, 'Crown fabrication');
 
-    expect($xr->xray_number)->toBe("XR-{$clinic->id}-00001")
-        ->and($lb->lab_order_number)->toBe("LB-{$clinic->id}-00001");
+    expect($xr->xray_number)->toMatch('/^IMG-[0-9]{4}-000001$/')
+        ->and($lb->lab_order_number)->toMatch('/^LAB-[0-9]{4}-000001$/');
 });
 
 test('patient summary compiler output', function () {

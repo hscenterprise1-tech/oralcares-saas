@@ -26,7 +26,10 @@ class ProcessMarketingContactImportJob implements ShouldQueue
         public array $rows,
         public ?int $organizationId,
         public ?int $userId
-    ) {}
+    ) {
+        // Long-running: its own queue, so it never delays interactive work.
+        $this->onQueue(config('queue.queues.imports'));
+    }
 
     public function handle(ContactImportService $importService): void
     {

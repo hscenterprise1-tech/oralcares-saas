@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
 class TreatmentPlanningService
 {
     public function __construct(
-        protected ClinicalIdentifierService $identifierService
+        protected ClinicalIdentifierService $identifierService,
+        protected ClinicalPrescriptionService $prescriptions,
     ) {}
 
     /**
@@ -69,32 +70,12 @@ class TreatmentPlanningService
         array $items,
         ?string $notes = null
     ): Prescription {
-        return DB::transaction(function () use ($encounter, $doctor, $items, $notes) {
-            $rxNumber = $this->identifierService->generatePrescriptionNumber($encounter->clinic);
+        // Through the one prescription writer, never a second Rx path.
+        $rx = $this->prescriptions->issuePrescription($encounter, ['notes' => $notes], $items, $doctor);
 
-            $rx = Prescription::create([
-                'encounter_id' => $encounter->id,
-                'patient_id' => $encounter->patient_id,
-                'doctor_id' => $doctor->id,
-                'prescription_number' => $rxNumber,
-                'status' => 'active',
-                'notes' => $notes,
-            ]);
+        event(new PrescriptionDrafted($rx));
 
-            foreach ($items as $item) {
-                $rx->items()->create([
-                    'drug_name' => $item['drug_name'],
-                    'dosage' => $item['dosage'],
-                    'frequency' => $item['frequency'],
-                    'duration' => $item['duration'],
-                    'instructions' => $item['instructions'] ?? null,
-                ]);
-            }
-
-            event(new PrescriptionDrafted($rx));
-
-            return $rx;
-        });
+        return $rx;
     }
 
     /**

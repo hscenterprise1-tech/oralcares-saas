@@ -63,18 +63,34 @@ test('I finish with the current patient before calling the next', function () {
         ->assertSessionHasErrors(['status' => 'Finish with Current P. first.']);
 });
 
-test('done and call next completes the current patient and calls the next in one tap', function () {
+test('done and call next completes the current patient and calls the next in one step', function () {
     $current = ($this->checkIn)('Current');
     $this->travel(1)->minute();
     $next = ($this->checkIn)('Next');
     app(QueueStateMachine::class)->start($current);
 
-    $this->actingAs($this->doctorUser)->withSession($this->doctorSession)
-        ->patch("/clinic/reception/queue/{$current->id}/status", ['action' => 'complete', 'then_call_next' => true])
-        ->assertSessionHas('success', 'Done. Next P. has been called.');
+    $called = app(DoctorQueue::class)->completeAndCallNext($this->f->clinic, $this->f->branch, $this->me, $current);
 
     expect($current->fresh()->status)->toBe(QueueItemStatus::Completed)
+        ->and($called?->id)->toBe($next->id)
         ->and($next->fresh()->status)->toBe(QueueItemStatus::Called);
+});
+
+test('the queue page cannot mark a patient done: the doctor finishes the visit by signing it', function () {
+    $current = ($this->checkIn)('Current');
+    app(QueueStateMachine::class)->start($current);
+
+    // The Front Desk is not the doctor's workspace: its endpoints are closed to them outright.
+    $this->actingAs($this->doctorUser)->withSession($this->doctorSession)
+        ->patch("/clinic/reception/queue/{$current->id}/status", ['action' => 'complete'])
+        ->assertForbidden();
+    // And Reception, whose workspace it is, cannot finish a visit there either.
+    [$receptionist, $session] = $this->f->memberWithRole(ClinicRole::Receptionist);
+    $this->actingAs($receptionist)->withSession($session)
+        ->patch("/clinic/reception/queue/{$current->id}/status", ['action' => 'complete'])
+        ->assertSessionHasErrors('action');
+
+    expect($current->fresh()->status)->toBe(QueueItemStatus::InConsultation);
 });
 
 test('now and next shows who is with me, who is next, and how many wait after', function () {

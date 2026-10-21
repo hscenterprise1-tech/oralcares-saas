@@ -5,12 +5,17 @@ namespace App\Policies;
 use App\ClinicPermission;
 use App\Models\Patient;
 use App\Models\User;
+use App\PatientStatus;
 use App\Services\ClinicContext;
+use App\Services\Patient\PatientBranchAccess;
 use App\UserType;
 
 class PatientPolicy
 {
-    public function __construct(protected ClinicContext $clinicContext) {}
+    public function __construct(
+        protected ClinicContext $clinicContext,
+        protected PatientBranchAccess $branchAccess,
+    ) {}
 
     /**
      * Only ClinicUsers (reception, doctor, billing, etc.) and MasterAdmin can access patients.
@@ -49,7 +54,8 @@ class PatientPolicy
             }
         }
 
-        return $user->hasClinicPermission(ClinicPermission::PatientView);
+        // A branch-limited member opens only patients seen at one of their branches.
+        return $user->hasClinicPermission(ClinicPermission::PatientView) && $this->branchAccess->allows($patient);
     }
 
     /**
@@ -79,7 +85,12 @@ class PatientPolicy
             }
         }
 
-        return $user->hasClinicPermission(ClinicPermission::PatientEdit);
+        // An archived record is kept read-only; a merged one lives on in its survivor.
+        if (! in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true)) {
+            return false;
+        }
+
+        return $user->hasClinicPermission(ClinicPermission::PatientEdit) && $this->branchAccess->allows($patient);
     }
 
     /**
@@ -105,6 +116,11 @@ class PatientPolicy
         }
 
         if ($this->clinicContext->hasClinic() && $patient->clinic_id !== $this->clinicContext->clinic()->id) {
+            return false;
+        }
+
+        // A branch-limited member writes only for patients seen at one of their branches.
+        if (! $this->branchAccess->allows($patient)) {
             return false;
         }
 

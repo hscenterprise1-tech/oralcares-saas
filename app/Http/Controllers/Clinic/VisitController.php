@@ -32,12 +32,12 @@ class VisitController extends Controller
         }
 
         $branch = $this->clinicContext->branchScopeOrAbort();
-        $date = $request->input('date');
+        $date = $request->validate(['date' => ['nullable', 'date']])['date'] ?? null;
 
         $query = PatientVisit::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->when($branch, fn ($q) => $q->where('branch_id', $branch->id))
-            ->when($date, fn ($q) => $q->whereDate('visit_date', $date))
+            ->when($date, fn ($q) => $q->whereOnDate('visit_date', $date))
             ->with(['patient', 'doctor', 'branch', 'caseNumber', 'queueItem'])
             ->orderBy('visit_date', 'desc')
             ->orderBy('id', 'desc');

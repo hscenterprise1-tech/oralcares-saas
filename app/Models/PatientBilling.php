@@ -8,6 +8,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * A clinic bill (invoice) — the canonical clinic billing record (ADR-001 §G).
+ *
+ * Owned by a clinic and issued by a branch, whose financial-year series
+ * numbers it. Amounts are kept by `App\Services\BillingService` and
+ * `PaymentService` only: `total_amount` is the gross of its lines,
+ * `final_amount` what the patient owes after discounts and tax, and
+ * `outstanding_balance` what remains after payments and refunds.
+ */
 class PatientBilling extends Model
 {
     use ClinicScoped;
@@ -19,11 +28,21 @@ class PatientBilling extends Model
         'branch_id',
         'doctor_id',
         'billing_number',
+        'financial_year',
         'status',
         'total_amount',
         'discount_amount',
+        'tax_amount',
         'final_amount',
+        'paid_amount',
+        'refunded_amount',
+        'adjusted_amount',
         'outstanding_balance',
+        'notes',
+        'issued_at',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
         'created_by',
         'updated_by',
     ];
@@ -34,8 +53,14 @@ class PatientBilling extends Model
             'status' => BillingStatus::class,
             'total_amount' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
             'final_amount' => 'decimal:2',
+            'paid_amount' => 'decimal:2',
+            'refunded_amount' => 'decimal:2',
+            'adjusted_amount' => 'decimal:2',
             'outstanding_balance' => 'decimal:2',
+            'issued_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -74,6 +99,11 @@ class PatientBilling extends Model
         return $this->belongsTo(ClinicEmployee::class, 'updated_by');
     }
 
+    public function canceller(): BelongsTo
+    {
+        return $this->belongsTo(ClinicEmployee::class, 'cancelled_by');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(PatientBillingItem::class);
@@ -87,5 +117,10 @@ class PatientBilling extends Model
     public function refunds(): HasMany
     {
         return $this->hasMany(PatientBillingRefund::class);
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->status === BillingStatus::Cancelled;
     }
 }

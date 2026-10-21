@@ -6,6 +6,11 @@ use App\Models\Branch;
 use App\Models\QueueDisplay;
 use Illuminate\Database\Eloquent\Collection;
 
+/**
+ * @deprecated The first waiting-room display service. Only its own test calls it; no
+ * route or page reaches it. Kept until that test is retired with approval;
+ * build nothing on it.
+ */
 class QueueDisplayService
 {
     /**

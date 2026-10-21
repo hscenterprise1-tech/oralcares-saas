@@ -2,8 +2,11 @@
 
 namespace App\Shared\Search\Repositories;
 
-use App\Models\Clinic;
+use App\ClinicPermission;
+use App\Models\Patient;
+use App\Models\PatientBilling;
 use App\Models\User;
+use App\Services\ClinicContext;
 use App\Shared\Search\Models\SearchDocument;
 use App\UserType;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -11,6 +14,18 @@ use Illuminate\Support\Facades\DB;
 
 class SearchRepository
 {
+    /**
+     * Index document types that hold a clinic's own records, with the clinic
+     * permission needed to look each one up. A clinic user finds only these,
+     * in their active clinic; HQ never finds them.
+     *
+     * @var array<class-string, ClinicPermission>
+     */
+    public const CLINIC_DOCUMENT_TYPES = [
+        Patient::class => ClinicPermission::PatientSearch,
+        PatientBilling::class => ClinicPermission::BillingView,
+    ];
+
     /**
      * Perform a global search across indexed documents.
      */
@@ -25,35 +40,39 @@ class SearchRepository
         /*
          * 1. Tenant scoping.
          *
-         * This read `$user->clinic_id`, and `users` has no such column — so the
-         * condition was never true and nothing was ever scoped. Every
-         * authenticated user, clinic tenants included, could read the whole
-         * index through the command palette: HQ's leads, accounts, commercial
-         * documents and employee records.
+         * A clinic user searches the clinic they are working in — the active
+         * `ClinicContext` clinic — and only the clinic's own records they hold
+         * the permission to look up. It used to be every clinic of
+         * `users.organization_id`, which let a receptionist of one clinic find
+         * a sister clinic's patients without a membership there, and scoped a
+         * login that belongs to clinics of two organisations to whichever one
+         * happened to be stamped on the user row.
          *
-         * The boundary is the one the portals already enforce. HQ oversees every
-         * tenant, so a company user and a master admin see the index whole; a
-         * clinic tenant sees only documents belonging to its own organisation's
-         * clinics, and never a document that belongs to HQ rather than a clinic.
+         * HQ (company users and master admins) sees the head-office index but
+         * never a clinic's clinical records: OralCares sees whether a tenant
+         * uses the product, not its patients.
          */
         if ($this->isTenantUser($user)) {
-            /*
-             * No organisation, no documents. Matching on a null
-             * `organization_id` would instead hand this user every clinic row
-             * that also has none — an unrelated set that happens to share a
-             * missing value.
-             */
-            $clinicIds = $user->organization_id
-                ? Clinic::query()->where('organization_id', $user->organization_id)->pluck('id')
-                : collect();
+            $clinic = app(ClinicContext::class)->clinic();
+            $types = $clinic ? $this->clinicTypesFor($user) : [];
 
-            $q->whereIn('clinic_id', $clinicIds);
+            if ($types === []) {
+                $q->whereRaw('1 = 0');
+            } else {
+                $q->where('clinic_id', $clinic->id)->whereIn('model_type', $types);
+            }
+        } else {
+            $q->whereNotIn('model_type', array_keys(self::CLINIC_DOCUMENT_TYPES));
         }
 
         // 2. Search Query Matching (MySQL FULLTEXT or SQLite LIKE fallback)
+        $booleanQuery = $this->booleanQuery($query);
+
         if (! empty($query)) {
             if (DB::getDriverName() === 'mysql') {
-                $q->whereRaw('MATCH(title, subtitle, searchable_text) AGAINST(? IN BOOLEAN MODE)', [$query.'*']);
+                $booleanQuery === ''
+                    ? $q->whereRaw('1 = 0')
+                    : $q->whereRaw('MATCH(title, subtitle, searchable_text) AGAINST(? IN BOOLEAN MODE)', [$booleanQuery]);
             } else {
                 $q->where(function ($sub) use ($query) {
                     $sub->where('title', 'like', "%{$query}%")
@@ -77,13 +96,40 @@ class SearchRepository
         }
 
         // 4. Sort and Paginate
-        if (! empty($query) && DB::getDriverName() === 'mysql') {
-            $q->orderByRaw('MATCH(title, subtitle, searchable_text) AGAINST(? IN BOOLEAN MODE) DESC', [$query.'*']);
+        if ($booleanQuery !== '' && DB::getDriverName() === 'mysql') {
+            $q->orderByRaw('MATCH(title, subtitle, searchable_text) AGAINST(? IN BOOLEAN MODE) DESC', [$booleanQuery]);
         } else {
             $q->latest('updated_at');
         }
 
         return $q->paginate($perPage);
+    }
+
+    /**
+     * The search text as a FULLTEXT boolean-mode query: each word a prefix
+     * match, with the boolean operators removed so typed input (an email's
+     * `@`, a stray quote) can never become query syntax or a syntax error.
+     */
+    protected function booleanQuery(string $query): string
+    {
+        return collect(preg_split('/\s+/', trim($query)) ?: [])
+            ->map(fn (string $word) => preg_replace('/[+\-><()~*"@]/', '', $word))
+            ->filter(fn (string $word) => $word !== '')
+            ->map(fn (string $word) => $word.'*')
+            ->implode(' ');
+    }
+
+    /**
+     * The indexed document types a clinic user may find in their own clinic.
+     *
+     * @return list<class-string>
+     */
+    protected function clinicTypesFor(User $user): array
+    {
+        return array_keys(array_filter(
+            self::CLINIC_DOCUMENT_TYPES,
+            fn (ClinicPermission $permission) => $user->hasClinicPermission($permission),
+        ));
     }
 
     /**

@@ -2,11 +2,14 @@
 
 namespace App\Services;
 
+use App\ClinicDocument;
 use App\Models\Branch;
+use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
-use App\Models\DoctorProfile;
+use App\Models\ClinicEmployee;
 use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
+use App\Services\Numbering\ClinicDocumentNumbers;
 use Illuminate\Auth\Access\AuthorizationException;
 
 class EncounterManagementService
@@ -17,7 +20,7 @@ class EncounterManagementService
     public function startEncounter(
         Patient $patient,
         Branch $branch,
-        ?DoctorProfile $provider = null,
+        ?ClinicEmployee $doctor = null,
         ?string $encounterType = 'consultation'
     ): ClinicalEncounter {
         if ($patient->clinic_id && $branch->clinic_id && (int) $patient->clinic_id !== (int) $branch->clinic_id) {
@@ -31,10 +34,8 @@ class EncounterManagementService
             }
         }
 
-        // Generate encounter number
-        $encounterNumber = 'ENC-'.date('Ymd').'-'.rand(1000, 9999);
-
         $clinicId = $patient->clinic_id ?? $branch->clinic_id;
+        $encounterNumber = app(ClinicDocumentNumbers::class)->next(ClinicDocument::Encounter, Clinic::query()->findOrFail($clinicId));
         $organizationId = $patient->organization_id ?? $branch->organization_id ?? $patient->clinic?->organization_id;
 
         $encounter = ClinicalEncounter::create([
@@ -42,7 +43,7 @@ class EncounterManagementService
             'clinic_id' => $clinicId,
             'patient_id' => $patient->id,
             'branch_id' => $branch->id,
-            'provider_id' => $provider?->id,
+            'doctor_id' => $doctor?->id,
             'encounter_number' => $encounterNumber,
             'encounter_type' => $encounterType,
             'status' => 'in_progress',

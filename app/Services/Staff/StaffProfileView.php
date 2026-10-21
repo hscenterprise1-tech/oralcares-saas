@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\ClinicContext;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\ClinicClock;
+use App\Support\Specialty\PracticeAreas;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -104,7 +105,7 @@ class StaffProfileView
             'departments:id,name',
             'roles',
             'services:id',
-            'practitionerProfile' => fn ($q) => $q->withoutGlobalScopes()->with(['qualificationRecords', 'primarySpecialty:id,name', 'specialties' => fn ($s) => $s->withoutGlobalScopes()]),
+            'practitionerProfile' => fn ($q) => $q->withoutGlobalScopes()->with(['qualificationRecords', 'primarySpecialty:id,name,practice_area_key', 'specialties' => fn ($s) => $s->withoutGlobalScopes()]),
             'invitations' => fn ($query) => $query->whereNull('accepted_at')->whereNull('revoked_at')->where('expires_at', '>', now())->latest(),
         ]);
 
@@ -241,13 +242,21 @@ class StaffProfileView
     private function practitioner(Practitioner $profile, $today): array
     {
         $expires = $profile->registration_expires_at;
+        $areas = app(PracticeAreas::class);
 
         return [
             'id' => $profile->id,
             'profession' => $profile->profession,
             'headline' => $this->headline($profile),
-            'primary_specialty' => $profile->primarySpecialty ? ['id' => $profile->primarySpecialty->id, 'name' => $profile->primarySpecialty->name] : ($profile->specialty ? ['id' => null, 'name' => $profile->specialty] : null),
-            'additional_specialties' => $profile->specialties->map(fn (ClinicalSpecialty $specialty) => ['id' => $specialty->id, 'name' => $specialty->name])->values(),
+            'credentials' => $profile->credentials(),
+            // What choosing this practitioner resolves to at the desk: module · area.
+            'practice' => collect($profile->practiceAreaKeys())->map(fn (string $key) => [
+                'key' => $key,
+                'label' => $areas->get($key)['label'],
+                'module' => $areas->moduleLabel($areas->get($key)['module']),
+            ])->values()->all(),
+            'primary_specialty' => $profile->primarySpecialty ? ['id' => $profile->primarySpecialty->id, 'name' => $profile->primarySpecialty->name, 'area' => $profile->primarySpecialty->practice_area_key] : ($profile->specialty ? ['id' => null, 'name' => $profile->specialty, 'area' => $areas->match($profile->specialty)] : null),
+            'additional_specialties' => $profile->specialties->map(fn (ClinicalSpecialty $specialty) => ['id' => $specialty->id, 'name' => $specialty->name, 'area' => $specialty->practice_area_key])->values(),
             'experience_years' => $profile->experience_years,
             'bio' => $profile->bio,
             'is_active' => (bool) $profile->is_active,
@@ -284,7 +293,22 @@ class StaffProfileView
      */
     private function specialtyOptions(int $organizationId, ClinicContext $context): array
     {
-        $own = ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $areas = app(PracticeAreas::class);
+        $own = ClinicalSpecialty::withoutGlobalScopes()->where('organization_id', $organizationId)->where('is_active', true)->orderBy('name')->get(['id', 'name', 'practice_area_key']);
+        // A row recorded before areas existed ("Orthodontics") stands for its area.
+        $areaOf = fn (ClinicalSpecialty $specialty) => $areas->get($specialty->practice_area_key) ? $specialty->practice_area_key : $areas->match($specialty->name);
+
+        // The practice areas of every module the clinic practises, grouped by module.
+        $modules = collect($this->access->specialties())->map(fn (string $specialty) => $areas->moduleOfSpecialty($specialty))->filter()->unique();
+        $areaOptions = $modules->flatMap(fn (string $module) => collect($areas->ofModule($module))->map(fn (array $area, string $key) => [
+            'id' => $own->first(fn (ClinicalSpecialty $specialty) => $areaOf($specialty) === $key)?->id,
+            'key' => null,
+            'area' => $key,
+            'name' => $area['label'],
+            'group' => $areas->moduleLabel($module),
+        ])->values());
+
+        $custom = $own->filter(fn (ClinicalSpecialty $specialty) => $areaOf($specialty) === null);
         $categories = collect($this->access->specialties())
             ->flatMap(fn (string $specialty) => config("clinic_staff.specialty_categories.{$specialty}", []))
             ->unique()->values()->all();
@@ -295,11 +319,13 @@ class StaffProfileView
             ->orderBy('position')
             ->limit(60)
             ->get(['key', 'name'])
-            ->reject(fn ($master) => $own->contains(fn (ClinicalSpecialty $specialty) => strcasecmp($specialty->name, $master->name) === 0));
+            ->reject(fn ($master) => $areas->match($master->name) !== null
+                || $own->contains(fn (ClinicalSpecialty $specialty) => strcasecmp($specialty->name, $master->name) === 0));
 
         return [
-            ...$own->map(fn (ClinicalSpecialty $specialty) => ['id' => $specialty->id, 'key' => null, 'name' => $specialty->name])->all(),
-            ...$suggested->map(fn ($master) => ['id' => null, 'key' => $master->key, 'name' => $master->name])->values()->all(),
+            ...$areaOptions->all(),
+            ...$custom->map(fn (ClinicalSpecialty $specialty) => ['id' => $specialty->id, 'key' => null, 'area' => null, 'name' => $specialty->name, 'group' => 'Other specialties'])->values()->all(),
+            ...$suggested->map(fn ($master) => ['id' => null, 'key' => $master->key, 'area' => null, 'name' => $master->name, 'group' => 'Other specialties'])->values()->all(),
         ];
     }
 

@@ -5,6 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @deprecated The first waiting-room display model. No production path uses it (only
+ * `QueueDisplayService` and its test); its table is empty. A future display
+ * will be built on `ClinicQueueItem`. Kept until its test is retired with
+ * approval; build nothing on it.
+ */
 class QueueDisplay extends Model
 {
     protected $fillable = [

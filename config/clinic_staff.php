@@ -55,6 +55,8 @@ return [
         'earned' => 'Earned leave',
         'conference' => 'Conference / training',
         'personal' => 'Personal',
+        // Approved unpaid leave is deducted from monthly pay (`ClinicPayroll`).
+        'unpaid' => 'Unpaid leave',
         'other' => 'Other',
     ],
 

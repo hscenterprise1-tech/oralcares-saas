@@ -18,7 +18,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 /**
- * Everything the Live Queue shows, read from real rows only: today's queue
+ * The queue the Front Desk and Today read, from real rows only: today's queue
  * items, today's appointments, `queue_histories`, leave and shift data.
  *
  * Order is automatic: emergencies first, then by "effective time" — a booked
@@ -47,7 +47,7 @@ class QueueBoard
         $appointments = Appointment::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->where('branch_id', $branch->id)
-            ->whereDate('scheduled_at', $now->toDateString())
+            ->whereOnDate('scheduled_at', $now)
             ->with(['patient', 'practitioner', ...($roomsEnabled ? ['room'] : [])])
             ->orderBy('scheduled_at')
             ->get();
@@ -80,7 +80,7 @@ class QueueBoard
         $queueIds = ClinicQueue::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->where('branch_id', $branch->id)
-            ->whereDate('queue_date', $now->toDateString())
+            ->whereOnDate('queue_date', $now)
             ->pluck('id');
 
         return ClinicQueueItem::whereIn('clinic_queue_id', $queueIds)
@@ -99,7 +99,7 @@ class QueueBoard
         $grace = (int) config('reception.thresholds.late_arrival_minutes', 15);
 
         return $items->sortBy(fn (ClinicQueueItem $item) => [
-            $item->priority === VisitPriority::Emergency ? 0 : 1,
+            $item->priority?->rank() ?? VisitPriority::Normal->rank(),
             self::effectiveTime($item, $grace)?->getTimestamp() ?? PHP_INT_MAX,
             $item->position,
         ])->values();

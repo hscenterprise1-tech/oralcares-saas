@@ -10,6 +10,7 @@ use App\Models\ClinicEmployee;
 use App\Models\ClinicMembership;
 use App\Models\ClinicQueueItem;
 use App\Models\Patient;
+use App\Models\Practitioner;
 use App\Models\User;
 use App\QueueItemStatus;
 use App\Services\ClinicContext;
@@ -50,9 +51,11 @@ beforeEach(function () {
         'designation' => 'General Practitioner',
         'status' => 'active',
     ]);
+    // Only a practitioner can be given patients.
+    Practitioner::create(['clinic_employee_id' => $this->employee->id, 'specialty' => 'General Physician', 'is_active' => true]);
 });
 
-test('reception dashboard renders with operational metrics and patient flow', function () {
+test('the Front Desk renders the day figures and patient flow', function () {
     $patient = Patient::create([
         'clinic_id' => $this->clinic->id,
         'first_name' => 'Vikram',
@@ -79,12 +82,11 @@ test('reception dashboard renders with operational metrics and patient flow', fu
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Reception/Index')
-        ->where('board.summary.booked', 1)
-        ->where('board.summary.checked_in', 0)
-        ->where('board.booking_status.total', 1)
-        ->has('board.queue', 0)
-        ->has('board.doctors')
+        ->component('ClinicPortal/FrontDesk/Index', false)
+        ->where('desk.counts.booked_not_arrived', 1)
+        ->where('desk.counts.waiting', 0)
+        ->has('desk.waiting', 0)
+        ->has('desk.doctors')
     );
 });
 

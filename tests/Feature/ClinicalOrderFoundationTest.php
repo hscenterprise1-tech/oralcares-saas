@@ -26,7 +26,7 @@ it('places a generic clinical order with multiple items', function () {
 
     $this->actingAs($user);
 
-    $service = new ClinicalOrderService;
+    $service = app(ClinicalOrderService::class);
 
     $order = $service->placeOrder($encounter, [
         'order_type' => 'laboratory',
@@ -51,7 +51,7 @@ it('places a generic clinical order with multiple items', function () {
     expect($patient->timelineEvents()->where('event_type', 'clinical_order_placed')->count())->toBe(1);
 });
 
-it('auto-completes order when all items are completed', function () {
+it('completes the order when every item is reviewed', function () {
     $organization = Organization::factory()->create();
     $user = User::factory()->create(['organization_id' => $organization->id]);
     $patient = Patient::factory()->create(['organization_id' => $organization->id]);
@@ -65,7 +65,7 @@ it('auto-completes order when all items are completed', function () {
         'started_at' => now(),
     ]);
 
-    $service = new ClinicalOrderService;
+    $service = app(ClinicalOrderService::class);
 
     $order = $service->placeOrder($encounter, [
         'order_type' => 'imaging',
@@ -77,7 +77,8 @@ it('auto-completes order when all items are completed', function () {
     expect($order->status)->toBe('active');
 
     $item = $order->items()->first();
-    $service->updateItemStatus($item, 'completed');
+    $service->recordResult($item, null, ['summary' => 'No active lung disease.']);
+    $service->review($item, null);
 
     $order->refresh();
 

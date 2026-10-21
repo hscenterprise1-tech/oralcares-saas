@@ -13,7 +13,9 @@ use App\Models\LabOrder;
 use App\Models\LabOrderAttachment;
 use App\Models\Patient;
 use App\Models\TreatmentRecord;
+use DomainException;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class LaboratoryCaseService
 {
@@ -57,6 +59,53 @@ class LaboratoryCaseService
             event(new LaboratoryCaseCreated($labCase));
 
             return $labCase;
+        });
+    }
+
+    /**
+     * Order lab work from a consultation (crown, bridge, denture, aligner…):
+     * the teeth, the restoration, shade and material (from the clinic's lab
+     * masters when set up, else as written), the lab and the date expected.
+     * Optionally tied to the plan item it fulfils. Starts as an order the
+     * clinic has not yet sent.
+     *
+     * @param  array{teeth: list<int>, restoration: string, laboratory_name?: ?string, shade?: ?string, material?: ?string, delivery_due_date?: ?string, notes?: ?string, treatment_record_id?: ?int}  $details
+     */
+    public function order(ClinicalEncounter $encounter, ClinicEmployee $doctor, array $details): LabOrder
+    {
+        return DB::transaction(function () use ($encounter, $doctor, $details) {
+            /** @var ClinicalEncounter $locked */
+            $locked = ClinicalEncounter::query()->withoutGlobalScopes()->whereKey($encounter->id)->lockForUpdate()->firstOrFail();
+            if (! $locked->isEditable()) {
+                throw new DomainException('This consultation is signed. Order lab work in an open consultation.');
+            }
+            $txId = $details['treatment_record_id'] ?? null;
+            if ($txId && ! TreatmentRecord::query()->withoutGlobalScopes()->whereKey($txId)->where('clinic_id', $locked->clinic_id)->where('patient_id', $locked->patient_id)->exists()) {
+                throw new InvalidArgumentException('That treatment is not this patient\'s.');
+            }
+
+            $order = LabOrder::create([
+                'clinic_id' => $locked->clinic_id,
+                'patient_id' => $locked->patient_id,
+                'encounter_id' => $locked->id,
+                'branch_id' => $locked->branch_id,
+                'treatment_record_id' => $txId,
+                'requesting_doctor_id' => $doctor->id,
+                'lab_order_number' => $this->identifierService->generateLabOrderNumber($locked->clinic),
+                'status' => LabCaseStatus::Draft,
+                'laboratory_name' => $details['laboratory_name'] ?? null,
+                'requested_teeth' => array_values($details['teeth']),
+                'restoration' => $details['restoration'],
+                'shade' => $details['shade'] ?? null,
+                'material' => $details['material'] ?? null,
+                'delivery_due_date' => $details['delivery_due_date'] ?? null,
+                'notes' => $details['notes'] ?? null,
+                'created_by' => auth()->id(),
+            ]);
+
+            app(LaboratoryWorkflowService::class)->recordStep($order, 'lab_order_created', null);
+
+            return $order;
         });
     }
 

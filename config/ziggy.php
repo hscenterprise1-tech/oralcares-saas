@@ -38,4 +38,22 @@ return [
         'design-lab',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | The Clinic Portal's own table
+    |--------------------------------------------------------------------------
+    |
+    | Clinic pages resolve only `clinic.*` names by `route()` (the sign-in
+    | links and the New Case / Repeat Case intake); everything else they open
+    | arrives from the server as a finished URL. So a clinic page carries only
+    | those routes, and clinic users are not sent the Company Portal's route
+    | names. `resources/views/app.blade.php` picks this group for clinic
+    | requests; every other page keeps the table above.
+    |
+    */
+
+    'groups' => [
+        'clinic' => ['clinic.*'],
+    ],
+
 ];

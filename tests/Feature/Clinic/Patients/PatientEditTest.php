@@ -10,6 +10,7 @@ use App\Models\PatientMedicalHistory;
 use App\Models\PatientTimelineEvent;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\Patient\PatientClinicalEntries;
 use App\UserType;
 
 beforeEach(function () {
@@ -59,7 +60,7 @@ test('edit page pre-fills the existing patient and hides fields the clinic marke
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Patients/Edit')
+        ->component('ClinicPortal/Patients/Edit', false)
         ->where('patient.first_name', 'Meera')
         ->where('patient.last_name', 'Iyer')
         ->where('patient.phone', '9876533333')
@@ -102,7 +103,7 @@ test('updating a patient syncs allergies and manual alerts, clearing them when t
 
     $response->assertRedirect();
     $this->patient->refresh();
-    expect($this->patient->medicalHistory->allergies)->toBe(['Sulfa Drugs']);
+    expect(app(PatientClinicalEntries::class)->allergyLabels($this->patient))->toBe(['Sulfa Drugs']);
     expect($this->patient->alerts()->where('type', 'manual')->pluck('description')->all())->toBe(['Pacemaker']);
     expect($this->patient->alerts()->where('description', 'Fall risk')->exists())->toBeFalse();
 });

@@ -289,8 +289,14 @@ it('keeps one tenant failure from stopping the rest of the run', function () {
     /*
      * Its clinic row is gone, so loading it returns null and that trial cannot
      * be measured. The run must still finish the others.
+     *
+     * A clinic holding appointments can no longer be deleted outright — its
+     * clinical history restricts the delete (2026-10-02) — so the trial is
+     * pointed at a clinic that does not exist instead, with key checks
+     * deferred to a commit the test never makes (as legacy rows were stored).
      */
-    DB::table('clinics')->where('id', $broken->clinic_id)->delete();
+    DB::statement('PRAGMA defer_foreign_keys = ON');
+    DB::table('trials')->where('id', $broken->id)->update(['clinic_id' => 999999]);
 
     app(TrialUsageSnapshotJob::class)->handle(app(TenantTelemetryService::class), app(TrialLifecycleService::class));
 

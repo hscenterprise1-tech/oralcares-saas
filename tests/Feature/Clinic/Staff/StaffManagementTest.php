@@ -124,7 +124,7 @@ test('the staff list shows status tabs and no contact details', function () {
     ClinicEmployee::create(['clinic_id' => $this->f->clinic->id, 'name' => 'Paused Person', 'status' => 'suspended']);
 
     asAdmin()->get(route('admin.employees.index'))->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Staff/Index')
+        ->component('ClinicPortal/Staff/Index', false)
         ->where('counts.archived', 1)
         ->where('counts.suspended', 1)
         ->where('employees', fn ($rows) => collect($rows)->every(fn ($row) => ! array_key_exists('phone', $row) && ! array_key_exists('email', $row))));
@@ -166,7 +166,7 @@ test('a staff member is invited from their profile', function () {
     asAdmin()->post(route('admin.invitations.store'), ['clinic_employee_id' => $nurse->id, 'email' => 'nina@clinic.test'])->assertSessionHasNoErrors();
 
     expect(ClinicEmployeeInvitation::where('clinic_employee_id', $nurse->id)->exists())->toBeTrue();
-    asAdmin()->get(staffUrl($nurse))->assertInertia(fn ($page) => $page->component('ClinicPortal/Staff/Show')->where('employee.invitation.email', 'nina@clinic.test')->where('practitioner', null));
+    asAdmin()->get(staffUrl($nurse))->assertInertia(fn ($page) => $page->component('ClinicPortal/Staff/Show', false)->where('employee.invitation.email', 'nina@clinic.test')->where('practitioner', null));
 });
 
 // ─── Practitioner profile ───────────────────────────────────
@@ -318,7 +318,7 @@ test('a doctor requests leave; approval blocks booking and lists the affected ap
         ->and($booked->fresh()->status)->toBe(AppointmentStatus::Scheduled);
 
     asAdmin()->get(route('clinic.leave.index', ['leave' => $leave->id]))->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Leave/Index')
+        ->component('ClinicPortal/Leave/Index', false)
         ->where('leaves.0.affected', 1)
         ->has('affected', 1)
         ->where('affected.0.id', $booked->id));
@@ -417,7 +417,7 @@ test('expired and expiring documents are flagged, and required documents are cou
 });
 
 test('the owner sets which documents each staff type needs', function () {
-    asAdmin()->get(route('admin.staff-documents.settings'))->assertInertia(fn ($page) => $page->component('ClinicPortal/Staff/DocumentSettings'));
+    asAdmin()->get(route('admin.staff-documents.settings'))->assertInertia(fn ($page) => $page->component('ClinicPortal/Staff/DocumentSettings', false));
     $address = StaffDocumentType::withoutGlobalScopes()->where('key', 'address_proof')->sole();
 
     asAdmin()->put(route('admin.staff-documents.update'), ['types' => [[

@@ -11,6 +11,7 @@ use App\Services\Backup\BackupEncryptor;
 use App\Services\Security\Malware\ClamAvScanner;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -56,6 +57,14 @@ class SecurityProductionCheck extends Command
         // Mail and queue
         $this->check('both', ! in_array(config('mail.default'), ['log', 'array'], true), 'Mail is actually delivered', 'MAIL_MAILER is "'.config('mail.default').'": password setup and reset links would never arrive');
         $this->check('both', config('queue.default') !== 'sync', 'Queue runs off the request', 'QUEUE_CONNECTION is sync: mail and jobs run inside web requests');
+
+        // Scale: shared, lock-capable infrastructure (ADR-001 §J, §K)
+        $queueConnection = config('queue.default');
+        $this->check('production', $queueConnection === 'redis', 'Queue on Redis', 'QUEUE_CONNECTION is "'.$queueConnection.'": the database queue polls the primary and does not scale to many workers');
+        $this->check('both', (int) config("queue.connections.{$queueConnection}.retry_after", 0) > (int) config('queue.max_job_timeout') || $queueConnection === 'sqs', 'Queue retry_after exceeds the longest job', 'retry_after on "'.$queueConnection.'" is not above queue.max_job_timeout: a running job would be handed to a second worker');
+        $this->check('production', config('cache.default') === 'redis', 'Cache, locks and scheduler mutex on Redis', 'CACHE_STORE is "'.config('cache.default').'": scheduler onOneServer locks, rate limits and permission cache need one shared fast store');
+        $this->check('production', config('session.driver') === 'redis', 'Sessions on Redis', 'SESSION_DRIVER is "'.config('session.driver').'": database sessions write the primary on every request');
+        $this->check('both', $this->privateDiskOpens(), 'Private document storage opens', 'The private disk (driver "'.config('filesystems.disks.private.driver').'") could not be opened: for s3, league/flysystem-aws-s3-v3 must be installed and configured');
 
         // Malware scanning
         $scanner = app(MalwareScannerInterface::class);
@@ -107,6 +116,22 @@ class SecurityProductionCheck extends Command
         $status = $passes ? 'PASS' : ($applies ? 'FAIL' : 'WARN');
 
         $this->results[] = [$status, $requiredFor === 'both' ? 'staging+production' : $requiredFor, $label, $passes ? '' : $failure];
+    }
+
+    /**
+     * Whether the private (patient document) disk can be built at all. An s3
+     * disk without the Flysystem S3 adapter installed fails here rather than
+     * on the first upload in production.
+     */
+    private function privateDiskOpens(): bool
+    {
+        try {
+            Storage::disk('private');
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function backupKeyIsValid(): bool

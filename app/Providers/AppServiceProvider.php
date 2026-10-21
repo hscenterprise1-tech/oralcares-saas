@@ -3,9 +3,13 @@
 namespace App\Providers;
 
 use App\Contracts\MalwareScannerInterface;
+use App\Contracts\TenantConnectionResolver;
 use App\Contracts\VirusScannerInterface;
+use App\Events\QueueItemTransitioned;
 use App\Jobs\SendCampaignMessageJob;
+use App\Models\Appointment;
 use App\Models\Clinic;
+use App\Models\ClinicalEncounter;
 use App\Models\ClinicMembership;
 use App\Models\CommercialDocument;
 use App\Models\CommercialInvoice;
@@ -20,7 +24,11 @@ use App\Models\MarketingCampaignRecipient;
 use App\Models\MarketingContact;
 use App\Models\MarketingWhatsAppConversation;
 use App\Models\Organization;
+use App\Models\PatientBilling;
+use App\Models\PatientBillingPayment;
+use App\Models\PatientTreatmentStage;
 use App\Models\Payment;
+use App\Models\PhysioSession;
 use App\Models\Task;
 use App\Models\Trial;
 use App\Models\User;
@@ -30,7 +38,9 @@ use App\Observers\CRM\LeadObserver;
 use App\Observers\CRM\TrialObserver;
 use App\Observers\Marketing\MarketingContactObserver;
 use App\Observers\Marketing\MarketingWhatsAppConversationObserver;
+use App\Observers\Messaging\PatientMessageObserver;
 use App\Observers\OrganizationObserver;
+use App\Observers\PatientActivityObserver;
 use App\Observers\PaymentObserver;
 use App\Observers\Security\ClinicalAuditObserver;
 use App\Observers\Security\StaffIdentityAuditObserver;
@@ -45,9 +55,11 @@ use App\Services\Backup\DatabaseRestorer;
 use App\Services\Backup\MysqlDumper;
 use App\Services\Backup\MysqlRestorer;
 use App\Services\ClinicContext;
+use App\Services\Communication\PatientMessaging;
 use App\Services\Marketing\MarketingSettingsService;
 use App\Services\OwnerMode\OwnerModeVerifier;
 use App\Services\OwnerMode\PasswordOwnerModeVerifier;
+use App\Services\Platform\SingleDatabaseTenantResolver;
 use App\Services\Security\Malware\ClamAvScanner;
 use App\Services\Security\Malware\FakeMalwareScanner;
 use App\Services\Security\Malware\MalwareScannerVirusAdapter;
@@ -57,11 +69,17 @@ use App\Shared\Search\Observers\SearchIndexObserver;
 use App\Support\ClinicPortalErrors;
 use App\Support\CrmPermissions;
 use App\Support\CrmScope;
+use App\Support\Specialty\SpecialtyEntitlements;
 use App\UserType;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Auth\Middleware\RedirectIfAuthenticated;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
@@ -75,6 +93,11 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(ClinicContext::class);
+        // Which specialty products the clinic bought, read once per request or job.
+        $this->app->scoped(SpecialtyEntitlements::class);
+
+        // Where a clinic's data lives: one primary database today (ADR-001 §P).
+        $this->app->singleton(TenantConnectionResolver::class, SingleDatabaseTenantResolver::class);
 
         // Owner Mode's step-up check. A one-time code or MFA verifier replaces it here.
         $this->app->bind(OwnerModeVerifier::class, PasswordOwnerModeVerifier::class);
@@ -122,6 +145,25 @@ class AppServiceProvider extends ServiceProvider
             config(['app.debug' => false]);
             logger()->critical('APP_DEBUG was true in production and has been forced off. Fix the environment.');
         }
+
+        /*
+         * Day filters that indexes can serve. `whereDate($column, $day)`
+         * compiles to `date(column) = ?`, which wraps the column in a function
+         * so no index on it is usable: on a hospital-sized tenant the
+         * dashboard's "today" counts scanned every appointment the clinic had
+         * ever booked. These compile to a half-open range on the bare column
+         * instead, which is equivalent for DATE and DATETIME columns.
+         */
+        QueryBuilder::macro('whereOnDate', function (string $column, CarbonInterface|string $date) {
+            $day = CarbonImmutable::parse($date)->startOfDay();
+
+            /** @var QueryBuilder $this */
+            return $this->where($column, '>=', $day->toDateString())->where($column, '<', $day->addDay()->toDateString());
+        });
+        QueryBuilder::macro('whereSinceDate', function (string $column, CarbonInterface|string $date) {
+            /** @var QueryBuilder $this */
+            return $this->where($column, '>=', CarbonImmutable::parse($date)->toDateString());
+        });
 
         // The Clinic Portal's own error pages and session-expiry redirect.
         Inertia::handleExceptionsUsing(fn (ExceptionResponse $response) => ClinicPortalErrors::handle($response));
@@ -177,6 +219,9 @@ class AppServiceProvider extends ServiceProvider
         // Catalog *administration* is a management surface. Reps still receive
         // the package list they need for quotations through the lead payload,
         // so restricting this screen does not block their workflow.
+        // Clinic WhatsApp numbers: integrations staff see them; only settings managers enter credentials.
+        Gate::define('clinic-whatsapp.view', fn (User $user) => CrmPermissions::checkAny($user, 'view-integrations', 'manage-settings'));
+        Gate::define('clinic-whatsapp.manage', fn (User $user) => CrmPermissions::check($user, 'manage-settings'));
         Gate::define('crm.packages.view', fn (User $user) => CrmPermissions::check($user, 'view-plans'));
         Gate::define('crm.operations.view', fn (User $user) => CrmPermissions::check($user, 'view-operations'));
         Gate::define('crm.packages.manage', fn (User $user) => CrmPermissions::checkAny($user, 'view-plans', 'manage-settings'));
@@ -266,6 +311,23 @@ class AppServiceProvider extends ServiceProvider
         foreach (array_keys(StaffIdentityAuditObserver::SUBJECTS) as $staffModel) {
             $staffModel::observe(StaffIdentityAuditObserver::class);
         }
+
+        // Where a patient has been seen: the basis of branch-limited patient access.
+        foreach (array_keys(PatientActivityObserver::SUBJECTS) as $activityModel) {
+            $activityModel::observe(PatientActivityObserver::class);
+        }
+
+        // Committed clinic events into patient messages (and their WhatsApp).
+        foreach ([Appointment::class, ClinicalEncounter::class, PatientTreatmentStage::class, PhysioSession::class, PatientBilling::class, PatientBillingPayment::class] as $messagedModel) {
+            $messagedModel::observe(PatientMessageObserver::class);
+        }
+        Event::listen(QueueItemTransitioned::class, function (QueueItemTransitioned $event) {
+            match ($event->action) {
+                'checked_in' => DB::afterCommit(fn () => app(PatientMessaging::class)->checkedIn($event->queueItem)),
+                'call', 'recall' => DB::afterCommit(fn () => app(PatientMessaging::class)->calledIn($event->queueItem->fresh() ?? $event->queueItem)),
+                default => null,
+            };
+        });
 
         /*
          * A clinic or a membership changing standing (active, inactive,

@@ -1,243 +1,166 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import * as Popover from '@radix-ui/react-popover';
-import { Bell, CheckCheck, RefreshCw } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ERROR_COPY, errorKind, requestJson, type ClinicHttpErrorKind } from '../http';
-import type { NotificationItem, Paginated, PortalLinks } from '../types';
-import { toolButton } from '../ui/Button';
-import { LoadingPanel, StatePanel } from '../ui/StatePanel';
+import { useNavigation } from '../context';
+import { NOTIFICATIONS_CHANGED } from '../notifications';
+import { ERROR_COPY, errorKind, requestJson } from '../http';
+import type { PortalLinks } from '../types';
+import { Spinner } from '../ui/Spinner';
 
-const PAGE_SIZE = 10;
-/** The unread count is re-read when the tab regains focus, at most this often. */
-const COUNT_REFRESH_MS = 60_000;
-
-const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-
-export function timeAgo(iso: string, now: number = Date.now()): string {
-  const seconds = Math.round((new Date(iso).getTime() - now) / 1000);
-  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
-    ['day', 86_400],
-    ['hour', 3_600],
-    ['minute', 60],
-  ];
-  for (const [unit, size] of steps) {
-    if (Math.abs(seconds) >= size) {
-      return relativeTime.format(Math.round(seconds / size), unit);
-    }
-  }
-
-  return 'just now';
+interface ClinicNotification {
+  id: string;
+  title: string | null;
+  data?: { title?: string; message?: string } | null;
+  read_at: string | null;
+  created_at: string;
 }
 
-function humanize(value: string | null): string | null {
-  return value ? value.replace(/[_-]+/g, ' ').replace(/^\w/, (first) => first.toUpperCase()) : null;
-}
-
-/** Only a path inside this site is followed; anything else stays put. */
-function safeInternalPath(url: string | undefined): string | null {
-  return url && url.startsWith('/') && !url.startsWith('//') ? url : null;
-}
+/** How often the bell re-reads its unread count while the tab is in view. */
+const UNREAD_POLL_MS = 60_000;
 
 /**
- * The bell: an unread count read once per page (and on refocus, at most once
- * a minute), and the latest notifications fetched only when opened. The
- * server limits both to the clinic this session works in.
+ * The signed-in user's notifications at this clinic (the server scopes them
+ * to the active clinic): an unread count on the bell, kept current every
+ * minute while the tab is in view, the latest few when it opens, "mark all
+ * read", and the way to all of them.
  */
 export function NotificationsMenu({ links }: { links: PortalLinks }) {
-  const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState<number | null>(null);
-  const [items, setItems] = useState<NotificationItem[] | null>(null);
-  const [failure, setFailure] = useState<ClinicHttpErrorKind | null>(null);
-  const [loading, setLoading] = useState(false);
-  const lastCountAt = useRef(0);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<ClinicNotification[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const page = useNavigation().find((item) => item.key === 'notifications' && item.available && item.href !== null);
 
-  const loadCount = useCallback(async () => {
-    lastCountAt.current = Date.now();
-    try {
-      const result = await requestJson<{ count: number }>('GET', links.notificationsUnreadCount);
-      setUnread(result.count);
-    } catch {
-      // The badge is a hint; leaving it as it was is the right failure.
+  // Set when the session has ended or access was refused: the bell stops asking.
+  const stopped = useRef(false);
+  const inFlight = useRef(false);
+
+  const refreshCount = useCallback(() => {
+    if (stopped.current || inFlight.current) {
+      return;
     }
+    inFlight.current = true;
+    requestJson<{ count: number }>('GET', links.notificationsUnreadCount)
+      .then((result) => setUnread(result.count))
+      .catch((error) => {
+        const kind = errorKind(error);
+        if (kind === 'unauthenticated' || kind === 'session_expired' || kind === 'forbidden') {
+          stopped.current = true;
+        }
+        setUnread(null);
+      })
+      .finally(() => {
+        inFlight.current = false;
+      });
   }, [links.notificationsUnreadCount]);
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
-    setFailure(null);
-    try {
-      const result = await requestJson<Paginated<NotificationItem>>('GET', links.notifications, {
-        query: { per_page: PAGE_SIZE },
-      });
-      setItems(result.data);
-    } catch (error) {
-      setFailure(errorKind(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [links.notifications]);
+  useEffect(refreshCount, [refreshCount]);
 
+  // Every minute while the tab is in view; at once when it comes back into view.
   useEffect(() => {
-    void loadCount();
-    const onFocus = () => {
-      if (Date.now() - lastCountAt.current > COUNT_REFRESH_MS) {
-        void loadCount();
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        refreshCount();
+      }
+    }, UNREAD_POLL_MS);
+    const onVisibility = () => {
+      if (!document.hidden) {
+        refreshCount();
       }
     };
-    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
 
-    return () => window.removeEventListener('focus', onFocus);
-  }, [loadCount]);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refreshCount]);
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) {
-      void loadList();
+  useEffect(() => {
+    window.addEventListener(NOTIFICATIONS_CHANGED, refreshCount);
+
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, refreshCount);
+  }, [refreshCount]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
     }
+    setFailure(null);
+    requestJson<{ data: ClinicNotification[] }>('GET', links.notifications, { query: { per_page: 8 } })
+      .then((page) => setItems(page.data))
+      .catch((error) => setFailure(ERROR_COPY[errorKind(error)]));
+  }, [open, links.notifications]);
+
+  const markAllRead = () => {
+    requestJson('POST', links.notificationsMarkAllRead)
+      .then(() => {
+        setUnread(0);
+        setItems((current) => current?.map((item) => ({ ...item, read_at: item.read_at ?? new Date().toISOString() })) ?? null);
+      })
+      .catch((error) => setFailure(ERROR_COPY[errorKind(error)]));
   };
-
-  const markRead = async (item: NotificationItem) => {
-    const target = safeInternalPath(item.data?.url);
-    if (!item.read_at) {
-      setItems(
-        (current) =>
-          current?.map((entry) => (entry.id === item.id ? { ...entry, read_at: new Date().toISOString() } : entry)) ??
-          null,
-      );
-      setUnread((count) => (count === null ? count : Math.max(0, count - 1)));
-      try {
-        await requestJson('PATCH', `${links.notifications}/${encodeURIComponent(item.id)}/read`);
-      } catch {
-        void loadCount();
-      }
-    }
-    if (target) {
-      setOpen(false);
-      router.visit(target);
-    }
-  };
-
-  const markAllRead = async () => {
-    try {
-      await requestJson('POST', links.notificationsMarkAllRead);
-      setItems(
-        (current) =>
-          current?.map((entry) => ({ ...entry, read_at: entry.read_at ?? new Date().toISOString() })) ?? null,
-      );
-      setUnread(0);
-    } catch (error) {
-      setFailure(errorKind(error));
-    }
-  };
-
-  const badge = unread && unread > 0 ? (unread > 99 ? '99+' : String(unread)) : null;
 
   return (
-    <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger aria-label={badge ? `Notifications, ${unread} unread` : 'Notifications'} className={toolButton}>
-        <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
-        {badge && (
-          <span
-            aria-hidden="true"
-            className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-clinic-danger px-1 text-center text-[10px] font-bold leading-[18px] text-white ring-2 ring-clinic-surface"
-          >
-            {badge}
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
+        aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
+        className="relative flex h-11 w-11 items-center justify-center rounded-full text-cx-nav-muted hover:bg-cx-nav-bg hover:text-cx-nav-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
+      >
+        <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+        {unread ? (
+          <span className="absolute right-1 top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-cx-rose-ink px-1 text-[10.5px] font-bold text-white">
+            {unread > 9 ? '9+' : unread}
           </span>
-        )}
+        ) : null}
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           align="end"
           sideOffset={8}
           collisionPadding={16}
-          aria-label="Notifications"
-          className="z-50 flex max-h-[min(520px,calc(100vh-96px))] w-[min(380px,calc(100vw-32px))] flex-col rounded-2xl border border-clinic-border bg-clinic-surface shadow-[0_16px_40px_-12px_rgba(16,24,40,0.25)] focus:outline-none"
+          className="z-50 w-[min(340px,calc(100vw-32px))] rounded-2xl border border-cx-nav-line bg-white shadow-cx-raised focus:outline-none"
         >
-          <div className="flex items-center justify-between gap-2 border-b border-clinic-border px-4 py-3">
-            <p className="text-[15px] font-bold text-clinic-ink">Notifications</p>
-            {items && items.some((item) => !item.read_at) && (
-              <button
-                type="button"
-                onClick={() => void markAllRead()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-clinic-brand-strong hover:bg-clinic-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
-              >
-                <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" /> Mark all read
+          <div className="flex items-center justify-between border-b border-cx-nav-line px-4 py-3">
+            <p className="text-[13.5px] font-semibold text-cx-nav-ink">Notifications</p>
+            {Boolean(unread) && (
+              <button type="button" onClick={markAllRead} className="rounded-md px-2 py-1 text-[12px] font-semibold text-cx-nav-teal-strong hover:bg-cx-nav-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal">
+                Mark all read
               </button>
             )}
           </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {loading && !items && <LoadingPanel label="Loading notifications…" rows={4} />}
-            {failure && (
-              <StatePanel
-                compact
-                kind={failure === 'network' ? 'offline' : 'error'}
-                title="Notifications could not load"
-                description={ERROR_COPY[failure]}
-                action={
-                  <button
-                    type="button"
-                    onClick={() => void loadList()}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-clinic-border px-3.5 text-[12.5px] font-semibold text-clinic-ink hover:bg-clinic-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Try again
-                  </button>
-                }
-              />
+          <div className="max-h-[360px] overflow-y-auto p-1.5" aria-live="polite">
+            {failure && <p className="px-3 py-4 text-[12.5px] text-cx-rose-ink">{failure}</p>}
+            {!failure && items === null && (
+              <p className="flex items-center gap-2 px-3 py-4 text-[12.5px] text-cx-nav-muted">
+                <Spinner /> Loading…
+              </p>
             )}
-            {!failure && items && items.length === 0 && (
-              <StatePanel
-                compact
-                kind="empty"
-                title="You are all caught up"
-                description="New notifications for this clinic will appear here."
-              />
-            )}
-            {!failure && items && items.length > 0 && (
-              <ul className="divide-y divide-clinic-border">
-                {items.map((item) => {
-                  const body = item.data?.message ?? item.data?.body ?? null;
-                  const category = humanize(item.category);
-
-                  return (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => void markRead(item)}
-                        className={cn(
-                          'flex w-full gap-3 px-4 py-3 text-left hover:bg-clinic-inset focus-visible:bg-clinic-inset focus-visible:outline-none',
-                          !item.read_at && 'bg-clinic-brand-soft/40',
-                        )}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                            item.read_at ? 'bg-transparent' : 'bg-clinic-brand-strong',
-                          )}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="sr-only">{item.read_at ? 'Read: ' : 'Unread: '}</span>
-                          <span className={cn('block text-[13px] text-clinic-ink', !item.read_at && 'font-semibold')}>
-                            {item.title ?? 'Notification'}
-                          </span>
-                          {body && (
-                            <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-clinic-secondary">
-                              {body}
-                            </span>
-                          )}
-                          <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11.5px] text-clinic-secondary">
-                            {category && <span className="font-semibold uppercase tracking-[0.06em]">{category}</span>}
-                            <time dateTime={item.created_at}>{timeAgo(item.created_at)}</time>
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            {!failure && items?.length === 0 && <p className="px-3 py-6 text-center text-[12.5px] text-cx-nav-muted">You're all caught up.</p>}
+            {items?.map((item) => (
+              <div key={item.id} className="flex gap-2.5 rounded-md px-3 py-2.5">
+                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', item.read_at ? 'bg-transparent' : 'bg-cx-nav-teal')} aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium text-cx-nav-ink">{item.title ?? item.data?.title ?? 'Notification'}</span>
+                  {item.data?.message && <span className="mt-0.5 block text-[12px] text-cx-nav-muted">{item.data.message}</span>}
+                  <span className="mt-0.5 block text-[11.5px] text-cx-nav-muted">{new Date(item.created_at).toLocaleString()}</span>
+                </span>
+              </div>
+            ))}
           </div>
+          {page?.href && (
+            <div className="border-t border-cx-nav-line p-1.5">
+              <Link
+                href={page.href}
+                onClick={() => setOpen(false)}
+                className="flex h-10 items-center justify-center rounded-md text-[13px] font-semibold text-cx-nav-ink hover:bg-cx-nav-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
+              >
+                View all notifications
+              </Link>
+            </div>
+          )}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

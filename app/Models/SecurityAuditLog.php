@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
 /**
@@ -48,5 +49,10 @@ class SecurityAuditLog extends Model
     {
         static::updating(fn () => throw new LogicException('Security audit entries cannot be changed.'));
         static::deleting(fn () => throw new LogicException('Security audit entries cannot be deleted.'));
+    }
+
+    public function actor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_user_id');
     }
 }

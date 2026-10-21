@@ -2,21 +2,24 @@
 
 namespace App\Http\Controllers\Clinic;
 
-use App\ClinicPermission;
 use App\Http\Controllers\Controller;
-use App\Models\Appointment;
 use App\Models\AttachedDocument;
+use App\Models\Clinic;
+use App\Models\ClinicalEncounter;
+use App\Models\ClinicalOrderItem;
 use App\Models\ClinicEmployee;
-use App\Models\Invoice;
+use App\Models\DeletionRequest;
 use App\Models\Patient;
+use App\Models\PatientMerge;
 use App\Models\PatientTimelineEvent;
-use App\Models\PatientVisit;
-use App\Models\Prescription;
+use App\PatientStatus;
 use App\Services\ClinicContext;
+use App\Services\Patient\Patient360\Patient360Access;
+use App\Services\Patient\Patient360\Patient360SectionPolicy;
+use App\Services\Patient\Patient360\Patient360Summary;
 use App\Services\Security\Malware\ScannedUploadIntake;
 use App\Services\Security\Malware\UploadRejectedException;
 use App\Services\Security\SecurityAudit;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -25,340 +28,138 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Patient 360: the patient's workspace.
+ *
+ * The first response carries only the first screen — identity, state, the
+ * quick clinical context and what the user may do. The overview is deferred;
+ * every other section is fetched from `Patient360SectionController` when it
+ * is opened, a page at a time.
+ *
+ * Access: the patient must be in the active clinic (`PatientPolicy::view`);
+ * clinical, billing and appointment parts follow their own permissions, and
+ * branch-held records are limited to the member's branches.
+ */
 class Patient360Controller extends Controller
 {
     public function __construct(
-        protected ClinicContext $clinicContext
+        protected ClinicContext $clinicContext,
+        protected Patient360Access $access,
+        protected Patient360Summary $summary,
+        protected Patient360SectionPolicy $policy,
     ) {}
 
-    /**
-     * Display the Patient 360 Central Workspace.
-     */
-    public function show(Request $request, Patient $patient): Response
+    public function show(Request $request, Patient $patient): Response|RedirectResponse
     {
         $this->authorize('view', $patient);
-
-        // Record access: who opened this patient's record, and when.
+        $this->assertInClinic($patient);
+        // A merged record is kept for history; its chart lives on the survivor.
+        if ($patient->status === PatientStatus::Merged) {
+            $survivorId = PatientMerge::query()->where('clinic_id', $patient->clinic_id)->where('source_patient_id', $patient->id)->value('survivor_patient_id');
+            if ($survivorId) {
+                return redirect()->route('clinic.patients.show', $survivorId)->with('success', 'This record was merged into this patient.');
+            }
+        }
         app(SecurityAudit::class)->record('patient.viewed', $patient);
 
-        $clinic = $this->clinicContext->clinic();
-        if (! $clinic || $patient->clinic_id !== $clinic->id) {
-            abort(403, 'Patient does not belong to the active clinic context.');
-        }
+        $user = $request->user();
+        $lens = $this->policy->lens($user, $patient);
+        $fields = $lens['fields'];
+        $open = $fields['clinical'] ? $this->access->openConsultation($user, $patient) : null;
+        $pending = $this->policy->pendingRequests($user, $patient);
+        $base = fn (string $section) => route('clinic.patients.360.section', [$patient->id, $section]);
 
-        $patient->load(['profile', 'medicalHistory', 'alerts', 'currentPractitioner']);
-
-        // 1. Check Today's Operational Status (Active Appointment or Visit today)
-        $todayAppointment = Appointment::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->whereDate('scheduled_at', today())
-            ->with(['practitioner'])
-            ->latest('scheduled_at')
-            ->first();
-
-        $todayVisit = PatientVisit::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->whereDate('visit_date', today())
-            ->with(['doctor', 'queueItem'])
-            ->latest()
-            ->first();
-
-        // 2. Upcoming Appointment (next future appointment)
-        $upcomingAppointment = Appointment::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->where('scheduled_at', '>=', now())
-            ->whereNotIn('status', ['cancelled', 'completed', 'no_show'])
-            ->with(['practitioner', 'branch'])
-            ->orderBy('scheduled_at', 'asc')
-            ->first();
-
-        // 3. Aggregate Unified Timeline
-        $timelineEvents = $this->gatherUnifiedTimeline($patient, $clinic);
-
-        // 4. Appointments History
-        $appointments = Appointment::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with(['practitioner', 'branch', 'creator'])
-            ->orderBy('scheduled_at', 'desc')
-            ->paginate(10, ['*'], 'appts_page');
-
-        // 5. Visits History
-        $visits = PatientVisit::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with(['doctor', 'branch', 'caseNumber', 'queueItem'])
-            ->orderBy('visit_date', 'desc')
-            ->paginate(10, ['*'], 'visits_page');
-
-        // 6. Billing Invoices (Protected)
-        //
-        // Paginated rather than `->get()` — a patient billed for years could
-        // otherwise have every invoice they've ever had pulled into memory
-        // on every single page view, not just when the Billing tab is
-        // opened. The summary cards still need to reflect *all* invoices,
-        // not just the page shown, so they're their own aggregate queries
-        // rather than a sum over the (now-partial) fetched collection.
-        $canViewBilling = auth()->user()?->hasClinicPermission(ClinicPermission::BillingView) ?? false;
-        $invoices = $this->emptyPage();
-        $billingSummary = ['total_billed' => 0, 'total_paid' => 0, 'total_balance' => 0];
-
-        if ($canViewBilling) {
-            $invoiceQuery = Invoice::where('organization_id', $clinic->organization_id)->where('patient_id', $patient->id);
-
-            $billingSummary = [
-                'total_billed' => (clone $invoiceQuery)->sum('total_amount'),
-                'total_paid' => (clone $invoiceQuery)->sum('amount_paid'),
-                'total_balance' => (clone $invoiceQuery)->sum('balance_due'),
-            ];
-
-            $invoices = $invoiceQuery
-                ->orderBy('created_at', 'desc')
-                ->paginate(10, ['*'], 'invoices_page')
-                ->through(fn ($inv) => [
-                    'id' => $inv->id,
-                    'invoice_number' => $inv->invoice_number,
-                    'status' => $inv->status,
-                    'total_amount' => (float) $inv->total_amount,
-                    'amount_paid' => (float) $inv->amount_paid,
-                    'balance_due' => (float) $inv->balance_due,
-                    'issued_at' => $inv->issued_at?->format('d M Y') ?? $inv->created_at?->format('d M Y'),
-                ]);
-        }
-
-        // 7. Prescriptions (Protected) — same unbounded-history concern as
-        // invoices above, same fix.
-        $canViewClinical = auth()->user()?->hasClinicPermission(ClinicPermission::ClinicalView) ?? false;
-        $prescriptions = $this->emptyPage();
-        if ($canViewClinical) {
-            $prescriptions = Prescription::where('clinic_id', $clinic->id)
-                ->where('patient_id', $patient->id)
-                ->with(['prescriber', 'items'])
-                ->orderBy('created_at', 'desc')
-                ->paginate(10, ['*'], 'prescriptions_page')
-                ->through(fn ($rx) => [
-                    'id' => $rx->id,
-                    'prescription_number' => $rx->prescription_number ?? sprintf('RX-%d', $rx->id),
-                    'status' => $rx->status ?? 'active',
-                    'prescribed_by' => $rx->prescriber?->name ?? 'Attending Practitioner',
-                    'created_at' => $rx->created_at?->format('d M Y'),
-                    'items_count' => $rx->items->count(),
-                    'items' => $rx->items->map(fn ($i) => [
-                        'id' => $i->id,
-                        'name' => $i->medication_name ?? $i->item_name ?? 'Medication',
-                        'dosage' => $i->dosage ?? '1 tablet',
-                        'frequency' => $i->frequency ?? 'Once daily',
-                        'duration' => $i->duration ?? '5 days',
-                    ]),
-                ]);
-        }
-
-        // 8. Documents — same fix again: a long-standing patient's full
-        // document history is not something every page view needs to load.
-        $documents = AttachedDocument::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with('uploader')
-            ->orderBy('created_at', 'desc')
-            ->paginate(10, ['*'], 'documents_page')
-            ->through(fn ($doc) => [
-                'id' => $doc->id,
-                'file_name' => $doc->file_name,
-                'file_size_bytes' => $doc->file_size_bytes,
-                'document_type' => $doc->document_type,
-                'uploaded_by' => $doc->uploader?->name ?? 'Staff',
-                'created_at' => $doc->created_at?->format('d M Y, h:i A'),
-                // An ordinary portal link, not a signed bearer URL. Opening it
-                // needs a signed-in session in this clinic and patient access,
-                // and every download is audited (see `downloadDocument`).
-                'download_url' => $doc->isCleared() ? route('clinic.patients.documents.download', [$patient, $doc->id]) : null,
-                'scan_status' => $doc->scan_status,
-            ]);
-
-        // 9. Available Practitioners for Action Modals
-        $practitioners = ClinicEmployee::activePractitioners($clinic->id);
-
-        return Inertia::render('Clinic/Patients/Show', [
-            'patient' => [
-                'id' => $patient->id,
-                'uhid' => $patient->uhid ?? '—',
-                'name' => $patient->full_name,
-                'first_name' => $patient->first_name,
-                'last_name' => $patient->last_name,
-                'phone' => $patient->phone,
-                'alternate_phone' => $patient->alternate_phone,
-                'email' => $patient->email,
-                'age' => $patient->age,
-                'gender' => $patient->gender,
-                'blood_group' => $patient->blood_group,
-                'status' => $patient->status?->value ?? 'active',
-                'created_at' => $patient->created_at?->format('d M Y'),
-                'profile' => $patient->profile ? [
-                    'address' => $patient->profile->address,
-                    'city' => $patient->profile->city,
-                    'state' => $patient->profile->state,
-                    'pincode' => $patient->profile->pincode ?? $patient->profile->postal_code,
-                    'emergency_contact_name' => $patient->profile->emergency_contact_name,
-                    'emergency_contact_phone' => $patient->profile->emergency_contact_phone,
-                ] : null,
-                'alerts' => $patient->alerts->map(fn ($alert) => [
-                    'id' => $alert->id,
-                    'type' => $alert->type,
-                    'description' => $alert->description,
-                    'severity' => $alert->severity,
-                ]),
-                'allergies' => $patient->medicalHistory?->allergies ?? [],
-                'current_practitioner' => $patient->currentPractitioner ? [
-                    'id' => $patient->currentPractitioner->id,
-                    'name' => $patient->currentPractitioner->name,
-                ] : null,
+        return Inertia::render('ClinicPortal/Patients/Show', [
+            'patient' => $this->summary->identity($patient),
+            'state' => $this->summary->state($patient, $user),
+            'context' => $this->summary->context($patient, $user),
+            'overview' => Inertia::defer(fn () => $this->summary->overview($patient, $user)),
+            'lens' => [
+                'persona' => $lens['persona'],
+                'default_section' => $lens['default_section'],
+                'owner' => $lens['owner'],
+                'owner_mode' => $lens['owner_mode'],
+                'governance' => $lens['governance'],
+                'fields' => collect($fields)->only(['clinical', 'clinical_write', 'financial', 'refunds', 'investigation_results', 'dental', 'physio'])->all(),
+                'pending_requests' => $pending,
+                // Records with a request already waiting on the owner, as "action:target".
+                'open_requests' => DeletionRequest::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+                    ->whereNotNull('open_key')->limit(200)->get(['action_type', 'target_id'])
+                    ->map(fn (DeletionRequest $r) => "{$r->action_type}:{$r->target_id}")->values()->all(),
             ],
-            'todayStatus' => [
-                'has_active_today' => ($todayAppointment !== null || $todayVisit !== null),
-                'appointment' => $todayAppointment ? [
-                    'id' => $todayAppointment->id,
-                    'scheduled_time' => $todayAppointment->scheduled_at?->format('h:i A'),
-                    'practitioner_name' => $todayAppointment->practitioner?->name ?? 'Assigned Provider',
-                    'status' => $todayAppointment->status?->value,
-                ] : null,
-                'visit' => $todayVisit ? [
-                    'id' => $todayVisit->id,
-                    'queue_status' => $todayVisit->queue_status ?? 'waiting',
-                    'visit_status' => $todayVisit->visit_status ?? 'checked_in',
-                    'doctor_name' => $todayVisit->doctor?->name ?? 'Attending Provider',
-                    'queue_position' => $todayVisit->queueItem?->position,
-                ] : null,
+            'sections' => $lens['sections'],
+            'endpoints' => [
+                'timeline' => $base('timeline'),
+                'clinical' => $base('encounters'),
+                'appointments' => $base('appointments'),
+                'treatment' => $base('treatment'),
+                'prescriptions' => $base('prescriptions'),
+                'investigations' => $base('investigations'),
+                'billing' => $base('billing'),
+                'documents' => $base('documents'),
+                'consents' => route('clinic.patients.consents.index', $patient, false),
+                'follow-ups' => $base('follow-ups'),
+                'communication' => $base('communications'),
+                'requests' => $base('requests'),
+                'audit' => $base('audit'),
+                'dental' => $base('dental'),
+                'physio' => $base('physio'),
+                'availability' => $fields['appointments'] ? route('clinic.appointments.availability') : null,
+                'governance_request' => route('clinic.approvals.store'),
+                'governance_direct' => route('clinic.approvals.direct'),
+                'owner_mode' => route('clinic.owner-mode.store'),
+                'patients_index' => route('clinic.patients.index'),
             ],
-            'upcomingAppointment' => $upcomingAppointment ? [
-                'id' => $upcomingAppointment->id,
-                'date' => $upcomingAppointment->scheduled_at?->format('d M Y'),
-                'time' => $upcomingAppointment->scheduled_at?->format('h:i A'),
-                'practitioner_name' => $upcomingAppointment->practitioner?->name ?? 'Assigned Provider',
-                'branch_name' => $upcomingAppointment->branch?->name ?? 'Main Clinic',
-                'status' => $upcomingAppointment->status?->value,
-            ] : null,
-            'timeline' => $timelineEvents,
-            'appointments' => $appointments,
-            'visits' => $visits,
-            'billing' => [
-                'is_accessible' => $canViewBilling,
-                'summary' => $billingSummary,
-                'invoices' => $invoices,
-            ],
-            'prescriptions' => [
-                'is_accessible' => $canViewClinical,
-                'items' => $prescriptions,
-            ],
-            'documents' => $documents,
-            'practitioners' => $practitioners,
-            'permissions' => [
-                'can_view_billing' => $canViewBilling,
-                'can_view_clinical' => $canViewClinical,
-                'can_manage_docs' => auth()->user()?->hasClinicPermission(ClinicPermission::DocumentsManage) ?? true,
-                'can_edit_patient' => auth()->user()?->hasClinicPermission(ClinicPermission::PatientEdit) ?? true,
-                // Same permission as editing demographics — Reception and
-                // Admin/Owner, never Practitioner — reused rather than a
-                // dedicated permission, matching this policy's convention
-                // elsewhere (see `PatientPolicy::writeClinicalData()`).
-                'can_transfer_patient' => auth()->user()?->hasClinicPermission(ClinicPermission::PatientEdit) ?? false,
-            ],
+            'actions' => $this->policy->actions($user, $patient, $open, $pending),
+            // Practitioners only, with the specialty they recorded (or none).
+            'practitioners' => ($fields['appointments'] || $this->access->canManageFollowUps($user))
+                ? ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('status', 'active')
+                    ->whereHas('practitionerProfile')->with('practitionerProfile:id,clinic_employee_id,specialty')
+                    ->orderBy('name')->limit(200)->get(['id', 'name'])
+                    ->map(fn (ClinicEmployee $employee) => ['id' => $employee->id, 'name' => $employee->name, 'specialty' => $employee->practitionerProfile?->specialty])
+                    ->values()
+                : [],
         ]);
     }
 
     /**
-     * Dedicated Timeline endpoint (JSON or tab).
-     */
-    public function timeline(Request $request, Patient $patient): JsonResponse
-    {
-        $this->authorize('view', $patient);
-
-        $clinic = $this->clinicContext->clinic();
-        if (! $clinic || $patient->clinic_id !== $clinic->id) {
-            abort(403);
-        }
-
-        $events = $this->gatherUnifiedTimeline($patient, $clinic);
-
-        return response()->json($events);
-    }
-
-    /**
-     * Dedicated Billing tab endpoint with backend permission gate.
-     */
-    public function billing(Request $request, Patient $patient): JsonResponse
-    {
-        $this->authorize('view', $patient);
-        app(SecurityAudit::class)->record('patient.billing_viewed', $patient);
-
-        $clinic = $this->clinicContext->clinic();
-        if (! $clinic || $patient->clinic_id !== $clinic->id) {
-            abort(403, 'Unauthorized clinic context.');
-        }
-
-        if (! auth()->user()?->hasClinicPermission(ClinicPermission::BillingView)) {
-            abort(403, 'Unauthorized. Billing view permission required.');
-        }
-
-        $invoices = Invoice::where('organization_id', $clinic->organization_id)
-            ->where('patient_id', $patient->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json([
-            'invoices' => $invoices,
-            'total_balance' => $invoices->sum('balance_due'),
-        ]);
-    }
-
-    /**
-     * Dedicated Clinical tab endpoint with backend permission gate.
-     */
-    public function clinical(Request $request, Patient $patient): JsonResponse
-    {
-        $this->authorize('view', $patient);
-        app(SecurityAudit::class)->record('patient.clinical_viewed', $patient);
-
-        $clinic = $this->clinicContext->clinic();
-        if (! $clinic || $patient->clinic_id !== $clinic->id) {
-            abort(403, 'Unauthorized clinic context.');
-        }
-
-        if (! auth()->user()?->hasClinicPermission(ClinicPermission::ClinicalView)) {
-            abort(403, 'Unauthorized. Clinical record view permission required.');
-        }
-
-        $prescriptions = Prescription::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with(['prescriber', 'items'])
-            ->get();
-
-        return response()->json([
-            'prescriptions' => $prescriptions,
-        ]);
-    }
-
-    /**
-     * Secure Patient Document Upload.
+     * Secure document upload: quarantine → malware scan → private disk. A
+     * file can be filed against one of this patient's consultations or
+     * investigation results.
      */
     public function uploadDocument(Request $request, Patient $patient): RedirectResponse
     {
         $this->authorize('view', $patient);
-
-        $clinic = $this->clinicContext->clinic();
-        if (! $clinic || $patient->clinic_id !== $clinic->id) {
-            abort(403, 'Unauthorized clinic context.');
-        }
+        $clinic = $this->assertInClinic($patient);
 
         $validated = $request->validate([
             'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
-            'document_type' => ['nullable', 'string', 'in:medical_report,id_proof,xray,lab_report,other'],
+            'document_type' => ['nullable', 'string', 'in:medical_report,id_proof,xray,intraoral_photo,lab_report,other'],
+            // Dental images are filed against the teeth they show.
+            'tooth_numbers' => ['nullable', 'array', 'max:32'],
+            'tooth_numbers.*' => ['integer', 'between:11,85'],
             'title' => ['nullable', 'string', 'max:255'],
+            'encounter_id' => ['nullable', 'integer'],
+            'clinical_order_item_id' => ['nullable', 'integer'],
         ]);
 
+        $encounterId = null;
+        if (! empty($validated['encounter_id'])) {
+            $encounterId = ClinicalEncounter::query()->where('clinic_id', $clinic->id)->where('patient_id', $patient->id)
+                ->whereKey($validated['encounter_id'])->value('id') ?? abort(404);
+        }
+        $orderItem = null;
+        if (! empty($validated['clinical_order_item_id'])) {
+            $orderItem = ClinicalOrderItem::query()->where('clinical_order_items.clinic_id', $clinic->id)
+                ->whereHas('order', fn ($order) => $order->where('patient_id', $patient->id))
+                ->with('order:id,encounter_id')
+                ->find($validated['clinical_order_item_id']) ?? abort(404);
+            $encounterId ??= $orderItem->order->encounter_id;
+        }
+
         $file = $request->file('document');
-        // `title` is optional; reading it with `?:` alone crashed every upload
-        // sent without one ("Undefined array key").
         $fileName = ($validated['title'] ?? null) ?: $file->getClientOriginalName();
 
-        // Quarantine → malware scan → private disk. Nothing reaches the private
-        // disk, or gets a database row, without a clean verdict.
         try {
             $admitted = app(ScannedUploadIntake::class)->admit($file, "clinic_{$clinic->id}/patients/{$patient->id}/documents");
         } catch (UploadRejectedException $e) {
@@ -368,6 +169,8 @@ class Patient360Controller extends Controller
         $doc = AttachedDocument::create([
             'clinic_id' => $clinic->id,
             'patient_id' => $patient->id,
+            'encounter_id' => $encounterId,
+            'clinical_order_item_id' => $orderItem?->id,
             'uploaded_by' => auth()->id(),
             'file_name' => $fileName,
             'file_path' => $admitted['path'],
@@ -377,6 +180,7 @@ class Patient360Controller extends Controller
             'scanned_at' => now(),
             'scanner' => $admitted['scanner'],
             'file_sha256' => $admitted['sha256'],
+            'tooth_numbers' => ! empty($validated['tooth_numbers']) ? array_values(array_unique(array_map('intval', $validated['tooth_numbers']))) : null,
         ]);
 
         PatientTimelineEvent::create([
@@ -385,11 +189,7 @@ class Patient360Controller extends Controller
             'patient_id' => $patient->id,
             'actor_id' => auth()->id(),
             'event_type' => 'document_uploaded',
-            'context' => [
-                'file_name' => $fileName,
-                'document_type' => $doc->document_type,
-                'uploaded_by' => auth()->user()?->name ?? 'Staff',
-            ],
+            'context' => ['file_name' => $fileName, 'document_type' => $doc->document_type, 'uploaded_by' => auth()->user()?->name ?? 'Staff'],
         ]);
 
         app(SecurityAudit::class)->record('document.uploaded', $doc, [
@@ -402,35 +202,37 @@ class Patient360Controller extends Controller
     }
 
     /**
-     * Stream one of a patient's documents from private storage.
-     *
-     * This replaces a 60-minute signed URL to the generic file endpoint, which
-     * anyone holding the link could open without signing in, from any clinic,
-     * with nothing recorded. Now the document is looked up through the patient
-     * (`patient_id`) and the clinic scope, so a document id from another
-     * patient or clinic is a 404. Patient access is checked by the same policy
-     * as the Patient 360 page, and each download is written to the security
-     * trail.
+     * Stream one of the patient's documents from private storage, looked up
+     * through the patient and the clinic (another patient's id is a 404).
+     * `?inline=1` opens a PDF or image in the browser instead of downloading.
+     * Every access is audited.
      */
-    public function downloadDocument(Patient $patient, int $document): StreamedResponse
+    public function downloadDocument(Request $request, Patient $patient, int $document): StreamedResponse
     {
         $this->authorize('view', $patient);
+        $clinic = $this->assertInClinic($patient);
 
+        $doc = AttachedDocument::query()->where('patient_id', $patient->id)->where('clinic_id', $clinic->id)->findOrFail($document);
+
+        abort_unless($doc->isCleared(), 404);
+        // A clinical document (a report, an image, a result) opens only for clinical roles.
+        abort_unless($this->policy->canOpenDocument($request->user(), $patient, $doc), 403);
+        abort_unless(Storage::disk('private')->exists($doc->file_path), 404);
+
+        $inline = $request->boolean('inline') && in_array(strtolower(pathinfo($doc->file_path, PATHINFO_EXTENSION)), ['pdf', 'jpg', 'jpeg', 'png', 'webp'], true);
+        app(SecurityAudit::class)->record($inline ? 'document.previewed' : 'document.downloaded', $doc, ['patient_id' => $patient->id]);
+
+        return $inline
+            ? Storage::disk('private')->response($doc->file_path, $this->safeDownloadName($doc), ['X-Content-Type-Options' => 'nosniff'])
+            : Storage::disk('private')->download($doc->file_path, $this->safeDownloadName($doc));
+    }
+
+    private function assertInClinic(Patient $patient): Clinic
+    {
         $clinic = $this->clinicContext->clinic();
         abort_if(! $clinic || $patient->clinic_id !== $clinic->id, 404);
 
-        $doc = AttachedDocument::query()
-            ->where('patient_id', $patient->id)
-            ->where('clinic_id', $clinic->id)
-            ->findOrFail($document);
-
-        // A document that has not passed a malware scan is never served.
-        abort_unless($doc->isCleared(), 404);
-        abort_unless(Storage::disk('private')->exists($doc->file_path), 404);
-
-        app(SecurityAudit::class)->record('document.downloaded', $doc, ['patient_id' => $patient->id]);
-
-        return Storage::disk('private')->download($doc->file_path, $this->safeDownloadName($doc));
+        return $clinic;
     }
 
     /**
@@ -443,175 +245,5 @@ class Patient360Controller extends Controller
         $base = Str::of(pathinfo((string) $doc->file_name, PATHINFO_FILENAME))->ascii()->replaceMatches('/[^A-Za-z0-9 ._-]+/', '')->trim()->limit(120, '');
 
         return ($base->isEmpty() ? 'document' : (string) $base).($extension ? ".{$extension}" : '');
-    }
-
-    /**
-     * Helper to build a unified chronological activity feed from all domain models.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private function gatherUnifiedTimeline(Patient $patient, $clinic): array
-    {
-        $events = collect();
-
-        // Each source below is capped to its most recent rows rather than
-        // fetched in full: the feed only ever shows the latest 12 events
-        // (`PatientTimelineFeed limit={12}` on the frontend), but without a
-        // cap here a patient with years of history would have every
-        // timeline event, appointment, visit and invoice they've ever had
-        // pulled into memory and sorted on every single page view — a cost
-        // that grows without bound the longer a patient has been coming to
-        // the clinic. 50 per source is generous headroom over the 12 shown.
-        $timelineSourceLimit = 50;
-
-        // 1. System & Operational timeline events
-        $timelineRecords = PatientTimelineEvent::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with('actor')
-            ->latest()
-            ->limit($timelineSourceLimit)
-            ->get();
-
-        foreach ($timelineRecords as $event) {
-            $actorName = $event->actor?->name ?? ($event->context['operator'] ?? ($event->context['registered_by'] ?? 'Staff'));
-            $title = match ($event->event_type) {
-                'registered' => 'Patient Registered',
-                'appointment_checked_in' => 'Appointment Checked In',
-                'walk_in_registered' => 'Walk-in Registered',
-                'document_uploaded' => 'Document Uploaded',
-                'demographics_updated' => 'Demographic Details Updated',
-                'doctor_transferred' => 'Doctor Transferred',
-                default => ucwords(str_replace('_', ' ', $event->event_type)),
-            };
-
-            $category = match ($event->event_type) {
-                'registered' => 'system',
-                'appointment_checked_in', 'walk_in_registered' => 'reception',
-                'document_uploaded' => 'document',
-                'demographics_updated', 'doctor_transferred' => 'record',
-                default => 'system',
-            };
-
-            $events->push([
-                'id' => 'evt-'.$event->id,
-                'type' => $event->event_type,
-                'category' => $category,
-                'title' => $title,
-                'description' => $this->formatEventDescription($event),
-                'timestamp' => $event->created_at ? $event->created_at->toISOString() : now()->toISOString(),
-                'formatted_time' => $event->created_at ? $event->created_at->format('d M Y, h:i A') : '—',
-                'actor_name' => $actorName,
-                'badge_color' => match ($category) {
-                    'reception' => 'emerald',
-                    'document' => 'purple',
-                    'billing' => 'amber',
-                    'clinical' => 'blue',
-                    'record' => 'slate',
-                    default => 'indigo',
-                },
-            ]);
-        }
-
-        // 2. Appointments
-        $appts = Appointment::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with(['practitioner', 'creator'])
-            ->latest()
-            ->limit($timelineSourceLimit)
-            ->get();
-
-        foreach ($appts as $appt) {
-            $practitionerName = $appt->practitioner?->name ?? 'Attending Provider';
-            $creatorName = $appt->creator?->name ?? 'Staff';
-            $scheduledTime = $appt->scheduled_at ? $appt->scheduled_at->format('d M Y, h:i A') : '—';
-
-            $events->push([
-                'id' => 'appt-'.$appt->id,
-                'type' => 'appointment_scheduled',
-                'category' => 'appointment',
-                'title' => 'Appointment Scheduled',
-                'description' => "Scheduled with {$practitionerName} for {$scheduledTime} ({$appt->status?->value})",
-                'timestamp' => $appt->created_at ? $appt->created_at->toISOString() : now()->toISOString(),
-                'formatted_time' => $appt->created_at ? $appt->created_at->format('d M Y, h:i A') : '—',
-                'actor_name' => $creatorName,
-                'badge_color' => 'blue',
-            ]);
-        }
-
-        // 3. Visits
-        $visits = PatientVisit::where('clinic_id', $clinic->id)
-            ->where('patient_id', $patient->id)
-            ->with(['doctor', 'caseNumber'])
-            ->latest()
-            ->limit($timelineSourceLimit)
-            ->get();
-
-        foreach ($visits as $visit) {
-            $docName = $visit->doctor?->name ?? 'Practitioner';
-            $caseNum = $visit->caseNumber?->case_number ?? 'Case #'.$visit->id;
-
-            $events->push([
-                'id' => 'visit-'.$visit->id,
-                'type' => 'visit_created',
-                'category' => 'clinical',
-                'title' => 'Clinical Visit Initiated',
-                'description' => "Visit recorded with {$docName} (Case: {$caseNum}, Status: {$visit->visit_status})",
-                'timestamp' => $visit->created_at ? $visit->created_at->toISOString() : now()->toISOString(),
-                'formatted_time' => $visit->created_at ? $visit->created_at->format('d M Y, h:i A') : '—',
-                'actor_name' => $docName,
-                'badge_color' => 'teal',
-            ]);
-        }
-
-        // 4. Invoices
-        $invoices = Invoice::where('organization_id', $clinic->organization_id)
-            ->where('patient_id', $patient->id)
-            ->latest()
-            ->limit($timelineSourceLimit)
-            ->get();
-
-        foreach ($invoices as $inv) {
-            $events->push([
-                'id' => 'inv-'.$inv->id,
-                'type' => 'invoice_created',
-                'category' => 'billing',
-                'title' => 'Invoice Generated',
-                'description' => "Invoice #{$inv->invoice_number} for ₹".number_format($inv->total_amount, 2)." ({$inv->status})",
-                'timestamp' => $inv->created_at ? $inv->created_at->toISOString() : now()->toISOString(),
-                'formatted_time' => $inv->created_at ? $inv->created_at->format('d M Y, h:i A') : '—',
-                'actor_name' => 'Billing Desk',
-                'badge_color' => 'amber',
-            ]);
-        }
-
-        return $events->sortByDesc('timestamp')->values()->all();
-    }
-
-    private function formatEventDescription(PatientTimelineEvent $event): string
-    {
-        $context = $event->context ?? [];
-
-        return match ($event->event_type) {
-            'registered' => 'Patient registered at front desk (UHID assigned).',
-            'appointment_checked_in' => 'Checked in at reception. Assigned Queue #'.($context['queue_position'] ?? '1'),
-            'walk_in_registered' => 'Walk-in patient arrived and queued at position #'.($context['queue_position'] ?? '1'),
-            'document_uploaded' => 'Attached document: '.($context['file_name'] ?? 'File'),
-            'demographics_updated' => 'Updated: '.(! empty($context['updated_fields']) ? implode(', ', array_map(fn ($f) => str_replace('_', ' ', $f), $context['updated_fields'])) : 'record details'),
-            'doctor_transferred' => ($context['from_practitioner'] ?? null)
-                ? "Reassigned from {$context['from_practitioner']} to {$context['to_practitioner']}".(! empty($context['reason']) ? " — {$context['reason']}" : '')
-                : "Assigned to {$context['to_practitioner']}".(! empty($context['reason']) ? " — {$context['reason']}" : ''),
-            default => 'Event logged.',
-        };
-    }
-
-    /**
-     * The same shape a real `LengthAwarePaginator` sends to the frontend
-     * (`data`/`links`/`from`/`to`/`total`), for a tab the acting user
-     * isn't permitted to see any of. Kept distinct from actually querying
-     * with a `0 = 1` filter so a denied tab costs nothing at the database.
-     */
-    private function emptyPage(): array
-    {
-        return ['data' => [], 'links' => [], 'from' => null, 'to' => null, 'total' => 0];
     }
 }

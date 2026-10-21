@@ -60,7 +60,7 @@ beforeEach(function () {
 it('adds a new clinic to an existing login after it confirms its own password', function () {
     $url = ($this->invite)();
 
-    $this->get($url)->assertInertia(fn (Assert $page) => $page->component('Clinic/Auth/AcceptInvitation')->where('status', 'existing'));
+    $this->get($url)->assertInertia(fn (Assert $page) => $page->component('Clinic/Auth/AcceptInvitation', true)->where('status', 'existing'));
 
     $this->from($url)->post($url, ['password' => 'priyas-own-password'])->assertRedirect(route('dashboard'));
 

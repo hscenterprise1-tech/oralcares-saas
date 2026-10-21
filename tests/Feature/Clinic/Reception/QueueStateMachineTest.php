@@ -106,8 +106,8 @@ test('each move announces itself for the display screens', function () {
 
 test('an illegal move reaches the browser as a validation message', function () {
     $response = $this->actingAs($this->f->owner)->withSession($this->f->session)
-        ->patch("/clinic/reception/queue/{$this->item->id}/status", ['action' => 'complete']);
+        ->patch("/clinic/reception/queue/{$this->item->id}/status", ['action' => 'requeue']);
 
-    $response->assertSessionHasErrors(['status' => 'Only a patient in consultation can be marked done.']);
+    $response->assertSessionHasErrors(['status' => 'Only a patient marked as not present can be put back in the queue.']);
     expect(ClinicQueueItem::find($this->item->id)->status)->toBe(QueueItemStatus::Waiting);
 });

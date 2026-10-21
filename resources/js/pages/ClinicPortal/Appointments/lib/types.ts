@@ -183,7 +183,6 @@ export interface CalendarProps {
     patientSearch: string;
     patient: string;
     registerPatient: string;
-    checkIn: string;
     settings: string;
   };
   /** Deferred: undefined until they arrive. */
@@ -191,14 +190,7 @@ export interface CalendarProps {
   freeTimes?: FreeTime[];
 }
 
-export interface PatientHit {
-  id: number;
-  uhid: string | null;
-  name: string;
-  phone: string | null;
-  gender: string | null;
-  age: number | null;
-}
+export type { PatientHit } from '@/clinic/patients/types';
 
 export interface Slot {
   provider_id: number;

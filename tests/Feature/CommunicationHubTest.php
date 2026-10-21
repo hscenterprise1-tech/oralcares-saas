@@ -116,11 +116,13 @@ test('notification queuing, mock send execution, and event dispatching', functio
     expect($notification->status)->toBe('pending');
     Event::assertDispatched(NotificationQueued::class);
 
-    // 2. Deliver
+    // 2. Send: no e-mail provider is connected, so nothing goes out and it
+    // is never reported as delivered.
     $notificationService->sendNotification($notification);
-    expect($notification->fresh()->status)->toBe('delivered')
-        ->and($notification->fresh()->sent_at)->not->toBeNull();
-    Event::assertDispatched(NotificationSent::class);
+    expect($notification->fresh()->status)->toBe(NotificationService::SKIPPED)
+        ->and($notification->fresh()->failed_reason)->toBe(NotificationService::NO_PROVIDER_REASON)
+        ->and($notification->fresh()->sent_at)->toBeNull();
+    Event::assertNotDispatched(NotificationSent::class);
 });
 
 test('reminders scheduling triggers events', function () {

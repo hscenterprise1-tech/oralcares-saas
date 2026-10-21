@@ -6,25 +6,58 @@ use App\Http\Controllers\Auth\ClinicPasswordResetController;
 use App\Http\Controllers\Auth\ClinicPasswordSetupController;
 use App\Http\Controllers\Auth\CompanyLoginController;
 use App\Http\Controllers\Clinic\Admin\BranchController as ClinicAdminBranchController;
+use App\Http\Controllers\Clinic\Admin\CatalogPageController as ClinicAdminCatalogPageController;
+use App\Http\Controllers\Clinic\Admin\ConsentTypeController;
 use App\Http\Controllers\Clinic\Admin\DepartmentController as ClinicAdminDepartmentController;
 use App\Http\Controllers\Clinic\Admin\EmployeeController as ClinicAdminEmployeeController;
 use App\Http\Controllers\Clinic\Admin\EmployeeInvitationController as ClinicAdminEmployeeInvitationController;
+use App\Http\Controllers\Clinic\Admin\PricingController as ClinicAdminPricingController;
+use App\Http\Controllers\Clinic\Admin\ProcedureCatalogController as ClinicAdminProcedureCatalogController;
 use App\Http\Controllers\Clinic\Admin\RoomController as ClinicAdminRoomController;
 use App\Http\Controllers\Clinic\Admin\SettingsController as ClinicAdminSettingsController;
+use App\Http\Controllers\Clinic\Admin\SpecialtyController as ClinicAdminSpecialtyController;
 use App\Http\Controllers\Clinic\Admin\StaffDocumentController;
 use App\Http\Controllers\Clinic\Admin\StaffProfileController;
+use App\Http\Controllers\Clinic\Admin\TreatmentCatalogController as ClinicAdminTreatmentCatalogController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
 use App\Http\Controllers\Clinic\AppointmentSettingsController;
 use App\Http\Controllers\Clinic\BranchSwitchController;
+use App\Http\Controllers\Clinic\CheckoutController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
+use App\Http\Controllers\Clinic\ClinicNotificationsController;
+use App\Http\Controllers\Clinic\ClinicSearchController;
+use App\Http\Controllers\Clinic\ClinicSupportController;
+use App\Http\Controllers\Clinic\ConsultationController;
+use App\Http\Controllers\Clinic\ConsultationTreatmentController;
 use App\Http\Controllers\Clinic\DashboardVisibilityController;
+use App\Http\Controllers\Clinic\DeletionRequestController;
+use App\Http\Controllers\Clinic\DentalController;
+use App\Http\Controllers\Clinic\DentalSpecialtyController;
+use App\Http\Controllers\Clinic\ExpenseController;
+use App\Http\Controllers\Clinic\FollowUpBoardController;
+use App\Http\Controllers\Clinic\InvestigationController;
 use App\Http\Controllers\Clinic\LeaveController as ClinicLeaveController;
 use App\Http\Controllers\Clinic\OnboardingController as ClinicOnboardingController;
+use App\Http\Controllers\Clinic\OwnerInvitationController as ClinicOwnerInvitationController;
 use App\Http\Controllers\Clinic\OwnerModeController;
 use App\Http\Controllers\Clinic\Patient360Controller;
+use App\Http\Controllers\Clinic\Patient360SectionController;
+use App\Http\Controllers\Clinic\PatientClinicalEntryController;
+use App\Http\Controllers\Clinic\PatientConsentController;
 use App\Http\Controllers\Clinic\PatientController as ClinicPatientController;
+use App\Http\Controllers\Clinic\PatientDirectoryController;
+use App\Http\Controllers\Clinic\PatientFollowUpController;
+use App\Http\Controllers\Clinic\PatientTreatmentController;
+use App\Http\Controllers\Clinic\PayrollController as ClinicPayrollController;
+use App\Http\Controllers\Clinic\PhysioController;
+use App\Http\Controllers\Clinic\PrescriptionController;
 use App\Http\Controllers\Clinic\ReceptionController;
+use App\Http\Controllers\Clinic\ReportController as ClinicReportController;
+use App\Http\Controllers\Clinic\TreatmentBoardController;
+use App\Http\Controllers\Clinic\TreatmentCareController;
+use App\Http\Controllers\Clinic\TreatmentChargeController;
 use App\Http\Controllers\Clinic\VisitController as ClinicVisitController;
+use App\Http\Controllers\Clinic\WhatsAppController;
 use App\Http\Controllers\Company\Admin\PackageController;
 use App\Http\Controllers\Company\Administration\SettingsController as CompanyAdministrationSettingsController;
 use App\Http\Controllers\Company\CompanyDashboardController;
@@ -49,6 +82,7 @@ use App\Http\Controllers\Company\CustomerSuccess\OverviewController as CustomerS
 use App\Http\Controllers\Company\CustomerSuccess\RenewalController as CustomerSuccessRenewalController;
 use App\Http\Controllers\Company\CustomerSuccess\SubscriptionActionController;
 use App\Http\Controllers\Company\Finance\FinanceController;
+use App\Http\Controllers\Company\Integrations\ClinicWhatsAppController;
 use App\Http\Controllers\Company\Integrations\IntegrationsController;
 use App\Http\Controllers\Company\Lifecycle\ProvisioningController;
 use App\Http\Controllers\Company\Lifecycle\SubscriptionController as LifecycleSubscriptionController;
@@ -88,11 +122,14 @@ use App\Http\Controllers\Dev\DesignLabController;
 use App\Http\Controllers\NotificationViewController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\LeadIntakeController;
+use App\Http\Controllers\Webhooks\ClinicWhatsAppWebhookController;
 use App\Models\OnboardingProgress;
 use App\Models\Organization;
 use App\Shared\Notification\Controllers\NotificationController;
 use App\Shared\Notification\Controllers\NotificationPreferenceController;
 use App\Shared\Search\Controllers\GlobalSearchController;
+use App\Support\ClinicAccess\ClinicAccess;
+use App\Support\ClinicWorkspaces;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -116,6 +153,9 @@ Route::post('enquiry', [LeadIntakeController::class, 'store'])
 // Public Webhook Endpoints (unauthenticated for WhatsApp Cloud API)
 Route::get('webhooks/whatsapp', [MarketingWhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
 Route::post('webhooks/whatsapp', [MarketingWhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp.handle');
+// Clinic patient WhatsApp numbers (OralCares common and clinic-owned): a separate business context.
+Route::get('webhooks/clinic-whatsapp', [ClinicWhatsAppWebhookController::class, 'verify'])->name('webhooks.clinic-whatsapp.verify');
+Route::post('webhooks/clinic-whatsapp', [ClinicWhatsAppWebhookController::class, 'handle'])->middleware('throttle:600,1')->name('webhooks.clinic-whatsapp.handle');
 
 // Development Tools
 if (app()->environment('local')) {
@@ -391,6 +431,19 @@ $companyRoutes = function () {
         Route::get('/integrations', [IntegrationsController::class, 'index'])
             ->middleware('can:view-integrations')
             ->name('company.integrations.index');
+
+        // Clinic WhatsApp: the common number and each clinic's own number, configured by OralCares.
+        Route::prefix('clinic-whatsapp')->name('company.clinic-whatsapp.')->group(function () {
+            Route::get('/', [ClinicWhatsAppController::class, 'index'])->name('index');
+            Route::get('/clinics', [ClinicWhatsAppController::class, 'clinics'])->name('clinics');
+            Route::post('/connections', [ClinicWhatsAppController::class, 'store'])->name('connections.store');
+            Route::put('/connections/{connection}', [ClinicWhatsAppController::class, 'update'])->name('connections.update');
+            Route::post('/connections/{connection}/activate', [ClinicWhatsAppController::class, 'activate'])->name('connections.activate');
+            Route::post('/connections/{connection}/disable', [ClinicWhatsAppController::class, 'disable'])->name('connections.disable');
+            Route::post('/connections/{connection}/check', [ClinicWhatsAppController::class, 'check'])->middleware('throttle:10,1')->name('connections.check');
+            Route::post('/connections/{connection}/templates', [ClinicWhatsAppController::class, 'template'])->name('connections.templates.store');
+            Route::post('/connections/{connection}/templates/defaults', [ClinicWhatsAppController::class, 'seedTemplates'])->name('connections.templates.defaults');
+        });
 
         /*
          * Workflow administration — what the workflow engine has been
@@ -1099,6 +1152,11 @@ $clinicRoutes = function () {
         ->middleware('throttle:clinic-login')
         ->name('clinic.invitation.accept');
 
+    // The clinic owner's invitation, sent by provisioning after Deal Won.
+    Route::match(['get', 'post'], '/owner-invitations/accept/{token}', [ClinicOwnerInvitationController::class, 'accept'])
+        ->middleware('throttle:clinic-login')
+        ->name('clinic.owner-invitation.accept');
+
     // One-time password links: the primary owner's first password (setup)
     // and "Forgot your password?" (reset). The {token} is the random secret
     // itself, checked by ClinicPasswordTokenService; it carries no user data.
@@ -1124,8 +1182,9 @@ $clinicRoutes = function () {
 
     Route::middleware(['clinic_portal', 'clinic_context', 'onboarding_completed', 'subscription_window'])->group(function () {
         Route::get('/dashboard', [ClinicDashboardController::class, 'index'])->name('clinic.dashboard');
-        Route::get('/dashboard-redirect', function () {
-            return redirect()->route('clinic.dashboard');
+        // Where a signed-in user lands: the Appointment Calendar, or their role's home without it.
+        Route::get('/dashboard-redirect', function (ClinicAccess $access) {
+            return redirect()->to(ClinicWorkspaces::landing($access));
         })->name('dashboard');
 
         // The branch switcher's search: bounded pages of the member's own
@@ -1142,28 +1201,241 @@ $clinicRoutes = function () {
             ->name('clinic.owner-mode.store');
         Route::delete('/owner-mode', [OwnerModeController::class, 'destroy'])->name('clinic.owner-mode.destroy');
 
+        // Destructive-action governance: anyone with the domain permission
+        // asks; only the owner, in Owner Mode, acts or decides.
+        Route::get('/approvals', [DeletionRequestController::class, 'index'])->name('clinic.approvals.index');
+        Route::post('/approvals', [DeletionRequestController::class, 'store'])->middleware('throttle:30,1')->name('clinic.approvals.store');
+        Route::post('/approvals/direct', [DeletionRequestController::class, 'execute'])->middleware('clinic_owner_mode')->name('clinic.approvals.direct');
+        Route::post('/approvals/{deletionRequest}/respond', [DeletionRequestController::class, 'respond'])->whereNumber('deletionRequest')->name('clinic.approvals.respond');
+        Route::post('/approvals/{deletionRequest}/cancel', [DeletionRequestController::class, 'cancel'])->whereNumber('deletionRequest')->name('clinic.approvals.cancel');
+        Route::middleware('clinic_owner_mode')->whereNumber('deletionRequest')->group(function () {
+            Route::post('/approvals/{deletionRequest}/approve', [DeletionRequestController::class, 'approve'])->name('clinic.approvals.approve');
+            Route::post('/approvals/{deletionRequest}/reject', [DeletionRequestController::class, 'reject'])->name('clinic.approvals.reject');
+            Route::post('/approvals/{deletionRequest}/clarify', [DeletionRequestController::class, 'clarify'])->name('clinic.approvals.clarify');
+        });
+
+        // The clinic's follow-up worklist (changes go through the patient's follow-up routes).
+        Route::middleware('clinic_entitled:patients')->group(function () {
+            Route::get('/follow-ups', [FollowUpBoardController::class, 'index'])->name('clinic.follow-ups.index');
+            Route::patch('/follow-ups/{followUp}/notes', [FollowUpBoardController::class, 'annotate'])->whereNumber('followUp')->name('clinic.follow-ups.annotate');
+        });
+
+        // The top bar's search: pages, patients, appointments and support requests, each on its own destination's rule.
+        Route::get('/search', [ClinicSearchController::class, 'index'])->middleware('throttle:clinic-patient-lookup')->name('clinic.search');
+
+        // The member's own notifications at this clinic (the list is the shared notification API's).
+        Route::get('/notifications', [ClinicNotificationsController::class, 'index'])->name('clinic.notifications.index');
+
+        // OralCares support: the clinic raises requests and follows them; the support desk answers.
+        Route::get('/support', [ClinicSupportController::class, 'index'])->name('clinic.support.index');
+        Route::post('/support', [ClinicSupportController::class, 'store'])->middleware('throttle:10,1')->name('clinic.support.store');
+        Route::get('/support/{ticket}', [ClinicSupportController::class, 'show'])->whereNumber('ticket')->name('clinic.support.show');
+
+        // Expenses: recording and paying is `expense.manage`; deciding is `expense.approve`.
+        Route::prefix('expenses')->name('clinic.expenses.')->middleware('clinic_permission:expense.manage')->group(function () {
+            Route::get('/', [ExpenseController::class, 'index'])->name('index');
+            Route::post('/', [ExpenseController::class, 'store'])->middleware('throttle:60,1')->name('store');
+            Route::post('/categories', [ExpenseController::class, 'storeCategory'])->name('categories.store');
+            Route::post('/vendors', [ExpenseController::class, 'storeVendor'])->name('vendors.store');
+            Route::post('/recurring', [ExpenseController::class, 'storeRecurring'])->name('recurring.store');
+            Route::post('/recurring/{recurring}/active', [ExpenseController::class, 'toggleRecurring'])->whereNumber('recurring')->name('recurring.active');
+            Route::get('/{expense}/receipt', [ExpenseController::class, 'receipt'])->whereNumber('expense')->name('receipt');
+            Route::post('/{expense}/pay', [ExpenseController::class, 'pay'])->whereNumber('expense')->name('pay');
+            Route::middleware('clinic_permission:expense.approve')->group(function () {
+                Route::post('/{expense}/approve', [ExpenseController::class, 'approve'])->whereNumber('expense')->name('approve');
+                Route::post('/{expense}/reject', [ExpenseController::class, 'reject'])->whereNumber('expense')->name('reject');
+            });
+        });
+
+        // Payroll: salaries are visible only with `payroll.view`; every change is `payroll.manage`.
+        Route::prefix('payroll')->name('clinic.payroll.')->middleware('clinic_permission:payroll.view')->group(function () {
+            Route::get('/', [ClinicPayrollController::class, 'index'])->name('index');
+            Route::get('/entries/{entry}/payslip', [ClinicPayrollController::class, 'payslip'])->whereNumber('entry')->name('payslip');
+            Route::middleware('clinic_permission:payroll.manage')->group(function () {
+                Route::put('/salaries/{employee}', [ClinicPayrollController::class, 'salary'])->whereNumber('employee')->name('salaries.update');
+                Route::post('/advances', [ClinicPayrollController::class, 'advance'])->name('advances.store');
+                Route::post('/periods', [ClinicPayrollController::class, 'open'])->name('periods.store');
+                Route::post('/periods/{period}/finalise', [ClinicPayrollController::class, 'finalise'])->whereNumber('period')->name('periods.finalise');
+                Route::post('/entries/{entry}/recalculate', [ClinicPayrollController::class, 'recalculate'])->whereNumber('entry')->name('entries.recalculate');
+                Route::put('/entries/{entry}/units', [ClinicPayrollController::class, 'units'])->whereNumber('entry')->name('entries.units');
+                Route::post('/entries/{entry}/lines', [ClinicPayrollController::class, 'line'])->whereNumber('entry')->name('entries.lines.store');
+                Route::delete('/entries/{entry}/lines/{line}', [ClinicPayrollController::class, 'removeLine'])->whereNumber(['entry', 'line'])->name('entries.lines.destroy');
+                Route::post('/entries/{entry}/pay', [ClinicPayrollController::class, 'pay'])->whereNumber('entry')->name('entries.pay');
+            });
+        });
+
+        // Reports: the owner's and administrator's (the Command Center workspace), each report gated again by specialty and permission.
+        Route::prefix('reports')->name('clinic.reports.')->middleware(['clinic_permission:reports.view', 'clinic_workspace:command_center'])->group(function () {
+            Route::get('/', [ClinicReportController::class, 'index'])->name('index');
+            Route::post('/exports', [ClinicReportController::class, 'export'])->middleware('throttle:10,1')->name('exports.store');
+            Route::get('/exports/{export}', [ClinicReportController::class, 'download'])->whereNumber('export')->name('exports.download');
+        });
+
+        // Patient WhatsApp: the owner's choices; the number itself is OralCares'.
+        Route::prefix('whatsapp')->name('clinic.whatsapp.')->middleware('clinic_permission:settings.manage')->group(function () {
+            Route::get('/', [WhatsAppController::class, 'index'])->name('index');
+            Route::put('/', [WhatsAppController::class, 'update'])->name('update');
+            Route::post('/own-number', [WhatsAppController::class, 'requestOwn'])->middleware('throttle:6,1')->name('request-own');
+        });
+
         // The owner choosing what each staff role's dashboard shows.
         Route::put('/dashboard/visibility', [DashboardVisibilityController::class, 'update'])
             ->middleware('clinic_owner_mode')
             ->name('clinic.dashboard.visibility');
 
         // ==========================================
-        // RECEPTION COMMAND CENTER (Phase 2)
+        // FRONT DESK (Reception's workspace)
         // ==========================================
+        // Behind the workspace rule as well as the permission: a practitioner
+        // holds queue.manage only to call their next patient (below), so the
+        // Front Desk and everything it does is closed to them on the server.
         Route::middleware('clinic_permission:queue.manage')->group(function () {
-            Route::prefix('reception')->name('clinic.reception.')->group(function () {
+            Route::prefix('reception')->name('clinic.reception.')->middleware('clinic_workspace:front_desk')->group(function () {
                 Route::get('/', [ReceptionController::class, 'index'])->name('index');
                 Route::get('/check-in/search', [ReceptionController::class, 'search'])
                     ->middleware('throttle:clinic-patient-lookup')
                     ->name('check-in.search');
+                Route::get('/check-in/recent', [ReceptionController::class, 'recent'])->name('check-in.recent');
+                Route::get('/intake', [ReceptionController::class, 'intake'])->name('intake');
+                Route::get('/bookings/match', [ReceptionController::class, 'bookingMatches'])->name('bookings.match');
                 Route::post('/check-in', [ReceptionController::class, 'checkIn'])->name('check-in');
                 Route::post('/walk-in', [ReceptionController::class, 'walkIn'])->name('walk-in');
                 Route::patch('/queue/{item}/status', [ReceptionController::class, 'updateQueueStatus'])->name('queue.status');
                 Route::patch('/queue/{item}/priority', [ReceptionController::class, 'updatePriority'])->name('queue.priority');
+                // Corrections before the consultation starts: another doctor, or why the patient came.
+                Route::patch('/queue/{item}/doctor', [ReceptionController::class, 'reassign'])->name('queue.doctor');
+                Route::patch('/queue/{item}/visit', [ReceptionController::class, 'correctVisit'])->name('queue.visit');
+                // A Front Desk list in full ("View all"): today, this branch, cursor pages.
+                Route::get('/list/{list}', [ReceptionController::class, 'list'])->whereIn('list', ['waiting', 'with_doctor', 'done', 'not_present'])->name('list');
+                // Bill a signed consultation and take the payment at the desk.
+                Route::post('/billing/{encounter}/collect', [ReceptionController::class, 'collect'])
+                    ->whereNumber('encounter')->middleware('clinic_permission:payment.collect')->name('billing.collect');
             });
-            Route::get('/reception', [ReceptionController::class, 'index'])->name('clinic.reception');
-            Route::post('/queue/call-next', [ReceptionController::class, 'callNext'])->name('clinic.queue.call-next');
+            Route::get('/reception', [ReceptionController::class, 'index'])->middleware('clinic_workspace:front_desk')->name('clinic.reception');
+            // The day's queue in full, by stage: a destination of its own only with the Queue module.
+            Route::get('/queue', [ReceptionController::class, 'queue'])->middleware(['clinic_workspace:front_desk', 'clinic_module:queue'])->name('clinic.queue');
+            // Calling the next patient in queue order is the Queue module.
+            Route::post('/queue/call-next', [ReceptionController::class, 'callNext'])->middleware('clinic_module:queue')->name('clinic.queue.call-next');
         });
+
+        // ==========================================
+        // CONSULTATIONS (clinical core)
+        // ==========================================
+        // Reading needs clinical.view, writing clinical.edit; each action is
+        // then authorised on the encounter by ClinicalEncounterPolicy.
+        Route::prefix('consultations')->name('clinic.consultations.')->middleware('clinic_permission:clinical.view')->group(function () {
+            Route::get('/', [ConsultationController::class, 'index'])->name('index');
+            Route::get('/{encounter}', [ConsultationController::class, 'show'])->whereNumber('encounter')->name('show');
+
+            Route::middleware('clinic_permission:clinical.edit')->group(function () {
+                Route::post('/queue/{item}', [ConsultationController::class, 'startFromQueue'])->name('start-from-queue');
+                Route::post('/patients/{patient}', [ConsultationController::class, 'startForPatient'])->name('start-for-patient');
+                Route::patch('/{encounter}/draft', [ConsultationController::class, 'autosave'])->middleware('throttle:120,1')->name('autosave');
+                Route::post('/{encounter}/diagnoses', [ConsultationController::class, 'storeDiagnosis'])->name('diagnoses.store');
+                Route::delete('/{encounter}/diagnoses/{diagnosis}', [ConsultationController::class, 'destroyDiagnosis'])->scopeBindings()->name('diagnoses.destroy');
+                Route::post('/{encounter}/procedures', [ConsultationController::class, 'storeProcedure'])->name('procedures.store');
+                Route::delete('/{encounter}/procedures/{procedure}', [ConsultationController::class, 'destroyProcedure'])->scopeBindings()->name('procedures.destroy');
+                Route::post('/{encounter}/notes', [ConsultationController::class, 'storeNote'])->name('notes.store');
+                Route::post('/{encounter}/finalize', [ConsultationController::class, 'finalize'])->name('finalize');
+                Route::post('/{encounter}/addenda', [ConsultationController::class, 'storeAddendum'])->name('addenda.store');
+                // Start a treatment (with its plan, package and today's session) without leaving the visit.
+                Route::post('/{encounter}/treatments', [ConsultationTreatmentController::class, 'store'])
+                    ->whereNumber('encounter')->middleware('clinic_permission:treatment.start')->name('treatments.store');
+            });
+
+            // Dental extension (registry extension `odontogram`).
+            Route::get('/{encounter}/dental/teeth/{tooth}', [DentalController::class, 'toothHistory'])->whereNumber('tooth')->name('dental.tooth');
+            Route::middleware('clinic_permission:clinical.edit')->group(function () {
+                Route::post('/{encounter}/dental/chart', [DentalController::class, 'chart'])->name('dental.chart');
+                Route::post('/{encounter}/dental/plans', [DentalController::class, 'proposePlan'])->name('dental.plans.store');
+                Route::post('/{encounter}/dental/plans/{plan}/accept', [DentalController::class, 'acceptPlan'])->name('dental.plans.accept');
+                Route::post('/{encounter}/dental/plans/{plan}/items/{item}/complete', [DentalController::class, 'completeItem'])->name('dental.plans.items.complete');
+                Route::post('/{encounter}/dental/plans/{plan}/items/{item}/cancel', [DentalController::class, 'cancelItem'])->name('dental.plans.items.cancel');
+                Route::post('/{encounter}/dental/periodontal', [DentalController::class, 'periodontal'])->name('dental.periodontal');
+                Route::post('/{encounter}/dental/endodontic', [DentalSpecialtyController::class, 'saveEndodontic'])->name('dental.endodontic.store');
+                Route::post('/{encounter}/dental/endodontic/{record}', [DentalSpecialtyController::class, 'saveEndodontic'])->whereNumber('record')->name('dental.endodontic.update');
+                Route::post('/{encounter}/dental/implants', [DentalSpecialtyController::class, 'saveImplant'])->name('dental.implants.store');
+                Route::post('/{encounter}/dental/implants/{record}', [DentalSpecialtyController::class, 'saveImplant'])->whereNumber('record')->name('dental.implants.update');
+                Route::post('/{encounter}/dental/orthodontic', [DentalSpecialtyController::class, 'saveOrthodontic'])->name('dental.orthodontic.store');
+                Route::post('/{encounter}/dental/orthodontic/{case}', [DentalSpecialtyController::class, 'saveOrthodontic'])->whereNumber('case')->name('dental.orthodontic.update');
+                Route::post('/{encounter}/dental/orthodontic/{case}/visit', [DentalSpecialtyController::class, 'recordVisit'])->whereNumber('case')->name('dental.orthodontic.visit');
+                Route::post('/{encounter}/dental/lab', [DentalSpecialtyController::class, 'orderLab'])->name('dental.lab.store');
+            });
+
+            // Physiotherapy extensions.
+            Route::middleware('clinic_permission:clinical.edit')->prefix('/{encounter}/physio')->name('physio.')->group(function () {
+                Route::post('/assessment', [PhysioController::class, 'assessment'])->name('assessment');
+                Route::post('/session', [PhysioController::class, 'session'])->name('session');
+                Route::post('/plans', [PhysioController::class, 'startPlan'])->name('plans.store');
+                Route::put('/plans/{plan}/exercises', [PhysioController::class, 'exercises'])->name('plans.exercises');
+                Route::post('/plans/{plan}/close', [PhysioController::class, 'closePlan'])->name('plans.close');
+            });
+
+            Route::post('/{encounter}/prescription', [PrescriptionController::class, 'store'])
+                ->middleware('clinic_permission:prescription.manage')
+                ->name('prescription.store');
+        });
+
+        // ==========================================
+        // PRESCRIPTION STUDIO
+        // ==========================================
+        Route::prefix('prescriptions')->name('clinic.prescriptions.')->middleware('clinic_permission:clinical.view')->group(function () {
+            Route::get('/{prescription}/print', [PrescriptionController::class, 'print'])->name('print');
+
+            Route::middleware('clinic_permission:prescription.manage')->group(function () {
+                Route::patch('/{prescription}', [PrescriptionController::class, 'update'])->name('update');
+                Route::post('/{prescription}/items', [PrescriptionController::class, 'storeItem'])->name('items.store');
+                Route::put('/{prescription}/items/{item}', [PrescriptionController::class, 'updateItem'])->scopeBindings()->name('items.update');
+                Route::delete('/{prescription}/items/{item}', [PrescriptionController::class, 'destroyItem'])->scopeBindings()->name('items.destroy');
+                Route::post('/{prescription}/finalize', [PrescriptionController::class, 'finalize'])->name('finalize');
+                Route::post('/{prescription}/cancel', [PrescriptionController::class, 'cancel'])->name('cancel');
+            });
+        });
+        // ==========================================
+        // INVESTIGATIONS (order → fulfilment → result → review)
+        // ==========================================
+        Route::prefix('orders')->name('clinic.orders.')->middleware('clinic_permission:clinical.view')->group(function () {
+            Route::get('/', [InvestigationController::class, 'index'])->name('index');
+            Route::get('/{order}', [InvestigationController::class, 'show'])->whereNumber('order')->name('show');
+
+            Route::middleware('clinic_permission:clinical.edit')->scopeBindings()->group(function () {
+                Route::post('/{order}/items/{item}/collect', [InvestigationController::class, 'collect'])->name('items.collect');
+                Route::post('/{order}/items/{item}/result', [InvestigationController::class, 'result'])->name('items.result');
+                Route::post('/{order}/items/{item}/review', [InvestigationController::class, 'review'])->name('items.review');
+                Route::post('/{order}/items/{item}/cancel', [InvestigationController::class, 'cancel'])->name('items.cancel');
+            });
+        });
+        Route::post('/consultations/{encounter}/orders', [InvestigationController::class, 'store'])
+            ->middleware(['clinic_permission:clinical.view', 'clinic_permission:clinical.edit'])
+            ->name('clinic.consultations.orders.store');
+        Route::get('/investigations/search', [InvestigationController::class, 'catalogue'])
+            ->middleware(['clinic_permission:clinical.edit', 'throttle:120,1'])
+            ->name('clinic.investigations.search');
+
+        // ==========================================
+        // BILLING: checkout after the consultation
+        // ==========================================
+        Route::prefix('billing')->name('clinic.billing.')->middleware('clinic_permission:billing.view')->group(function () {
+            // The Billing work center: whoever runs the clinic, the front desk, or billing staff (not a practitioner's day).
+            Route::get('/', [CheckoutController::class, 'index'])->middleware('clinic_workspace:command_center,front_desk,billing')->name('index');
+            Route::get('/checkout/{encounter}', [CheckoutController::class, 'show'])->whereNumber('encounter')->name('checkout');
+            Route::post('/checkout/{encounter}', [CheckoutController::class, 'store'])
+                ->middleware('clinic_permission:billing.create')->name('checkout.store');
+            Route::post('/bills/{bill}/payments', [CheckoutController::class, 'pay'])
+                ->middleware('clinic_permission:payment.collect')->name('payments.store');
+            Route::post('/bills/{bill}/refunds', [CheckoutController::class, 'refund'])
+                ->middleware('clinic_permission:refund.process')->name('refunds.store');
+            Route::get('/bills/{bill}/print', [CheckoutController::class, 'printBill'])->name('bills.print');
+            Route::get('/payments/{payment}/messages', [CheckoutController::class, 'paymentMessages'])->whereNumber('payment')->name('payments.messages');
+            Route::post('/payments/{payment}/messages/retry', [CheckoutController::class, 'retryPaymentMessages'])->whereNumber('payment')
+                ->middleware(['clinic_permission:payment.collect', 'throttle:10,1'])->name('payments.messages.retry');
+            Route::post('/bills/{bill}/adjustments', [CheckoutController::class, 'adjust'])
+                ->middleware('clinic_permission:discount.apply')->name('adjustments.store');
+        });
+
+        Route::get('/medicines/search', [PrescriptionController::class, 'medicines'])
+            ->middleware(['clinic_permission:prescription.manage', 'throttle:120,1'])
+            ->name('clinic.medicines.search');
 
         // ==========================================
         // PATIENTS & PATIENT 360 (Phase 2)
@@ -1172,6 +1444,10 @@ $clinicRoutes = function () {
         // is checked by `PatientPolicy` inside the controllers.
         Route::prefix('patients')->name('clinic.patients.')->middleware('clinic_entitled:patients')->group(function () {
             Route::get('/', [ClinicPatientController::class, 'index'])->name('index');
+            // The directory as JSON keyset pages (PatientDirectory).
+            Route::get('/directory', [PatientDirectoryController::class, 'index'])
+                ->middleware('throttle:120,1')
+                ->name('directory');
             Route::get('/create', [ClinicPatientController::class, 'create'])->name('create');
             // Duplicate-check is a step of registering a patient and returns
             // matching patients, so it needs the permission to register one.
@@ -1183,9 +1459,30 @@ $clinicRoutes = function () {
             Route::get('/{patient}/edit', [ClinicPatientController::class, 'edit'])->name('edit');
             Route::put('/{patient}', [ClinicPatientController::class, 'update'])->name('update');
             Route::post('/{patient}/transfer', [ClinicPatientController::class, 'transfer'])->name('transfer');
-            Route::get('/{patient}/timeline', [Patient360Controller::class, 'timeline'])->name('timeline');
-            Route::get('/{patient}/billing', [Patient360Controller::class, 'billing'])->name('billing');
-            Route::get('/{patient}/clinical', [Patient360Controller::class, 'clinical'])->name('clinical');
+            // Clinical staff change recorded conditions/allergies/medications (writeClinicalData).
+            Route::put('/{patient}/clinical-entries/{kind}', [PatientClinicalEntryController::class, 'update'])
+                ->where('kind', 'condition|allergy|medication')
+                ->name('clinical-entries.update');
+            Route::post('/{patient}/session-packages', [PhysioController::class, 'sellPackage'])->name('session-packages.store');
+            Route::post('/{patient}/session-packages/{package}/cancel', [PhysioController::class, 'cancelPackage'])->name('session-packages.cancel');
+            // Patient 360 sections, each loaded when opened, a page at a time.
+            Route::get('/{patient}/360/bills/{bill}', [Patient360SectionController::class, 'bill'])->whereNumber('bill')->name('360.bill');
+            Route::get('/{patient}/360/dental/teeth/{tooth}', [Patient360SectionController::class, 'tooth'])->whereNumber('tooth')->name('360.dental.tooth');
+            Route::get('/{patient}/360/{section}', [Patient360SectionController::class, 'show'])
+                ->where('section', 'timeline|encounters|appointments|treatment|prescriptions|investigations|billing|documents|follow-ups|communications|requests|audit|dental|physio')
+                ->middleware('throttle:240,1')
+                ->name('360.section');
+            Route::post('/{patient}/dental/lab/{labOrder}/{step}', [DentalSpecialtyController::class, 'labStep'])
+                ->whereNumber('labOrder')->where('step', 'send|start|receive|remake|fit|complete|cancel')
+                ->name('dental.lab.step');
+            Route::post('/{patient}/dental/plans/{plan}/{transition}', [DentalController::class, 'transitionPlan'])
+                ->whereNumber('plan')->where('transition', 'accept|pause|resume|decline|cancel')
+                ->middleware('clinic_permission:clinical.edit')
+                ->name('dental.plans.transition');
+            Route::post('/{patient}/follow-ups', [PatientFollowUpController::class, 'store'])->name('follow-ups.store');
+            Route::patch('/{patient}/follow-ups/{followUp}', [PatientFollowUpController::class, 'update'])->whereNumber('followUp')->name('follow-ups.update');
+            Route::post('/{patient}/follow-ups/{followUp}/complete', [PatientFollowUpController::class, 'complete'])->whereNumber('followUp')->name('follow-ups.complete');
+            Route::post('/{patient}/follow-ups/{followUp}/cancel', [PatientFollowUpController::class, 'cancel'])->whereNumber('followUp')->name('follow-ups.cancel');
             // Uploading needs its own permission. Being able to view a patient
             // is not enough to add files to their record.
             Route::post('/{patient}/documents', [Patient360Controller::class, 'uploadDocument'])
@@ -1194,6 +1491,69 @@ $clinicRoutes = function () {
             Route::get('/{patient}/documents/{document}', [Patient360Controller::class, 'downloadDocument'])
                 ->whereNumber('document')
                 ->name('documents.download');
+
+            // Treatments (T7/T8): reading needs patient.view (PatientPolicy +
+            // branch); every write is authorised again in PatientTreatments.
+            Route::get('/{patient}/treatments', [PatientTreatmentController::class, 'index'])->name('treatments.index');
+            Route::get('/{patient}/treatments/options', [PatientTreatmentController::class, 'options'])
+                ->middleware('clinic_permission:treatment.start')->name('treatments.options');
+            Route::post('/{patient}/treatments', [PatientTreatmentController::class, 'store'])
+                ->middleware('clinic_permission:treatment.start')->name('treatments.store');
+            // A treatment without a catalogue entry (e.g. an ad-hoc physiotherapy programme): same canonical model.
+            Route::post('/{patient}/treatments/adhoc', [TreatmentCareController::class, 'startAdHoc'])
+                ->middleware('clinic_permission:treatment.start')->name('treatments.adhoc');
+
+            // Treatment charges outside a consultation.
+            Route::middleware('clinic_permission:billing.view')->group(function () {
+                Route::get('/{patient}/treatment-charges', [TreatmentChargeController::class, 'index'])->name('treatment-charges.index');
+                Route::post('/{patient}/treatment-charges', [TreatmentChargeController::class, 'store'])
+                    ->middleware('clinic_permission:billing.create')->name('treatment-charges.store');
+            });
+
+            // Consents (X1).
+            Route::get('/{patient}/consents', [PatientConsentController::class, 'index'])->name('consents.index');
+            Route::middleware('clinic_permission:consent.manage')->group(function () {
+                Route::post('/{patient}/consents', [PatientConsentController::class, 'store'])->name('consents.store');
+                Route::post('/{patient}/consents/{consent}/revoke', [PatientConsentController::class, 'revoke'])->whereNumber('consent')->name('consents.revoke');
+            });
+        });
+
+        // ==========================================
+        // TREATMENTS (detail, execution, board)
+        // ==========================================
+        Route::prefix('treatments')->name('clinic.treatments.')->middleware('clinic_entitled:patients')->group(function () {
+            Route::get('/', [TreatmentBoardController::class, 'index'])
+                ->middleware(['clinic_permission:patient.view', 'throttle:120,1'])->name('board');
+            Route::get('/{treatment}', [PatientTreatmentController::class, 'show'])->whereNumber('treatment')->name('show');
+            // Packages belong to one treatment; selling and adjusting need billing rights (checked in the controller/service).
+            Route::whereNumber(['treatment', 'package'])->group(function () {
+                Route::get('/{treatment}/packages/eligible', [TreatmentCareController::class, 'eligiblePackages'])->name('packages.eligible');
+                Route::post('/{treatment}/packages', [TreatmentCareController::class, 'sellPackage'])->name('packages.store');
+                Route::post('/{treatment}/packages/{package}/adjust', [TreatmentCareController::class, 'adjustPackage'])->name('packages.adjust');
+            });
+
+            Route::middleware('clinic_permission:treatment.execute')->whereNumber(['treatment', 'stage'])->group(function () {
+                Route::post('/{treatment}/pause', [PatientTreatmentController::class, 'pause'])->name('pause');
+                Route::post('/{treatment}/resume', [PatientTreatmentController::class, 'resume'])->name('resume');
+                Route::post('/{treatment}/cancel', [PatientTreatmentController::class, 'cancel'])->name('cancel');
+                // Care inside the treatment: context, completion, plan revisions, sessions (4E.2).
+                Route::put('/{treatment}/context', [TreatmentCareController::class, 'context'])->name('context');
+                Route::post('/{treatment}/complete', [TreatmentCareController::class, 'complete'])->name('complete');
+                Route::middleware('clinic_permission:clinical.edit')->whereNumber(['plan', 'session'])->group(function () {
+                    Route::post('/{treatment}/plans', [TreatmentCareController::class, 'startPlan'])->name('plans.store');
+                    Route::post('/{treatment}/plans/{plan}/revise', [TreatmentCareController::class, 'revisePlan'])->name('plans.revise');
+                    Route::post('/{treatment}/sessions', [TreatmentCareController::class, 'openSession'])->name('sessions.store');
+                    Route::put('/{treatment}/sessions/{session}', [TreatmentCareController::class, 'saveSession'])->name('sessions.update');
+                    Route::post('/{treatment}/sessions/{session}/complete', [TreatmentCareController::class, 'completeSession'])->name('sessions.complete');
+                    Route::post('/{treatment}/sessions/{session}/reverse', [TreatmentCareController::class, 'reverseSession'])->name('sessions.reverse');
+                });
+                Route::scopeBindings()->group(function () {
+                    Route::post('/{treatment}/stages/{stage}/start', [PatientTreatmentController::class, 'startStage'])->name('stages.start');
+                    Route::post('/{treatment}/stages/{stage}/complete', [PatientTreatmentController::class, 'completeStage'])->name('stages.complete');
+                    Route::post('/{treatment}/stages/{stage}/skip', [PatientTreatmentController::class, 'skipStage'])->name('stages.skip');
+                    Route::post('/{treatment}/stages/{stage}/procedures', [PatientTreatmentController::class, 'recordProcedure'])->name('stages.procedures.store');
+                });
+            });
         });
         Route::get('/search/patients', [ClinicPatientController::class, 'search'])
             ->middleware(['clinic_entitled:patients', 'clinic_permission:patient.search', 'throttle:clinic-patient-lookup'])
@@ -1276,6 +1636,29 @@ $clinicRoutes = function () {
             Route::post('/complete', [ClinicOnboardingController::class, 'complete'])
                 ->middleware('clinic_permission:settings.manage')
                 ->name('complete');
+
+            // The onboarding engine. Who may change which session is decided
+            // in the controller: clinic setup needs settings.manage, a staff
+            // member's own setup is theirs alone.
+            Route::get('/account', [ClinicOnboardingController::class, 'account'])->name('account');
+            Route::post('/account', [ClinicOnboardingController::class, 'saveAccount'])->name('account.store');
+            Route::get('/done', [ClinicOnboardingController::class, 'done'])->name('done');
+            Route::post('/pause', [ClinicOnboardingController::class, 'pause'])->name('pause');
+            Route::post('/resume', [ClinicOnboardingController::class, 'resume'])->name('resume');
+            Route::put('/steps/{step}/draft', [ClinicOnboardingController::class, 'draft'])
+                ->middleware('throttle:120,1')
+                ->where('step', '[a-z_]+')
+                ->name('draft');
+            Route::post('/steps/{step}', [ClinicOnboardingController::class, 'submit'])
+                ->middleware('throttle:60,1')
+                ->where('step', '[a-z_]+')
+                ->name('submit');
+            Route::post('/steps/{step}/skip', [ClinicOnboardingController::class, 'skip'])
+                ->where('step', '[a-z_]+')
+                ->name('skip');
+            Route::post('/documents', [ClinicOnboardingController::class, 'uploadDocument'])
+                ->middleware('throttle:30,1')
+                ->name('documents.store');
         });
 
         // ==========================================
@@ -1327,11 +1710,51 @@ $clinicRoutes = function () {
                 Route::resource('rooms', ClinicAdminRoomController::class)->only(['index', 'store', 'update', 'destroy']);
             });
 
+            // Treatment catalog (T1–T4), pricing (T5): catalog.manage, re-checked in the services.
+            Route::middleware('clinic_permission:catalog.manage')->prefix('catalog')->name('catalog.')->group(function () {
+                Route::get('treatments', [ClinicAdminTreatmentCatalogController::class, 'index'])->name('treatments.index');
+                Route::post('treatments', [ClinicAdminTreatmentCatalogController::class, 'store'])->name('treatments.store');
+                Route::get('treatments/{treatment}', [ClinicAdminTreatmentCatalogController::class, 'show'])->whereNumber('treatment')->name('treatments.show');
+                Route::post('treatments/{treatment}/active', [ClinicAdminTreatmentCatalogController::class, 'setActive'])->whereNumber('treatment')->name('treatments.active');
+                Route::put('treatments/{treatment}/capability', [ClinicAdminTreatmentCatalogController::class, 'setCapability'])->whereNumber('treatment')->name('treatments.capability');
+                Route::post('treatments/{treatment}/versions', [ClinicAdminTreatmentCatalogController::class, 'storeVersion'])->whereNumber('treatment')->name('versions.store');
+                Route::put('treatments/{treatment}/versions/{version}', [ClinicAdminTreatmentCatalogController::class, 'updateVersion'])->whereNumber(['treatment', 'version'])->name('versions.update');
+                Route::post('treatments/{treatment}/versions/{version}/publish', [ClinicAdminTreatmentCatalogController::class, 'publish'])->whereNumber(['treatment', 'version'])->name('versions.publish');
+
+                Route::get('/', [ClinicAdminCatalogPageController::class, 'index'])->name('index');
+                Route::get('procedures', [ClinicAdminProcedureCatalogController::class, 'index'])->name('procedures.index');
+                Route::post('procedures', [ClinicAdminProcedureCatalogController::class, 'store'])->name('procedures.store');
+                Route::put('procedures/{procedure}', [ClinicAdminProcedureCatalogController::class, 'update'])->whereNumber('procedure')->name('procedures.update');
+                Route::post('procedures/{procedure}/active', [ClinicAdminProcedureCatalogController::class, 'setActive'])->whereNumber('procedure')->name('procedures.active');
+
+                Route::get('prices', [ClinicAdminPricingController::class, 'index'])->name('prices.index');
+                Route::post('prices', [ClinicAdminPricingController::class, 'store'])->name('prices.store');
+            });
+
+            // Specialties (T6): readable by catalog managers; changed only by the owner, in Owner Mode.
+            Route::get('specialties', [ClinicAdminSpecialtyController::class, 'index'])
+                ->middleware('clinic_permission:catalog.manage')->name('specialties.index');
+            Route::put('specialties', [ClinicAdminSpecialtyController::class, 'update'])
+                ->middleware(['clinic_permission:specialty.configure', 'clinic_owner_mode'])->name('specialties.update');
+
             Route::middleware('clinic_permission:settings.manage')->group(function () {
+                // Consent types and their versioned wording.
+                Route::get('consents', [ConsentTypeController::class, 'index'])->name('consents.index');
+                Route::post('consents', [ConsentTypeController::class, 'store'])->name('consents.store');
+                Route::put('consents/{type}', [ConsentTypeController::class, 'update'])->whereNumber('type')->name('consents.update');
+                Route::post('consents/{type}/active', [ConsentTypeController::class, 'setActive'])->whereNumber('type')->name('consents.active');
+
                 Route::get('settings', [ClinicAdminSettingsController::class, 'index'])->name('settings.index');
                 Route::put('settings', [ClinicAdminSettingsController::class, 'update'])->name('settings.update');
+                Route::get('settings/patient-form', [ClinicAdminSettingsController::class, 'patientForm'])->name('settings.patient-form');
                 Route::put('settings/patient-fields', [ClinicAdminSettingsController::class, 'updatePatientFields'])->name('settings.patient-fields');
+                Route::post('settings/patient-fields/template', [ClinicAdminSettingsController::class, 'applyPatientFieldTemplate'])->name('settings.patient-fields.template');
                 Route::put('settings/patient-flow', [ClinicAdminSettingsController::class, 'updatePatientFlow'])->name('settings.patient-flow');
+                Route::put('settings/check-in', [ClinicAdminSettingsController::class, 'updateCheckIn'])->name('settings.check-in');
+                Route::put('settings/quick-care', [ClinicAdminSettingsController::class, 'updateQuickCare'])->name('settings.quick-care');
+                Route::get('settings/catalogue/{kind}', [ClinicAdminSettingsController::class, 'catalogue'])->name('settings.catalogue.index');
+                Route::post('settings/catalogue/{kind}', [ClinicAdminSettingsController::class, 'addCatalogueItem'])->name('settings.catalogue.store');
+                Route::put('settings/catalogue/{kind}/{key}', [ClinicAdminSettingsController::class, 'configureCatalogueItem'])->name('settings.catalogue.update');
                 Route::put('settings/case-number', [ClinicAdminSettingsController::class, 'updateCaseNumber'])->name('settings.case-number');
             });
         });

@@ -47,6 +47,7 @@ class SecurityAudit
     {
         $request = request();
         $clinicContext = app()->bound(ClinicContext::class) ? app(ClinicContext::class) : null;
+        $context = $this->withActorRole($context, $clinicContext, $overrides);
 
         $entry = [
             'event' => $event,
@@ -144,6 +145,33 @@ class SecurityAudit
      * @param  array<string, mixed>  $context
      * @return array<string, mixed>
      */
+    /**
+     * In a clinic, the trail says in what capacity the actor acted: "Owner",
+     * or the clinic roles they hold. Only for the signed-in member acting on
+     * their own behalf, and never at the cost of the audit itself.
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array{actor_user_id?: int|null, clinic_id?: int|null, branch_id?: int|null}  $overrides
+     * @return array<string, mixed>
+     */
+    private function withActorRole(array $context, ?ClinicContext $clinicContext, array $overrides): array
+    {
+        try {
+            $user = request()->user();
+            $membership = $clinicContext?->hasClinic() ? $clinicContext->membership() : null;
+            if (array_key_exists('actor_role', $context) || ! $user || ! $membership || $membership->user_id !== $user->getAuthIdentifier()
+                || (array_key_exists('actor_user_id', $overrides) && $overrides['actor_user_id'] !== $user->getAuthIdentifier())) {
+                return $context;
+            }
+
+            $role = $membership->is_primary_owner ? 'Owner' : (method_exists($user, 'getRoleNames') ? $user->getRoleNames()->implode(', ') : '');
+
+            return $context + ['actor_role' => $role !== '' ? $role : 'Staff'];
+        } catch (Throwable) {
+            return $context;
+        }
+    }
+
     private function withoutSecrets(array $context): array
     {
         return Arr::map(

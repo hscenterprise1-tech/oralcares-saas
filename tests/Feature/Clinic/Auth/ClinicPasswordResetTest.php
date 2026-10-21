@@ -45,7 +45,7 @@ it('shows the forgot-password page with the clinic branding', function () {
     $this->get('/clinic/password/forgot?clinic=reset-dental')
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Auth/ForgotPassword')
+            ->component('Clinic/Auth/ForgotPassword', true)
             ->where('clinicName', 'Reset Dental')
         );
 });
@@ -115,7 +115,7 @@ it('resets the password from a valid link and sends the user to sign in', functi
 
     $this->get("/clinic/password/reset/{$token}?clinic=done-dental")
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Auth/SetupPassword')
+            ->component('Clinic/Auth/SetupPassword', true)
             ->where('status', 'valid')
             ->where('mode', 'reset')
             ->where('email', $user->email)

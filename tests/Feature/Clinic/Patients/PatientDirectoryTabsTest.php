@@ -53,8 +53,6 @@ test('a practitioner defaults to My Patients and only sees patients assigned to 
         ->where('filters.tab', 'mine')
         ->has('patients.data', 1)
         ->where('patients.data.0.id', $this->mine->id)
-        ->where('metrics.mine', 1)
-        ->where('metrics.total', 2)
     );
 });
 

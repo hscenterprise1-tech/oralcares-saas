@@ -27,7 +27,12 @@
         >
 
         <!-- Scripts -->
-        @routes
+        {{-- Clinic pages get the Clinic Portal's own routes only (config/ziggy.php, `groups.clinic`). --}}
+        @if (\App\Support\ClinicPortalErrors::isClinicPortalRequest(request()))
+            @routes('clinic')
+        @else
+            @routes
+        @endif
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         @inertiaHead

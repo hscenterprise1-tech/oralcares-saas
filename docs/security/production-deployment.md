@@ -32,6 +32,11 @@ Local development is expected to fail most checks.
 | `SECURITY_AUDIT_RETENTION_DAYS` ≥ 180 | – | required | required |
 | Master-admin seed password ≥ 16 chars, not a default | – | required | required |
 | Every active clinic has a subscription | – | warn | required |
+| Queue on Redis (`QUEUE_CONNECTION=redis`) | – | warn | required |
+| `retry_after` above `queue.max_job_timeout` (600 s) | – | required | required |
+| Cache, locks and scheduler mutex on Redis (`CACHE_STORE=redis`) | – | warn | required |
+| Sessions on Redis (`SESSION_DRIVER=redis`) | – | warn | required |
+| Private document disk opens (S3 adapter `league/flysystem-aws-s3-v3` installed) | – | required | required |
 
 ## Also required (outside the application)
 
@@ -43,6 +48,26 @@ Local development is expected to fail most checks.
 - A log collector and external store.
 - A secret manager for `APP_KEY`, `BACKUP_ENCRYPTION_KEY`,
   `SECURITY_AUDIT_CHAIN_KEY`, and database and mail credentials.
-- A queue worker and `php artisan schedule:run` every minute.
+- `php artisan schedule:run` every minute on every app server (each task
+  takes a Redis lock, `onOneServer()`, so it runs once).
+- Queue workers over the named queues (ADR-001 §J), `--timeout` below
+  `retry_after`:
+
+  ```
+  # interactive pool
+  php artisan queue:work redis --queue=critical,default,notifications,provisioning,search --timeout=300 --tries=1
+  # long-job pool (imports, reports, maintenance)
+  php artisan queue:work redis --queue=imports,reports,maintenance --timeout=600 --tries=1
+  ```
+
+  Restart workers on deploy (`php artisan queue:restart`).
+- Load balancer readiness probe on `GET /health/ready` (database, cache,
+  queue, private storage; 503 when any is down) and liveness on `GET /up`.
+- Ship `storage/logs/performance*.log` (slow queries, over-budget requests,
+  queue backlog) and `metrics*.log` (counters/timings), or set
+  `PERFORMANCE_LOG_DRIVER` / `METRICS_LOG_DRIVER` to a shipped channel.
+  Thresholds: `config/observability.php`.
+- `DB_READ_HOST` (replicas) and `DB_REPORTING_CONNECTION=reporting` once read
+  replicas exist.
 - No demo clinics or test accounts in production data.
 - An independent penetration test before large-scale rollout.

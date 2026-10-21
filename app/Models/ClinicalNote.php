@@ -13,6 +13,9 @@ class ClinicalNote extends Model
 {
     use Auditable, ClinicScoped, InheritsClinicOwnership, OrganizationScoped;
 
+    /** The kinds of note a clinician adds to a consultation. */
+    public const TYPES = ['general' => 'Clinical note', 'progress' => 'Progress', 'treatment' => 'Treatment given', 'advice' => 'Advice to patient'];
+
     protected $fillable = [
         'organization_id',
         'clinic_id',

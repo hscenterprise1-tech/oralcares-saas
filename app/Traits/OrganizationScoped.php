@@ -47,8 +47,10 @@ trait OrganizationScoped
                 return;
             }
 
-            if ($user->organization_id) {
-                $model->organization_id = $user->organization_id;
+            // The active clinic's organisation for a clinic user (see
+            // `OrganizationScope::organizationIdFor()`), never a guess.
+            if ($organizationId = OrganizationScope::organizationIdFor($user)) {
+                $model->organization_id = $organizationId;
             }
         });
     }

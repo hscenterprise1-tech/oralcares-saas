@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
  * A queue move the state machine does not permit — completing someone who was
  * never seen, calling someone who already left. Same shape as
  * `IllegalStageTransition`: it renders itself as a validation error on
- * `status`, so the Live Queue, the Now/Next card and any job all get the same
+ * `status`, so the Front Desk, the Now/Next card and any job all get the same
  * sentence without catching it themselves.
  */
 class IllegalQueueTransition extends DomainException

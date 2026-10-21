@@ -44,6 +44,7 @@ use App\Services\CRM\TrialLifecycleService;
 use App\Services\Marketing\MarketingSettingsService;
 use App\Services\Marketing\PhoneNormalizer;
 use App\Services\Marketing\WhatsAppMessageService;
+use App\Services\Provisioning\ClinicProvisioning;
 use App\Shared\Notification\DTO\NotificationActionDTO;
 use App\Shared\Notification\DTO\SendNotificationDTO;
 use App\Shared\Notification\Enums\NotificationCategory;
@@ -1771,9 +1772,15 @@ class LeadWorkspaceService
          * is stamped at creation with the acting user's org, so guarding on it
          * meant provisioning never ran for a lead created through the UI.
          */
+        /*
+         * Since the onboarding system: Won requests a provisioning run, and a
+         * queued job does the work (tenant, primary branch, specialty, owner
+         * invitation, onboarding session), resumable stage by stage. The run
+         * is unique per deal. With a sync queue the job still runs inline.
+         */
         if ($targetStatus === LeadStatus::Won) {
             try {
-                app(CustomerProvisioningEngine::class)->provision($lead);
+                app(ClinicProvisioning::class)->requestForWonDeal($lead, $user);
             } catch (Throwable $e) {
                 Log::error('Customer provisioning failed after a lead was marked Won.', [
                     'lead_id' => $lead->id,

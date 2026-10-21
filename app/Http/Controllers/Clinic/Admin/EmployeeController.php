@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
+use App\ClinicMembershipStatus;
 use App\ClinicPermission;
 use App\ClinicRole;
 use App\EmploymentStatus;
+use App\Exceptions\ResourceLimitExceededException;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ClinicDepartment;
@@ -14,8 +16,11 @@ use App\Models\Practitioner;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
+use App\Services\ResourceLimitService;
+use App\Services\RetainedClinicalHistory;
 use App\Services\Security\SecurityAudit;
 use App\Services\Staff\StaffDirectory;
+use App\Services\Staff\StaffEnrolment;
 use App\Services\Staff\StaffProfileView;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,6 +44,7 @@ class EmployeeController extends Controller
     public function __construct(
         protected StaffDirectory $directory,
         protected StaffProfileView $profiles,
+        protected ResourceLimitService $limits,
     ) {}
 
     public function index(Request $request, ClinicContext $context): Response
@@ -91,43 +97,32 @@ class EmployeeController extends Controller
         return Inertia::render('ClinicPortal/Staff/Form', $this->formProps($context, null));
     }
 
-    public function store(Request $request, ClinicContext $context, SecurityAudit $audit): RedirectResponse
+    public function store(Request $request, ClinicContext $context, StaffEnrolment $enrolment): RedirectResponse
     {
         $clinic = $context->clinic();
         $validated = $request->validate($this->rules($context, null));
 
-        $employee = DB::transaction(function () use ($validated, $clinic, $request) {
-            $employee = ClinicEmployee::create([
-                'clinic_id' => $clinic->id,
-                'name' => $validated['name'],
-                'email' => $validated['email'] ?? null,
-                'phone' => $validated['phone'] ?? null,
-                'status' => $validated['status'],
-                'status_changed_at' => now(),
-            ] + $this->profileFields($validated));
+        if (! empty($validated['roles'])) {
+            abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not assign staff roles.');
+        }
 
+        $employee = DB::transaction(function () use ($validated, $clinic, $request, $enrolment) {
             $branchIds = array_map('intval', $validated['branches'] ?? []);
-            if ($branchIds !== []) {
-                $employee->branches()->sync($branchIds);
-            }
+
+            // A new staff record has no login, so the roles are the ones to
+            // grant when their invitation is accepted.
+            $employee = $enrolment->enrol(
+                $clinic,
+                ['name' => $validated['name'], 'email' => $validated['email'] ?? null, 'phone' => $validated['phone'] ?? null, 'status' => $validated['status']] + $this->profileFields($validated),
+                $branchIds,
+                null,
+                array_map('intval', $validated['roles'] ?? []),
+                $request->user(),
+            );
             $this->syncPrimaryAndDepartment($employee, $validated, $branchIds);
-
-            if (StaffDirectory::isClinical($employee->staff_type)) {
-                Practitioner::create(['clinic_employee_id' => $employee->id, 'profession' => StaffDirectory::typeLabel($employee->staff_type), 'is_active' => true]);
-            }
-
-            if (! empty($validated['roles'])) {
-                abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not assign staff roles.');
-
-                // A new staff record has no login, so these are the roles to
-                // grant when their invitation is accepted.
-                $employee->roles()->sync($validated['roles']);
-            }
 
             return $employee;
         });
-
-        $audit->record('staff.created', $employee, ['staff_type' => $employee->staff_type]);
 
         return redirect()->route('admin.employees.show', $employee)->with('success', "{$employee->name} added to staff.");
     }
@@ -165,45 +160,57 @@ class EmployeeController extends Controller
 
         $statusChanged = $employee->status?->value !== $validated['status'];
 
-        $employee->update([
-            'name' => $validated['name'],
-            'email' => $validated['email'] ?? null,
-            'phone' => $validated['phone'] ?? null,
-            'status' => $validated['status'],
-            'status_changed_at' => $statusChanged ? now() : $employee->status_changed_at,
-        ] + $this->profileFields($validated, $employee));
+        // One transaction: a seat this change starts holding (a reactivated
+        // login, or one moved into a doctor role) is checked under the
+        // clinic's lock first, and nothing is saved when the plan is full.
+        DB::transaction(function () use ($request, $employee, $context, $roleAssignments, $validated, $statusChanged) {
+            $this->holdSeatFor(
+                $employee,
+                $context,
+                $validated['status'],
+                isset($validated['roles']) ? Role::whereIn('id', $validated['roles'])->pluck('name')->all() : null,
+            );
 
-        if (isset($validated['branches'])) {
-            $this->placeAtBranches($employee, array_map('intval', $validated['branches']), $context, $request->user());
-        }
-        $this->syncPrimaryAndDepartment($employee, $validated, $employee->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->all());
+            $employee->update([
+                'name' => $validated['name'],
+                'email' => $validated['email'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+                'status' => $validated['status'],
+                'status_changed_at' => $statusChanged ? now() : $employee->status_changed_at,
+            ] + $this->profileFields($validated, $employee));
 
-        if (StaffDirectory::isClinical($employee->staff_type) && ! $employee->practitionerProfile()->withoutGlobalScopes()->exists()) {
-            Practitioner::create(['clinic_employee_id' => $employee->id, 'profession' => StaffDirectory::typeLabel($employee->staff_type), 'is_active' => true]);
-        }
+            if (isset($validated['branches'])) {
+                $this->placeAtBranches($employee, array_map('intval', $validated['branches']), $context, $request->user());
+            }
+            $this->syncPrimaryAndDepartment($employee, $validated, $employee->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->all());
 
-        if (isset($validated['roles'])) {
-            $requested = collect($validated['roles'])->map(fn ($id) => (int) $id)->sort()->values()->all();
-            $current = $this->currentRoleIds($employee)->sort()->values()->all();
-
-            // Changing what someone may do is its own permission; managing
-            // staff details is not enough to hand out roles.
-            if ($requested !== $current) {
-                abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not change staff roles.');
+            if (StaffDirectory::isClinical($employee->staff_type) && ! $employee->practitionerProfile()->withoutGlobalScopes()->exists()) {
+                Practitioner::create(['clinic_employee_id' => $employee->id, 'profession' => StaffDirectory::typeLabel($employee->staff_type), 'is_active' => true]);
             }
 
-            if ($employee->user_id) {
-                // Linked staff: Spatie roles, per branch, are the only roles
-                // that count. They are set on each branch the person works at,
-                // never on whichever branch the acting admin has open.
-                $roleNames = Role::whereIn('id', $requested)->pluck('name')->toArray();
-                $roleAssignments->syncRoles($employee->user, $roleNames, $employee->branches()->get());
-            } else {
-                // No login yet: keep the roles to grant when their invitation
-                // is accepted. Nothing reads these for access checks.
-                $employee->roles()->sync($requested);
+            if (isset($validated['roles'])) {
+                $requested = collect($validated['roles'])->map(fn ($id) => (int) $id)->sort()->values()->all();
+                $current = $this->currentRoleIds($employee)->sort()->values()->all();
+
+                // Changing what someone may do is its own permission; managing
+                // staff details is not enough to hand out roles.
+                if ($requested !== $current) {
+                    abort_unless($request->user()->hasClinicPermission(ClinicPermission::RolesManage), 403, 'You may not change staff roles.');
+                }
+
+                if ($employee->user_id) {
+                    // Linked staff: Spatie roles, per branch, are the only roles
+                    // that count. They are set on each branch the person works at,
+                    // never on whichever branch the acting admin has open.
+                    $roleNames = Role::whereIn('id', $requested)->pluck('name')->toArray();
+                    $roleAssignments->syncRoles($employee->user, $roleNames, $employee->branches()->get());
+                } else {
+                    // No login yet: keep the roles to grant when their invitation
+                    // is accepted. Nothing reads these for access checks.
+                    $employee->roles()->sync($requested);
+                }
             }
-        }
+        });
 
         $audit->record('staff.updated', $employee, ['status_changed' => $statusChanged]);
 
@@ -227,7 +234,12 @@ class EmployeeController extends Controller
         }
 
         $before = $employee->status?->value;
-        $employee->update(['status' => $validated['status'], 'status_changed_at' => now()]);
+        // A reactivated login takes its seat back only if the plan has room,
+        // checked under the clinic's lock in the same transaction.
+        DB::transaction(function () use ($employee, $context, $validated) {
+            $this->holdSeatFor($employee, $context, $validated['status'], null);
+            $employee->update(['status' => $validated['status'], 'status_changed_at' => now()]);
+        });
         $audit->record('staff.status_changed', $employee, ['from' => $before, 'to' => $validated['status']]);
 
         $label = match ($validated['status']) {
@@ -240,14 +252,70 @@ class EmployeeController extends Controller
         return back()->with('success', "{$employee->name} {$label}.");
     }
 
-    public function destroy(ClinicEmployee $employee, ClinicContext $context): RedirectResponse
+    public function destroy(ClinicEmployee $employee, ClinicContext $context, RetainedClinicalHistory $retained): RedirectResponse
     {
         $this->authorizeStaff($employee, $context);
 
-        // Ideally check if employee has dependencies.
+        // Someone who has seen patients or kept staff records stays on file
+        // as the author of that history; they are deactivated, not deleted.
+        $history = $retained->forEmployee($employee);
+        if ($history !== []) {
+            return back()->with('error', "{$employee->name} has ".implode(', ', $history).' on record and cannot be deleted. Set them to inactive instead.');
+        }
+
         $employee->delete();
 
         return redirect()->route('admin.employees.index')->with('success', 'Employee deleted successfully.');
+    }
+
+    /**
+     * Before a change lets this person's login hold a seat it did not hold —
+     * a reactivation — or a different kind of seat — a staff login moved into
+     * a doctor role, or back: the plan must have room for it
+     * (`ResourceLimitService::assertSeatAvailable`). Call it inside the
+     * transaction that makes the change, before the change is saved. A
+     * profile with no login (payroll only), or a login whose membership here
+     * is not active, never holds a seat and is never checked.
+     *
+     * A clinic with no active subscription has no seat entitlement to check
+     * against; these edits were never refused for it, and still are not
+     * (accepting an invitation is, as it always was).
+     *
+     * @param  list<string>|null  $roleNames  the roles after the change, or null when they stay as they are
+     *
+     * @throws ValidationException when the plan is full
+     */
+    private function holdSeatFor(ClinicEmployee $employee, ClinicContext $context, string $status, ?array $roleNames): void
+    {
+        if ($employee->user_id === null || in_array($status, EmploymentStatus::accessEnding(), true)) {
+            return;
+        }
+
+        $clinic = $context->clinic();
+        if ($this->limits->getActiveSubscription($clinic) === null) {
+            return;
+        }
+
+        $signsIn = ClinicMembership::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinic->id)->where('user_id', $employee->user_id)
+            ->where('status', ClinicMembershipStatus::Active)->exists();
+        if (! $signsIn) {
+            return;
+        }
+
+        $user = User::query()->findOrFail($employee->user_id);
+        $heldSeat = ! in_array($employee->status?->value, EmploymentStatus::accessEnding(), true);
+        $wasDoctor = $this->limits->holdsDoctorRole($clinic, $user);
+        $asDoctor = $roleNames === null ? $wasDoctor : ClinicRole::takesDoctorSeat($roleNames);
+        if ($heldSeat && $asDoctor === $wasDoctor) {
+            return;
+        }
+
+        try {
+            $this->limits->assertSeatAvailable($clinic, $asDoctor, $heldSeat ? $user : null);
+        } catch (ResourceLimitExceededException $e) {
+            throw ValidationException::withMessages([$heldSeat ? 'roles' : 'status' => $e->getMessage()]);
+        }
     }
 
     private function authorizeStaff(ClinicEmployee $employee, ClinicContext $context): void

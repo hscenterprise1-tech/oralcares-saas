@@ -11,17 +11,17 @@ use App\Models\ClinicEmployeeInvitation;
 use App\Models\ClinicMembership;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\Onboarding\OnboardingEngine;
 use App\Services\ResourceLimitService;
 use App\Services\Security\SecurityAudit;
 use App\Services\Staff\InvitationAcceptance;
+use App\Services\Staff\StaffInvitationService;
 use App\UserType;
 use DomainException;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\URL;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -53,40 +53,14 @@ class EmployeeInvitationController extends Controller
         // in accept() — this employee has no ClinicMembership yet, so it
         // consumes no seat until then, and another invite accepted in the
         // meantime could still fill the last one.
-        $error = $this->checkSeatLimits($context->clinic(), $employee->roles->contains('name', 'Doctor'), $limits);
+        $error = $this->checkSeatLimits($context->clinic(), ClinicRole::takesDoctorSeat($employee->roles->pluck('name')), $limits);
         if ($error) {
             return back()->with('error', $error);
         }
 
-        // Revoke any existing pending invitations for this employee
-        ClinicEmployeeInvitation::where('clinic_employee_id', $employee->id)
-            ->whereNull('accepted_at')
-            ->whereNull('revoked_at')
-            ->update(['revoked_at' => now()]);
-
-        // Create new invitation
-        $token = Str::random(60);
-        $invitation = ClinicEmployeeInvitation::create([
-            'clinic_id' => $context->clinic()->id,
-            'clinic_employee_id' => $employee->id,
-            'email' => $validated['email'],
-            'token' => hash('sha256', $token),
-            'expires_at' => now()->addDays(3),
-            'created_by' => auth()->id(),
-        ]);
-
-        // Generate Signed URL for acceptance
-        $acceptUrl = URL::temporarySignedRoute(
-            'clinic.invitation.accept',
-            now()->addDays(3),
-            ['token' => $token]
-        );
-
-        // TODO: Fire event / Send Mailable with $acceptUrl
-        // For now we just log it or rely on the user manual flow for tests
-        // e.g. Mail::to($invitation->email)->send(new EmployeeInvitationMailable($acceptUrl, $employee));
-
-        app(SecurityAudit::class)->record('invitation.created', $invitation, ['employee_id' => $invitation->clinic_employee_id]);
+        // Revokes any earlier pending invitation, stores only the token's
+        // hash, and emails the signed link.
+        app(StaffInvitationService::class)->invite($employee, $validated['email'], $request->user());
 
         return back()->with('success', 'Invitation sent successfully.');
     }
@@ -210,7 +184,7 @@ class EmployeeInvitationController extends Controller
     {
         return $this->checkSeatLimits(
             $invitation->clinic,
-            $invitation->employee->roles->contains('name', ClinicRole::Doctor->value),
+            ClinicRole::takesDoctorSeat($invitation->employee->roles->pluck('name')),
             $limits,
             audience: 'invitee'
         );
@@ -226,6 +200,15 @@ class EmployeeInvitationController extends Controller
         auth()->login($user);
         $request->session()->regenerate();
         $clinicContext->activateMembership($membership);
+
+        // In a clinic set up through the onboarding engine, the new member
+        // completes their own profile (practitioners: qualification,
+        // services, hours, documents) before using the portal.
+        $employee = $clinicContext->currentEmployee();
+        $onboarding = app(OnboardingEngine::class);
+        if ($employee && $onboarding->clinicSession($membership->clinic()->withoutGlobalScopes()->firstOrFail())) {
+            $onboarding->startForStaff($employee, $user);
+        }
 
         return redirect()->route('dashboard');
     }

@@ -29,6 +29,6 @@ class DoctorAvailability extends Model
 
     public function doctorProfile()
     {
-        return $this->belongsTo(DoctorProfile::class);
+        return $this->belongsTo(Practitioner::class, 'doctor_profile_id');
     }
 }

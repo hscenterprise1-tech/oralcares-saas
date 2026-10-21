@@ -1,6 +1,6 @@
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { Send } from 'lucide-react';
-import { CrmButton, CrmFormField, CrmInput } from '@/pages/Company/design';
+import { AuthButton, AuthField, AuthInput } from '../components/AuthControls';
 import { AuthNotice } from '../components/AuthNotice';
 import { ClinicPreAuthShell } from '../components/ClinicPreAuthShell';
 
@@ -45,8 +45,8 @@ export default function ForgotPassword({
       <form onSubmit={submit} noValidate className="space-y-5">
         {sent && <AuthNotice tone="success">{sent}</AuthNotice>}
 
-        <CrmFormField label="Email" error={errors.email}>
-          <CrmInput
+        <AuthField label="Email" error={errors.email}>
+          <AuthInput
             type="email"
             name="email"
             inputMode="email"
@@ -61,17 +61,17 @@ export default function ForgotPassword({
             invalid={!!errors.email}
             autoFocus
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmButton type="submit" tone="primary" size="lg" icon={Send} loading={processing} className="w-full">
+        <AuthButton type="submit" tone="primary" size="lg" icon={Send} loading={processing} className="w-full">
           Send reset link
-        </CrmButton>
+        </AuthButton>
 
-        <p className="text-center text-[12.5px] text-ovs-crm-text-secondary">
+        <p className="text-center text-[12.5px] text-clinic-secondary">
           Remembered it?{' '}
           <Link
             href={signInHref}
-            className="rounded font-semibold text-ovs-crm-brand-strong hover:text-ovs-crm-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ovs-crm-ink/25"
+            className="rounded font-semibold text-clinic-brand-strong hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-ink/25"
           >
             Back to sign in
           </Link>

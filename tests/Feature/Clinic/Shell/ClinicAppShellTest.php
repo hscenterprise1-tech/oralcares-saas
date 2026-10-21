@@ -66,14 +66,13 @@ test('clinic dashboard renders successfully with operational metrics and shared 
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Home')
-        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('appointments_today')
-            && collect($widgets)->pluck('key')->contains('todays_appointments'))
-        ->missing('widgetData')
-        ->loadDeferredProps(fn ($reload) => $reload
-            ->where('widgetData.appointments_today.value', 1)
-            ->has('widgetData.todays_appointments.items', 1)
-            ->where('widgetData.todays_appointments.items.0.primary', 'Aarav Mehta'))
+        ->component('ClinicPortal/Dashboard', true)
+        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('patients_today')
+            && collect($widgets)->pluck('key')->contains('upcoming_appointments'))
+        // The figures come with the page, in the first response.
+        ->where('widgetData.upcoming_appointments.total', 1)
+        ->has('widgetData.upcoming_appointments.items', 1)
+        ->where('widgetData.upcoming_appointments.items.0.primary', 'Aarav Mehta')
         ->where('clinic.id', $clinic->id)
         ->where('clinic.name', 'Metro Care Clinic')
         ->where('clinic.is_owner', true)

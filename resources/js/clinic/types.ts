@@ -16,11 +16,18 @@ export type ClinicPermission =
   | 'appointment.create'
   | 'appointment.manage'
   | 'queue.manage'
+  | 'front_office.operate'
   | 'visit.view'
   | 'visit.create'
   | 'clinical.view'
   | 'clinical.edit'
   | 'prescription.manage'
+  | 'treatment.start'
+  | 'treatment.execute'
+  | 'catalog.manage'
+  | 'specialty.configure'
+  | 'consent.manage'
+  | 'patient.merge'
   | 'documents.manage'
   | 'billing.view'
   | 'billing.create'
@@ -32,7 +39,14 @@ export type ClinicPermission =
   | 'roles.manage'
   | 'branch.manage'
   | 'settings.manage'
-  | 'reports.view';
+  | 'reports.view'
+  | 'staff.documents.verify'
+  | 'leave.request'
+  | 'leave.approve'
+  | 'expense.manage'
+  | 'expense.approve'
+  | 'payroll.view'
+  | 'payroll.manage';
 
 export interface BranchSummary {
   id: number;
@@ -44,6 +58,8 @@ export interface BranchSummary {
 export interface ActiveBranch extends BranchSummary {
   display_name: string | null;
   logo_url: string | null;
+  /** The name is provisioning's fallback ("Main Branch", a trial's company name), not one somebody chose. */
+  name_is_default: boolean;
 }
 
 /** A navigation entry the server resolved for this user (`ClinicNavigation`). */
@@ -56,8 +72,17 @@ export interface NavLink {
   keywords: string[];
 }
 
-/** One business domain this user may open, with the children they may open. */
-export interface NavDestination extends NavLink {
+/** One destination this user may open (`ClinicNavigation::for`). */
+export interface NavDestination extends Omit<NavLink, 'href'> {
+  /** Null when the destination has no backend yet. */
+  href: string | null;
+  /** `main` / `additional` are the sidebar's; `admin` is the account menu's. */
+  section: 'main' | 'additional' | 'admin';
+  section_label: string;
+  /** Whether its new frontend exists yet (`ClinicFrontend`); otherwise it is shown as coming soon. */
+  available: boolean;
+  /** No entry is an action any more; New Case / Repeat Case are the Dashboard's quick actions. */
+  action: null;
   children: NavLink[];
 }
 
@@ -65,17 +90,31 @@ export interface NavDestination extends NavLink {
 export type Tone = 'brand' | 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate' | 'ink';
 
 /** A quick action this user may start (`ClinicActions`). */
+/** A role workspace (Command Center, Front Desk, Today, Billing). */
+export interface Workspace {
+  key: 'command_center' | 'front_desk' | 'today' | 'billing';
+  label: string;
+  icon: string;
+  href: string;
+  primary: boolean;
+}
+
 export interface QuickAction extends NavLink {
   description: string;
   tone: Tone;
 }
 
-export type WidgetKind = 'kpi' | 'list' | 'stats' | 'trend' | 'facts' | 'actions';
+export type WidgetKind = 'kpi' | 'patients' | 'appointments' | 'dues' | 'follow_ups' | 'attention' | 'list' | 'stats' | 'facts';
 
-/** Where a widget sits: compact figures across the top, operational lists, or the side column. */
-export type WidgetZone = 'summary' | 'main' | 'side';
+/**
+ * Where a widget sits (`DashboardWidgets::ZONES`): the compact figures beside
+ * the quick actions, today's patients and appointments, today's pending
+ * payments, what needs attention, and the Owner/Admin dashboard's clinic-wide
+ * management widgets.
+ */
+export type WidgetZone = 'figures' | 'work' | 'payments' | 'side' | 'management';
 
-/** A dashboard widget the server resolved for this user (`DashboardWidgets`). Data arrives separately. */
+/** A dashboard widget the server composed for this user (`DashboardWidgets`), in order. Data arrives separately. */
 export interface DashboardWidget {
   key: string;
   title: string;
@@ -85,12 +124,28 @@ export interface DashboardWidget {
   kind: WidgetKind;
   zone: WidgetZone;
   empty: string | null;
+  /** Left out once its data shows nothing to act on (Needs attention, Follow-ups). */
+  hide_when_empty: boolean;
+  /** Only to a page that exists and that the user may open. */
   action: { label: string; href: string } | null;
+}
+
+/** A quick action whose destination works (`ClinicActions::forDashboard`): it opens the intake, or links. A tile is its icon and name only. */
+export interface DashboardAction {
+  key: string;
+  label: string;
+  icon: string;
+  tone: Tone;
+  /** `large` tiles sit side by side; `row` tiles are compact full-width rows beneath them. */
+  tile: 'large' | 'row';
+  intake: 'new' | 'repeat' | null;
+  href: string | null;
 }
 
 export interface KpiData {
   value: number;
-  detail?: string;
+  /** One short line under the figure, when there is something worth saying. */
+  detail?: string | null;
   format?: 'number' | 'currency';
   currency?: string;
 }
@@ -112,7 +167,6 @@ export interface ListItem {
 export interface ListData {
   total: number;
   items: ListItem[];
-  summary?: { value: number; label: string; format: 'number' | 'currency'; currency?: string; tone?: Tone };
 }
 
 export interface StatsData {
@@ -120,12 +174,8 @@ export interface StatsData {
   stats: { key: string; label: string; value: number; tone: Tone; format?: 'number' | 'currency' }[];
 }
 
-export interface TrendData {
-  series: { a: string; b: string };
-  points: { label: string; date: string; a: number; b: number }[];
-}
-
 export interface FactsData {
+  currency?: string;
   rows: {
     id?: number;
     label: string;
@@ -133,11 +183,11 @@ export interface FactsData {
     amount?: number;
     currency?: string;
     tone?: Tone;
-    values?: { label: string; value: number; tone: Tone }[];
+    values?: { label: string; value: number; tone: Tone; format?: 'number' | 'currency' }[];
   }[];
 }
 
-export type WidgetData = KpiData | ListData | StatsData | TrendData | FactsData | { error: true };
+export type WidgetData = KpiData | ListData | StatsData | FactsData | { error: true };
 
 /** The owner's choice of widgets per staff role (Owner Mode only). */
 export interface DashboardVisibilitySettings {
@@ -173,6 +223,8 @@ export interface ClinicContextProps {
   is_owner: boolean;
   has_all_branches_access: boolean;
   enabled_modules: string[];
+  /** Separately sold modules (queue, …) and whether each is on here. Presentation only. */
+  clinic_modules: Record<string, boolean>;
   has_subscription: boolean;
   permissions: ClinicPermission[];
   roles: string[];
@@ -181,8 +233,18 @@ export interface ClinicContextProps {
   owner_mode: OwnerModeStatus;
   navigation: NavDestination[];
   actions: QuickAction[];
+  /** Whether the one New Case / Repeat Case intake may open here (`ClinicNavigation::intake`). */
+  intake: { available: boolean; can_register: boolean };
+  /** What the top bar's search may look in for this user, in order (`ClinicSearch::searchable`). */
+  searchable: string[];
+  /** The plan, sent only to the owner with Owner Mode verified on the server. */
+  owner_subscription: OwnerSubscription | null;
+  /** The role workspaces this user switches between, primary first. */
+  workspaces: Workspace[];
   specialties: string[];
   capabilities: string[];
+  /** Specialty extensions available here (odontogram, physio_assessment, …). */
+  extensions: string[];
 }
 
 export interface AuthUser {
@@ -199,10 +261,19 @@ export interface FlashProps {
   warning?: string | null;
 }
 
+/** Every member's banner data: the access state and days left, never the plan (that is the owner's, in Owner Mode). */
 export interface SubscriptionWindowProps {
   state: string;
   days_remaining: number | null;
+}
+
+/** The clinic's plan for the owner in Owner Mode (`ClinicOwnerSubscription`); null for everyone else. */
+export interface OwnerSubscription {
+  state: 'active' | 'trial' | 'grace' | 'lapsed' | 'none';
   plan: string | null;
+  /** The day the current state ends, at the clinic; null when open-ended or unknown. */
+  ends_on: string | null;
+  days_remaining: number | null;
 }
 
 /** The portal's endpoints, built by the server for path or domain routing. */
@@ -213,6 +284,10 @@ export interface PortalLinks {
   dashboard: string;
   branches: string;
   branchSwitch: string;
+  /** GET ?q=: patients by name, phone or ID (each result carries its own `url`). */
+  patientSearch: string;
+  /** GET ?q=: the top bar's search, grouped, decided on the server (`ClinicSearch`). */
+  search: string;
   /** POST to enter Owner Mode, DELETE to leave it. */
   ownerMode: string;
   notifications: string;

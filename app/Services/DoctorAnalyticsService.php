@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Branch;
 use App\Models\Clinic;
-use App\Models\ClinicalConsultation;
+use App\Models\ClinicalEncounter;
 use App\Models\PatientBilling;
 use App\Models\TreatmentRecord;
 
@@ -15,9 +15,11 @@ class DoctorAnalyticsService
      */
     public function getDoctorMetrics(Clinic $clinic, ?Branch $branch, string $startDate, string $endDate): array
     {
-        $consultQuery = ClinicalConsultation::whereHas('encounter', function ($q) use ($clinic) {
-            $q->where('clinic_id', $clinic->id);
-        })->whereBetween('created_at', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
+        // A consultation is a clinical encounter attributed to its doctor; the
+        // old `clinical_consultations` timer rows are no longer written.
+        $consultQuery = ClinicalEncounter::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)
+            ->whereNotNull('doctor_id')->whereNull('voided_at')
+            ->whereBetween('created_at', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
 
         $txQuery = TreatmentRecord::whereHas('encounter', function ($q) use ($clinic) {
             $q->where('clinic_id', $clinic->id);
@@ -29,9 +31,7 @@ class DoctorAnalyticsService
         })->whereBetween('created_at', [$startDate.' 00:00:00', $endDate.' 23:59:59']);
 
         if ($branch) {
-            $consultQuery->whereHas('encounter', function ($q) use ($branch) {
-                $q->where('branch_id', $branch->id);
-            });
+            $consultQuery->where('branch_id', $branch->id);
             $txQuery->whereHas('encounter', function ($q) use ($branch) {
                 $q->where('branch_id', $branch->id);
             });

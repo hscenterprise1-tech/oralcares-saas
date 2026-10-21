@@ -137,6 +137,45 @@ return [
             ],
         },
 
+        /*
+         * Structured (JSON) application log, one object per line, for a log
+         * shipper. Production sets LOG_STACK=json (or stderr with
+         * LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter) so every
+         * line carries request_id / clinic_id context as fields.
+         */
+        'json' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/app.json.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DAILY_DAYS', 14),
+            'formatter' => JsonFormatter::class,
+        ],
+
+        /*
+         * Slow queries, over-budget requests/jobs and queue backlog
+         * (config/observability.php). SQL is logged without bindings.
+         */
+        'performance' => [
+            'driver' => env('PERFORMANCE_LOG_DRIVER', 'daily'),
+            'path' => storage_path('logs/performance.log'),
+            'level' => 'info',
+            'days' => 14,
+            'formatter' => JsonFormatter::class,
+        ],
+
+        /*
+         * Counters and timings from `App\Support\Metrics`, one JSON object
+         * per line, for a collector (Vector, Fluent Bit, CloudWatch) to turn
+         * into time series.
+         */
+        'metrics' => [
+            'driver' => env('METRICS_LOG_DRIVER', 'daily'),
+            'path' => storage_path('logs/metrics.log'),
+            'level' => 'info',
+            'days' => 7,
+            'formatter' => JsonFormatter::class,
+        ],
+
         'syslog' => [
             'driver' => 'syslog',
             'level' => env('LOG_LEVEL', 'debug'),

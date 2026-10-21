@@ -92,7 +92,7 @@ test('can create laboratory case, record trials and attach files', function () {
         ]
     );
 
-    expect($case->lab_order_number)->toBe("LB-{$clinic->id}-00001")
+    expect($case->lab_order_number)->toMatch('/^LAB-[0-9]{4}-000001$/')
         ->and($case->status)->toBe(LabCaseStatus::Requested)
         ->and($case->laboratory_name)->toBe('Internal Lab')
         ->and($case->is_internal)->toBeTrue()

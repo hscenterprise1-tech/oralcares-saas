@@ -59,11 +59,17 @@ class BranchSwitchController extends Controller
 
     /**
      * Switch the active branch context for the current clinic session.
+     *
+     * `branch_id` null means All branches: only the clinic's owner may look
+     * across every branch at once (staff roles are held per branch, so a
+     * staff member without a branch would hold no permissions at all). The
+     * choice is the server's to accept: the branch must be this clinic's,
+     * active and open to this membership.
      */
     public function switch(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'branch_id' => ['present', 'nullable', 'integer', 'exists:branches,id'],
         ]);
 
         $clinic = $this->clinicContext->clinic();
@@ -71,6 +77,14 @@ class BranchSwitchController extends Controller
 
         if (! $clinic || ! $membership) {
             return redirect()->back()->with('error', 'No active clinic session found.');
+        }
+
+        if ($validated['branch_id'] === null) {
+            abort_unless($membership->is_primary_owner, 403, 'Only the clinic owner can view all branches at once.');
+            $this->clinicContext->setBranch(null);
+            $request->session()->forget(ClinicContext::SESSION_BRANCH_ID);
+
+            return redirect()->back()->with('success', 'Showing all branches.');
         }
 
         // Found across organisations: a login can belong to clinics in several,

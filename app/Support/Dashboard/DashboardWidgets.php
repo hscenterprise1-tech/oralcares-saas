@@ -3,6 +3,8 @@
 namespace App\Support\Dashboard;
 
 use App\Support\ClinicAccess\ClinicAccess;
+use App\Support\ClinicActions;
+use App\Support\ClinicFrontend;
 use Throwable;
 
 /**
@@ -10,153 +12,237 @@ use Throwable;
  * not a page per role.
  *
  * Every widget declares what it needs in `ClinicAccess`'s terms (permission,
- * plan module, capability, specialty, branch scope, Owner Mode, practitioner)
- * and which `DashboardData` source fills it. For a user the dashboard is:
+ * plan module, capability, specialty extension, branch scope, Owner Mode,
+ * practitioner), the `DashboardData` source that fills it, and where it goes:
+ * its zone and its order within the zone. For a user the dashboard is:
  *
- *   eligible() -> every widget whose requirements hold and that the owner
- *                 has not hidden for the user's roles, in order
- *   data()     -> the source of each eligible widget, and nothing else
+ *   compose()  -> every widget of the user's role dashboards (`COMPOSITIONS`,
+ *                 by workspace) whose requirements hold and that the owner
+ *                 has not hidden for the user's roles, zone by zone, in
+ *                 order, each zone cut to its limit; plus the quick actions
+ *                 whose destination works (`ClinicActions::forDashboard`)
+ *   data()     -> the source of each composed widget, and nothing else
  *
  * A receptionist, a doctor, an admin, an owner, or someone holding several of
- * those roles at once all get the same engine. Their widgets differ because
- * their permissions do, and a widget appears once however many roles grant
- * it. A widget the user may not see is never queried and never sent.
+ * those roles at once all get the same engine. Their dashboards differ
+ * because their permissions do, and a widget appears once however many roles
+ * grant it. A widget the user may not see is never queried and never sent.
+ * The page draws what arrives, by zone and kind; it never decides access.
  *
- * Owner widgets need Owner Mode; they still obey the plan and every other
- * requirement.
+ * Reporting (trends, mixes, specialty activity, spending) is not here: it
+ * belongs to Reports. Neither is anything that only repeats another widget.
  */
 class DashboardWidgets
 {
     /**
-     * kind: kpi | list | stats | facts | trend | actions
-     * zone: summary (compact figures across the top) | main (operational
-     *       lists) | side (actions, attention, status). Within a zone,
-     *       widgets follow `order`; a zone the user has nothing in is not drawn.
-     * tone: brand | blue | green | amber | red | violet | slate | ink
+     * Who sees the clinic's money on a dashboard: the Billing route's own
+     * audience (whoever runs the clinic, the front desk, billing staff), with
+     * the billing plan module. A practitioner's `billing.view` (their own
+     * patients' bills) does not open collections or balances.
+     */
+    public const BILLING_AUDIENCE = ['permissions' => ['billing.view'], 'module' => 'billing', 'workspace' => ['command_center', 'front_desk', 'billing']];
+
+    /** Who works through the day's follow-ups from the dashboard (the widget's own rule). */
+    public const FOLLOW_UPS = ['permissions' => ['clinical.edit', 'appointment.create'], 'module' => 'patients', 'branch' => 'active', 'route' => 'clinic.follow-ups.index'];
+
+    /**
+     * The dashboard's zones, in reading order. `figures` are the compact
+     * figures beside the quick actions, at most `limit` of them (the first
+     * eligible by order); `work` is the day's patients and appointments side
+     * by side; `payments` what today's visits still owe; `side` what needs
+     * someone; `management` the clinic-wide widgets of the Owner/Admin
+     * dashboard.
+     */
+    public const ZONES = [
+        'figures' => ['limit' => 4],
+        'work' => ['limit' => null],
+        'payments' => ['limit' => null],
+        'side' => ['limit' => null],
+        'management' => ['limit' => null],
+    ];
+
+    /**
+     * Each role's dashboard, by the workspace that role works in
+     * (`ClinicAccess::workspaces()`, decided by permissions, never by a role
+     * name): which widgets it is made of. A user with several workspaces gets
+     * their union, each widget once, in the registry's zone and order. Every
+     * widget then still has to pass its own requirements, so a composition
+     * only ever narrows what a user's access allows. Someone with no
+     * workspace gets the `general` dashboard.
      *
-     * @var list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, order: int, requires: array<string, mixed>, source?: string, action?: array{label: string, route: string, requires?: array<string, mixed>}, empty?: string}>
+     *   front_desk      Reception: the day's figures, patients, bookings, dues
+     *   today           Doctor: their own queue and work, no money or admin
+     *   billing         Billing: collections and today's dues
+     *   command_center  Owner/Admin: the front office's view plus the clinic's
+     *                   management widgets (money, branches, security)
+     *
+     * @var array<string, list<string>>
+     */
+    public const COMPOSITIONS = [
+        'front_desk' => [
+            'patients_today', 'waiting_now', 'with_doctor_now', 'collections_today', 'appointments_today',
+            'todays_patients', 'upcoming_appointments',
+            'pending_payments',
+            'needs_attention', 'follow_ups_due',
+        ],
+        'today' => [
+            'my_waiting', 'my_seen', 'my_notes', 'appointments_today',
+            'my_queue', 'upcoming_appointments',
+            'needs_attention', 'follow_ups_due',
+        ],
+        'billing' => [
+            'collections_today', 'patients_today',
+            'pending_payments',
+            'needs_attention',
+        ],
+        'command_center' => [
+            'patients_today', 'waiting_now', 'with_doctor_now', 'collections_today', 'appointments_today',
+            'todays_patients', 'upcoming_appointments',
+            'pending_payments',
+            'needs_attention', 'follow_ups_due',
+            'owner_finance', 'branch_activity', 'owner_security',
+        ],
+        'general' => [
+            'patients_today', 'appointments_today',
+            'upcoming_appointments',
+        ],
+    ];
+
+    /**
+     * kind: kpi | patients | appointments | dues | follow_ups | attention | list | stats | facts
+     * tone: brand | blue | green | amber | red | violet | slate | ink
+     * hide_when_empty: the widget is left out once its data shows nothing to act on.
+     *
+     * @var list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, order: int, requires: array<string, mixed>, source: string, action?: array{label: string, route: string, query?: array<string, string>, requires?: array<string, mixed>}, empty?: string, hide_when_empty?: bool}>
      */
     public const WIDGETS = [
-        // Summary: the day in four figures.
+        // Figures: the day in at most four numbers, the user's own work first,
+        // then the front office's: patients, waiting, with a doctor, and money
+        // (or appointments for whoever does not see the money).
         [
-            'key' => 'patients_today', 'title' => "Today's patients", 'description' => 'Visits registered today',
-            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 10,
+            'key' => 'my_waiting', 'title' => 'Waiting for you', 'description' => 'Your patients and walk-ins for any doctor',
+            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 1,
+            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view'], 'branch' => 'active'],
+            'source' => 'myWaiting',
+        ],
+        [
+            'key' => 'my_seen', 'title' => 'Seen today', 'description' => 'Your consultations finished today',
+            'icon' => 'doctor', 'tone' => 'green', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 2,
+            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view'], 'branch' => 'active'],
+            'source' => 'mySeen',
+        ],
+        [
+            'key' => 'my_notes', 'title' => 'Notes to finish', 'description' => "Today's consultations not yet signed",
+            'icon' => 'notes', 'tone' => 'violet', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 3,
+            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view'], 'branch' => 'active'],
+            'source' => 'myNotes',
+        ],
+        [
+            'key' => 'patients_today', 'title' => 'Patients today', 'description' => 'Visits registered today',
+            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 10,
             'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients'],
             'source' => 'patientsToday',
         ],
         [
-            'key' => 'appointments_today', 'title' => 'Appointments', 'description' => 'Booked for today',
-            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 20,
-            'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
-            'source' => 'appointmentsToday',
-        ],
-        [
             'key' => 'waiting_now', 'title' => 'Waiting', 'description' => 'In the queue now',
-            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 30,
-            'requires' => ['permissions' => ['queue.manage']],
+            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 20,
+            'requires' => ['permissions' => ['queue.manage'], 'workspace' => ['front_desk', 'command_center']],
             'source' => 'waitingNow',
         ],
         [
-            'key' => 'collections_today', 'title' => "Today's collection", 'description' => 'Payments received today',
-            'icon' => 'payment', 'tone' => 'green', 'kind' => 'kpi', 'zone' => 'summary', 'order' => 40,
-            'requires' => ['permissions' => ['billing.view', 'payment.collect'], 'module' => 'billing'],
+            'key' => 'with_doctor_now', 'title' => 'With doctor', 'description' => 'In consultation now',
+            'icon' => 'doctor', 'tone' => 'violet', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 30,
+            'requires' => ['permissions' => ['queue.manage'], 'workspace' => ['front_desk', 'command_center']],
+            'source' => 'withDoctorNow',
+        ],
+        [
+            'key' => 'collections_today', 'title' => 'Collections', 'description' => 'Net collected today',
+            'icon' => 'payment', 'tone' => 'green', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 40,
+            'requires' => self::BILLING_AUDIENCE,
             'source' => 'collectionsToday',
         ],
-
-        // Main: compact operational lists.
         [
-            'key' => 'todays_patients', 'title' => "Today's patients", 'description' => 'Registered today, latest first',
-            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'list', 'zone' => 'main', 'order' => 10,
-            'requires' => ['permissions' => ['patient.view', 'visit.view'], 'module' => 'patients'],
-            'source' => 'todaysPatients',
-            'action' => ['label' => 'View all', 'route' => 'clinic.visits.index', 'requires' => ['permissions' => ['visit.view']]],
-            'empty' => 'No patients registered yet today.',
-        ],
-        [
-            'key' => 'todays_appointments', 'title' => "Today's appointments", 'description' => 'Next on the calendar',
-            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'list', 'zone' => 'main', 'order' => 20,
+            'key' => 'appointments_today', 'title' => 'Appointments', 'description' => 'Booked for today',
+            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'kpi', 'zone' => 'figures', 'order' => 50,
             'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
-            'source' => 'todaysAppointments',
-            'action' => ['label' => 'View all', 'route' => 'clinic.appointments.index'],
-            'empty' => 'No appointments booked for today.',
+            'source' => 'appointmentsToday',
         ],
+
+        // Work: today's patients and today's appointments, side by side.
         [
-            'key' => 'my_day', 'title' => 'Your day', 'description' => 'Your patients today',
-            'icon' => 'doctor', 'tone' => 'violet', 'kind' => 'stats', 'zone' => 'main', 'order' => 30,
-            'requires' => ['practitioner' => true, 'permissions' => ['patient.view']],
-            'source' => 'myDay',
-            'action' => ['label' => 'My patients', 'route' => 'clinic.patients.index'],
-        ],
-        [
-            'key' => 'my_queue', 'title' => 'Your queue', 'description' => 'Patients waiting for you',
-            'icon' => 'waiting', 'tone' => 'violet', 'kind' => 'list', 'zone' => 'main', 'order' => 40,
-            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view', 'queue.manage']],
+            'key' => 'my_queue', 'title' => 'Waiting for you', 'description' => 'Your patients and walk-ins for any doctor',
+            'icon' => 'waiting', 'tone' => 'amber', 'kind' => 'list', 'zone' => 'work', 'order' => 5,
+            'requires' => ['practitioner' => true, 'permissions' => ['clinical.view'], 'branch' => 'active'],
             'source' => 'myQueue',
-            'empty' => 'No one is waiting for you right now.',
+            'empty' => 'No one is waiting for you.',
+        ],
+        [
+            'key' => 'todays_patients', 'title' => "Today's patients", 'description' => 'Checked in today at this branch, as the Front Desk sees them',
+            'icon' => 'patients', 'tone' => 'brand', 'kind' => 'patients', 'zone' => 'work', 'order' => 10,
+            'requires' => ['workspace' => ['front_desk'], 'module' => 'patients', 'branch' => 'active'],
+            'source' => 'todaysPatients',
+            'action' => ['label' => 'View all', 'route' => 'clinic.reception'],
+            'empty' => 'No patients checked in yet today.',
+        ],
+        [
+            'key' => 'upcoming_appointments', 'title' => 'Appointments', 'description' => 'Booked for today, not yet arrived',
+            'icon' => 'appointments', 'tone' => 'blue', 'kind' => 'appointments', 'zone' => 'work', 'order' => 20,
+            'requires' => ['permissions' => ['appointment.view'], 'module' => 'appointments'],
+            'source' => 'upcomingAppointments',
+            // The full list: today's day view on the Calendar, with its own search.
+            'action' => ['label' => 'View all', 'route' => 'clinic.appointments.index', 'query' => ['view' => 'day']],
+            'empty' => 'No one else is booked to arrive today.',
+        ],
+
+        // Payments: what today's visits still owe, for whoever handles the money.
+        [
+            'key' => 'pending_payments', 'title' => "Today's pending payments", 'description' => "Balances still due on today's visits",
+            'icon' => 'wallet', 'tone' => 'violet', 'kind' => 'dues', 'zone' => 'payments', 'order' => 10,
+            'requires' => self::BILLING_AUDIENCE,
+            'source' => 'pendingPayments',
+            'action' => ['label' => 'View all', 'route' => 'clinic.billing.index'],
+            'empty' => "Nothing is due from today's patients.",
+        ],
+
+        // Side: what is waiting on someone, only when something is.
+        [
+            'key' => 'needs_attention', 'title' => 'Needs attention', 'description' => 'Waiting on someone',
+            'icon' => 'attention', 'tone' => 'amber', 'kind' => 'attention', 'zone' => 'side', 'order' => 10,
+            // Shown to anyone who could have an item; each item inside checks its
+            // own access (see `DashboardData::needsAttention`).
+            'requires' => ['permissions' => ['clinical.view', 'queue.manage', 'appointment.manage']],
+            'source' => 'needsAttention',
+            'empty' => 'Nothing needs attention right now.',
+            'hide_when_empty' => true,
+        ],
+        [
+            'key' => 'follow_ups_due', 'title' => 'Follow-ups due', 'description' => 'Due today or overdue, not yet booked',
+            'icon' => 'follow-ups', 'tone' => 'violet', 'kind' => 'follow_ups', 'zone' => 'side', 'order' => 20,
+            'requires' => self::FOLLOW_UPS,
+            'source' => 'followUpsDue',
+            'action' => ['label' => 'View all', 'route' => 'clinic.follow-ups.index'],
+            'empty' => 'No follow-ups are due.',
+            'hide_when_empty' => true,
+        ],
+
+        // Management: the clinic as a whole, on the Owner/Admin dashboard only.
+        [
+            'key' => 'owner_finance', 'title' => 'Money · all branches', 'description' => 'Billed, net collected, outstanding, overdue, clinic-wide',
+            'icon' => 'wallet', 'tone' => 'green', 'kind' => 'stats', 'zone' => 'management', 'order' => 10,
+            'requires' => ['owner_mode' => true, 'permissions' => ['billing.view'], 'module' => 'billing', 'branch' => 'clinic_wide'],
+            'source' => 'ownerFinance',
+            'action' => ['label' => 'Revenue report', 'route' => 'clinic.reports.index'],
         ],
         [
             'key' => 'branch_activity', 'title' => 'Branches today', 'description' => 'Activity at each branch',
-            'icon' => 'branches', 'tone' => 'blue', 'kind' => 'facts', 'zone' => 'main', 'order' => 50,
+            'icon' => 'branches', 'tone' => 'blue', 'kind' => 'facts', 'zone' => 'management', 'order' => 20,
             'requires' => ['permissions' => ['branch.manage'], 'branch' => 'clinic_wide', 'multi_branch' => true],
             'source' => 'branchActivity',
             'action' => ['label' => 'Manage branches', 'route' => 'admin.branches.index'],
         ],
         [
-            'key' => 'owner_performance', 'title' => 'Clinic performance', 'description' => 'Last 7 days, all branches',
-            'icon' => 'trend', 'tone' => 'ink', 'kind' => 'trend', 'zone' => 'main', 'order' => 60,
-            'requires' => ['owner_mode' => true, 'permissions' => ['patient.view', 'appointment.view'], 'branch' => 'clinic_wide'],
-            'source' => 'ownerPerformance',
-        ],
-
-        // Side: what to start, what needs attention, where the cash stands.
-        [
-            'key' => 'quick_actions', 'title' => 'Quick actions', 'description' => 'Start a task',
-            'icon' => 'bolt', 'tone' => 'brand', 'kind' => 'actions', 'zone' => 'side', 'order' => 10,
-            'requires' => [],
-        ],
-        [
-            'key' => 'needs_attention', 'title' => 'Needs attention', 'description' => 'Waiting on someone',
-            'icon' => 'pending', 'tone' => 'amber', 'kind' => 'list', 'zone' => 'side', 'order' => 20,
-            // Shown to anyone who can see at least one kind of item; each item
-            // inside checks its own access (see `DashboardData::needsAttention`).
-            'requires' => ['permissions' => ['billing.view', 'appointment.view', 'clinical.view', 'queue.manage']],
-            'source' => 'needsAttention',
-            'empty' => 'Nothing needs attention right now.',
-        ],
-        [
-            'key' => 'investigations', 'title' => 'Investigations', 'description' => 'Lab and imaging work',
-            'icon' => 'lab', 'tone' => 'violet', 'kind' => 'stats', 'zone' => 'side', 'order' => 30,
-            'requires' => ['permissions' => ['clinical.view', 'queue.manage'], 'capabilities' => ['lab', 'xray']],
-            'source' => 'investigations',
-        ],
-        [
-            'key' => 'cash_status', 'title' => 'Cash today', 'description' => 'For daily closing',
-            'icon' => 'wallet', 'tone' => 'green', 'kind' => 'facts', 'zone' => 'side', 'order' => 40,
-            'requires' => ['permissions' => ['billing.view', 'payment.collect'], 'module' => 'billing'],
-            'source' => 'cashStatus',
-        ],
-        [
-            'key' => 'staff_overview', 'title' => 'Team', 'description' => 'Staff across the clinic',
-            'icon' => 'staff', 'tone' => 'brand', 'kind' => 'stats', 'zone' => 'side', 'order' => 50,
-            'requires' => ['permissions' => ['staff.manage'], 'branch' => 'clinic_wide'],
-            'source' => 'staffOverview',
-            'action' => ['label' => 'Manage staff', 'route' => 'admin.employees.index'],
-        ],
-        [
-            'key' => 'owner_revenue', 'title' => 'Revenue', 'description' => 'All branches',
-            'icon' => 'payment', 'tone' => 'green', 'kind' => 'stats', 'zone' => 'side', 'order' => 60,
-            'requires' => ['owner_mode' => true, 'permissions' => ['billing.view'], 'module' => 'billing', 'branch' => 'clinic_wide'],
-            'source' => 'ownerRevenue',
-        ],
-        [
-            'key' => 'owner_plan', 'title' => 'Plan & usage', 'description' => 'Your OralCares subscription',
-            'icon' => 'plan', 'tone' => 'ink', 'kind' => 'facts', 'zone' => 'side', 'order' => 70,
-            'requires' => ['owner_mode' => true],
-            'source' => 'ownerPlan',
-        ],
-        [
-            'key' => 'owner_security', 'title' => 'Security', 'description' => 'Sign-in and Owner Mode checks',
-            'icon' => 'shield', 'tone' => 'red', 'kind' => 'list', 'zone' => 'side', 'order' => 80,
+            'key' => 'owner_security', 'title' => 'Security', 'description' => 'Sign-in and Owner Mode checks, last 7 days',
+            'icon' => 'shield', 'tone' => 'red', 'kind' => 'list', 'zone' => 'management', 'order' => 30,
             'requires' => ['owner_mode' => true],
             'source' => 'ownerSecurity',
             'empty' => 'No security events in the last 7 days.',
@@ -164,18 +250,36 @@ class DashboardWidgets
     ];
 
     /**
-     * The widgets this user may receive, in order, with their action link
-     * where the user may also follow it. No data.
+     * The dashboard for this user: the widgets, zone by zone, and the quick
+     * actions. Nothing here is data.
      *
-     * @param  list<array<string, mixed>>  $actions  the user's resolved quick actions
+     * @param  array<string, string>  $routeParameters
+     * @return array{widgets: list<array<string, mixed>>, actions: list<array<string, mixed>>}
+     */
+    public static function compose(ClinicAccess $access, array $routeParameters = []): array
+    {
+        return [
+            'widgets' => self::eligible($access, $routeParameters),
+            'actions' => ClinicActions::forDashboard($access, $routeParameters),
+        ];
+    }
+
+    /**
+     * The widgets this user may receive, zone by zone, in order, each zone cut
+     * to its limit, with their action link where the user may also follow it.
+     * No data.
+     *
      * @param  array<string, string>  $routeParameters
      * @param  list<array<string, mixed>>|null  $widgets  defaults to `WIDGETS`
-     * @return list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, empty: string|null, action: array{label: string, href: string}|null, source: string|null}>
+     * @return list<array{key: string, title: string, description: string, icon: string, tone: string, kind: string, zone: string, empty: string|null, hide_when_empty: bool, action: array{label: string, href: string}|null, source: string}>
      */
-    public static function eligible(ClinicAccess $access, array $actions, array $routeParameters = [], ?array $widgets = null): array
+    public static function eligible(ClinicAccess $access, array $routeParameters = [], ?array $widgets = null): array
     {
-        $widgets ??= self::WIDGETS;
-        usort($widgets, fn (array $a, array $b) => $a['order'] <=> $b['order']);
+        // Only the widgets of this user's dashboards (their workspaces' compositions).
+        $composed = self::composition($access);
+        $widgets = array_values(array_filter($widgets ?? self::WIDGETS, fn (array $widget) => in_array($widget['key'], $composed, true)));
+        $zones = array_keys(self::ZONES);
+        usort($widgets, fn (array $a, array $b) => [array_search($a['zone'], $zones, true), $a['order']] <=> [array_search($b['zone'], $zones, true), $b['order']]);
 
         $visibility = app(DashboardVisibility::class);
         $clinic = $access->clinic();
@@ -183,8 +287,10 @@ class DashboardWidgets
         $roles = $access->isOwner() ? [] : $access->roles();
 
         $eligible = [];
+        $perZone = [];
         foreach ($widgets as $widget) {
-            if ($widget['kind'] === 'actions' && $actions === []) {
+            $limit = self::ZONES[$widget['zone']]['limit'];
+            if ($limit !== null && ($perZone[$widget['zone']] ?? 0) >= $limit) {
                 continue;
             }
 
@@ -198,12 +304,8 @@ class DashboardWidgets
                 continue;
             }
 
-            $action = null;
-            if (isset($widget['action']) && $access->allows(['route' => $widget['action']['route']] + ($widget['action']['requires'] ?? []))) {
-                $action = ['label' => $widget['action']['label'], 'href' => route($widget['action']['route'], $routeParameters, false)];
-            }
-
-            $eligible[$widget['key']] = [
+            $perZone[$widget['zone']] = ($perZone[$widget['zone']] ?? 0) + 1;
+            $eligible[] = [
                 'key' => $widget['key'],
                 'title' => $widget['title'],
                 'description' => $widget['description'],
@@ -212,20 +314,53 @@ class DashboardWidgets
                 'kind' => $widget['kind'],
                 'zone' => $widget['zone'],
                 'empty' => $widget['empty'] ?? null,
-                'action' => $action,
-                'source' => $widget['source'] ?? null,
+                'hide_when_empty' => $widget['hide_when_empty'] ?? false,
+                'action' => isset($widget['action']) ? self::link($access, $widget['action'], $routeParameters) : null,
+                'source' => $widget['source'],
             ];
         }
 
-        return array_values($eligible);
+        return $eligible;
     }
 
     /**
-     * Each eligible widget's data, keyed by widget. Only eligible widgets are
+     * The widget keys this user's dashboards are made of: the union of their
+     * workspaces' compositions, or the general one when they have none.
+     *
+     * @return list<string>
+     */
+    public static function composition(ClinicAccess $access): array
+    {
+        $workspaces = array_values(array_intersect($access->workspaces(), array_keys(self::COMPOSITIONS)));
+
+        return array_values(array_unique(array_merge(...array_map(
+            fn (string $workspace) => self::COMPOSITIONS[$workspace],
+            $workspaces !== [] ? $workspaces : ['general'],
+        ))));
+    }
+
+    /**
+     * A link only to a page that exists (`ClinicFrontend`) and that the user may also open.
+     *
+     * @param  array{label: string, route: string, query?: array<string, string>, requires?: array<string, mixed>}  $action
+     * @param  array<string, string>  $routeParameters
+     * @return array{label: string, href: string}|null
+     */
+    private static function link(ClinicAccess $access, array $action, array $routeParameters): ?array
+    {
+        if (! ClinicFrontend::available($action['route']) || ! $access->allows(['route' => $action['route']] + ($action['requires'] ?? []))) {
+            return null;
+        }
+
+        return ['label' => $action['label'], 'href' => route($action['route'], $routeParameters + ($action['query'] ?? []), false)];
+    }
+
+    /**
+     * Each composed widget's data, keyed by widget. Only composed widgets are
      * asked, and a source that fails marks its own widget as failed without
      * taking the rest of the dashboard down.
      *
-     * @param  list<array{key: string, source: string|null}>  $eligible
+     * @param  list<array{key: string, source: string}>  $eligible
      * @return array<string, array<string, mixed>>
      */
     public static function data(array $eligible, DashboardData $data): array
@@ -233,10 +368,6 @@ class DashboardWidgets
         $result = [];
 
         foreach ($eligible as $widget) {
-            if ($widget['source'] === null) {
-                continue;
-            }
-
             try {
                 $result[$widget['key']] = $data->source($widget['source']);
             } catch (Throwable $exception) {

@@ -2,15 +2,22 @@
 
 namespace App\Support\Dashboard;
 
+use App\BillingStatus;
 use App\Models\Clinic;
+use App\Models\ClinicEmployee;
+use App\Models\PatientVisit;
+use App\QueueItemStatus;
+use App\Services\Clinical\DoctorToday;
 use App\Services\ClinicContext;
-use App\Services\Provisioning\EntitlementResolver;
+use App\Services\Reception\FrontDesk;
 use App\Support\ClinicAccess\ClinicAccess;
-use App\Support\ClinicActions;
 use App\Support\ClinicClock;
+use App\Support\ClinicFrontend;
+use App\Support\ClinicNavigation;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 /**
  * The dashboard's data sources, one method per source a widget can name.
@@ -23,6 +30,13 @@ use Illuminate\Support\Facades\DB;
  *    an owner or an all-branches member (`applyBranchScope`);
  *  - returns counts, sums or at most a handful of rows, never a full list.
  *
+ * Each figure has one definition, shared with the list or report it sums up:
+ *  - a visit counts unless it was cancelled;
+ *  - "waiting" is the Front Desk's waiting list (`FrontDesk::LISTS`);
+ *  - money is the Revenue report's: payments by the day they were paid
+ *    (`paid_at`) less refunds recorded that day, each at its own branch;
+ *  - an open bill has a balance due and was not cancelled.
+ *
  * Sources marked clinic-wide (branch overview, owner figures) are reached
  * only by widgets that require clinic-wide access.
  */
@@ -30,17 +44,28 @@ class DashboardData
 {
     private const LIST_LIMIT = 6;
 
+    /** Rows the queue preview shows; the counts are always the full day's. */
+    public const QUEUE_PREVIEW = 8;
+
+    /** Upcoming appointments the preview shows; the total is always the full day's. */
+    public const APPOINTMENT_PREVIEW = 4;
+
+    /** Pending bills the preview shows; the total and the balance due are over all of today's. */
+    public const DUES_PREVIEW = 5;
+
     private const BRANCH_LIMIT = 8;
 
-    /** Queue statuses that mean the patient is still waiting to be seen. */
-    private const WAITING = ['waiting', 'calling', 'called', 'recalled', 'held'];
+    /** A doctor with this many waiting is flagged as overloaded. */
+    private const OVERLOAD = 5;
+
+    /** Appointments still to arrive. */
+    private const TO_ARRIVE = ['scheduled', 'confirmed'];
 
     /** @var array<string, mixed> */
     private array $memo = [];
 
     public function __construct(
         protected ClinicContext $context,
-        protected EntitlementResolver $entitlements,
         protected ClinicAccess $access,
     ) {}
 
@@ -57,9 +82,7 @@ class DashboardData
     /** @return array<string, mixed> */
     protected function patientsToday(): array
     {
-        $counts = $this->visitCounts();
-
-        return ['value' => array_sum($counts), 'detail' => $this->plural(array_sum($counts), 'visit').' registered today'];
+        return ['value' => array_sum($this->visitCounts())];
     }
 
     /* --------------------------------------------------------- appointments */
@@ -68,39 +91,56 @@ class DashboardData
     protected function appointmentsToday(): array
     {
         $byStatus = $this->appointmentCounts();
-        $total = array_sum($byStatus);
-        $arrived = ($byStatus['arrived'] ?? 0) + ($byStatus['checked_in'] ?? 0) + ($byStatus['in_consultation'] ?? 0);
+        $toArrive = (int) array_sum(array_intersect_key($byStatus, array_flip(self::TO_ARRIVE)));
 
         return [
-            'value' => $total,
-            'detail' => "{$arrived} arrived · ".($byStatus['completed'] ?? 0).' completed',
+            'value' => array_sum($byStatus),
+            'detail' => $toArrive > 0 ? "{$toArrive} still to arrive" : null,
         ];
     }
 
-    /** @return array<string, mixed> */
-    protected function todaysAppointments(): array
+    /**
+     * Today's bookings still to arrive, earliest first: the ones the desk is
+     * waiting for. A booking whose time has passed is marked late. The total
+     * is the figure's "still to arrive".
+     *
+     * @return array<string, mixed>
+     */
+    protected function upcomingAppointments(): array
     {
         $query = DB::table('appointments')
             ->leftJoin('patients', 'patients.id', '=', 'appointments.patient_id')
             ->leftJoin('clinic_employees', 'clinic_employees.id', '=', 'appointments.practitioner_id')
             ->where('appointments.clinic_id', $this->clinic()->id)
-            ->whereDate('appointments.scheduled_at', $this->today()->toDateString())
-            ->whereNotIn('appointments.status', ['cancelled']);
+            ->whereOnDate('appointments.scheduled_at', $this->today())
+            ->whereIn('appointments.status', self::TO_ARRIVE);
         $this->applyBranchScope($query, 'appointments.branch_id');
 
+        $now = ClinicClock::now();
+        // A row opens that booking on the Calendar, for whoever may open it.
+        $calendar = ClinicFrontend::available('clinic.appointments.index') && $this->access->allows(ClinicNavigation::CALENDAR);
         $total = (clone $query)->count();
-        $rows = $query->orderBy('appointments.scheduled_at')->limit(self::LIST_LIMIT)
-            ->get(['appointments.id', 'appointments.scheduled_at', 'appointments.status', 'appointments.appointment_type', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name', 'clinic_employees.name as practitioner']);
+        $rows = $query->orderBy('appointments.scheduled_at')->orderBy('appointments.id')->limit(self::APPOINTMENT_PREVIEW)
+            ->get(['appointments.id', 'appointments.scheduled_at', 'appointments.status', 'appointments.appointment_type', 'appointments.prospect_name',
+                'patients.first_name', 'patients.last_name', 'patients.name as patient_name', 'clinic_employees.name as practitioner']);
 
         return [
             'total' => $total,
-            'items' => $rows->map(fn ($row) => [
-                'id' => $row->id,
-                'time' => CarbonImmutable::parse($row->scheduled_at)->format('h:i A'),
-                'primary' => $this->patientName($row),
-                'secondary' => trim(($row->appointment_type ? $this->humanize($row->appointment_type).' · ' : '').($row->practitioner ?? 'Any doctor')),
-                'status' => $row->status,
-            ])->values()->all(),
+            // How many rows the preview holds, so the page keeps the panel's size whatever is in it.
+            'limit' => self::APPOINTMENT_PREVIEW,
+            'items' => $rows->map(function ($row) use ($now, $calendar) {
+                // Appointment times are the clinic's wall clock, as the calendar books them.
+                $at = CarbonImmutable::parse($row->scheduled_at, $now->getTimezone());
+
+                return [
+                    'id' => $row->id,
+                    'time' => $at->format('h:i A'),
+                    'primary' => $row->first_name || $row->last_name || $row->patient_name ? $this->patientName($row) : ($row->prospect_name ?? 'New patient'),
+                    'secondary' => $this->joinParts([$row->appointment_type ? $this->humanize($row->appointment_type) : null, $row->practitioner ?? 'Any doctor']),
+                    'status' => $at->lt($now) ? 'late' : $row->status,
+                    'href' => $calendar ? route('clinic.appointments.index', ['view' => 'day', 'date' => $at->toDateString(), 'appointment' => $row->id], false) : null,
+                ];
+            })->values()->all(),
         ];
     }
 
@@ -109,180 +149,133 @@ class DashboardData
     /** @return array<string, mixed> */
     protected function waitingNow(): array
     {
-        $counts = $this->queueCounts();
-        $waiting = array_sum(array_intersect_key($counts, array_flip(self::WAITING)));
-
-        return ['value' => $waiting, 'detail' => ($counts['in_consultation'] ?? 0).' in consultation'];
-    }
-
-    /* ------------------------------------------------------ the practitioner */
-
-    /**
-     * The practitioner's own day, built from the patients assigned to them
-     * (`Patient::assignedTo`, the scope behind "My Patients"), as the
-     * dashboard's "My day" band always has been.
-     *
-     * @return array<string, mixed>
-     */
-    protected function myDay(): array
-    {
-        $employee = $this->context->currentEmployee();
-        $myPatients = DB::table('patients')
-            ->where('clinic_id', $this->clinic()->id)
-            ->where('current_practitioner_id', $employee?->id)
-            ->select('id');
-
-        $appointments = DB::table('appointments')
-            ->where('clinic_id', $this->clinic()->id)
-            ->whereDate('scheduled_at', $this->today()->toDateString())
-            ->whereNotIn('status', ['cancelled'])
-            ->whereIn('patient_id', $myPatients);
-        $this->applyBranchScope($appointments, 'branch_id');
-
-        $inQueue = $this->queueItems()
-            ->join('patient_visits', 'patient_visits.id', '=', 'clinic_queue_items.patient_visit_id')
-            ->whereIn('clinic_queue_items.status', [...self::WAITING, 'in_consultation'])
-            ->whereIn('patient_visits.patient_id', $myPatients);
+        // Queue times are the clinic's wall clock, as the desk reads them.
+        $now = ClinicClock::now();
+        $waits = $this->queueItems()->whereIn('clinic_queue_items.status', $this->waitingStatuses())->whereNotNull('clinic_queue_items.checked_in_at')
+            ->pluck('clinic_queue_items.checked_in_at')
+            ->map(fn ($at) => max(0, (int) CarbonImmutable::parse($at, $now->getTimezone())->diffInMinutes($now)));
 
         return [
-            'stats' => [
-                ['key' => 'today_appointments', 'label' => 'Your patients booked today', 'value' => $appointments->count(), 'tone' => 'blue'],
-                ['key' => 'patients_in_queue', 'label' => 'Your patients in the queue', 'value' => $inQueue->count(), 'tone' => 'amber'],
-                ['key' => 'total_assigned', 'label' => 'Assigned to you', 'value' => (clone $myPatients)->count(), 'tone' => 'violet'],
-            ],
+            'value' => (int) array_sum(array_intersect_key($this->queueCounts(), array_flip($this->waitingStatuses()))),
+            'detail' => $waits->isEmpty() ? null : 'Avg. wait '.(int) round($waits->avg()).' min',
         ];
     }
 
-    /** @return array<string, mixed> */
-    protected function myQueue(): array
+    /** Patients with a doctor right now. @return array<string, mixed> */
+    protected function withDoctorNow(): array
     {
-        $employee = $this->context->currentEmployee();
+        return ['value' => (int) ($this->queueCounts()[QueueItemStatus::InConsultation->value] ?? 0)];
+    }
 
-        $query = $this->queueItems()
-            ->leftJoin('patient_visits', 'patient_visits.id', '=', 'clinic_queue_items.patient_visit_id')
-            ->leftJoin('patients', 'patients.id', '=', 'patient_visits.patient_id')
-            ->where('clinic_queue_items.doctor_id', $employee?->id)
-            ->whereIn('clinic_queue_items.status', [...self::WAITING, 'in_consultation']);
+    /** Active session packages whose validity ends within a week. */
+    private function expiringPackages(): Builder
+    {
+        $query = DB::table('patient_session_packages')->where('clinic_id', $this->clinic()->id)->where('status', 'active')
+            ->whereBetween('valid_until', [$this->today()->toDateString(), $this->today()->addDays(7)->toDateString()]);
+        $this->applyBranchScope($query, 'branch_id');
 
-        $total = (clone $query)->count();
-        $rows = $query->orderBy('clinic_queue_items.position')->limit(self::LIST_LIMIT)
-            ->get(['clinic_queue_items.id', 'clinic_queue_items.case_number', 'clinic_queue_items.position', 'clinic_queue_items.status', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name']);
-
-        return [
-            'total' => $total,
-            'items' => $rows->map(fn ($row) => [
-                'id' => $row->id,
-                'time' => $row->case_number ?? ('#'.$row->position),
-                'primary' => $this->patientName($row),
-                'secondary' => null,
-                'status' => $row->status,
-            ])->values()->all(),
-        ];
+        return $query;
     }
 
     /* -------------------------------------------------------------- billing */
 
-    /** @return array<string, mixed> */
-    protected function collectionsToday(): array
-    {
-        $payments = $this->paymentsBetween($this->today()->startOfDay(), $this->today()->endOfDay());
-
-        return [
-            'value' => (float) (clone $payments)->sum('patient_billing_payments.amount'),
-            'format' => 'currency',
-            'currency' => $this->currency(),
-            'detail' => $this->plural((clone $payments)->count(), 'payment').' today',
-        ];
-    }
-
-    /* ------------------------------------------------- reception operations */
-
     /**
-     * Today's registrations, latest first: who, what kind of visit, which
-     * doctor, where they are. Only names and statuses, never a profile.
+     * Today's net collections: payments made today less refunds recorded
+     * today, the Revenue report's own definition for the same day.
      *
      * @return array<string, mixed>
      */
-    protected function todaysPatients(): array
+    protected function collectionsToday(): array
     {
-        $query = DB::table('patient_visits')
-            ->leftJoin('patients', 'patients.id', '=', 'patient_visits.patient_id')
-            ->leftJoin('clinic_employees', 'clinic_employees.id', '=', 'patient_visits.doctor_id')
-            ->where('patient_visits.clinic_id', $this->clinic()->id)
-            ->whereDate('patient_visits.visit_date', $this->today()->toDateString());
-        $this->applyBranchScope($query, 'patient_visits.branch_id');
-
-        $total = (clone $query)->count();
-        $rows = $query->orderByDesc('patient_visits.id')->limit(self::LIST_LIMIT)
-            ->get(['patient_visits.id', 'patient_visits.patient_id', 'patient_visits.registration_type', 'patient_visits.queue_status', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name', 'clinic_employees.name as doctor']);
-
-        // "Case" where the clinic registers cases; a plain visit elsewhere.
-        $cases = array_intersect($this->access->specialties(), ClinicActions::CASE_SPECIALTIES) !== [];
-        $type = fn (?string $value) => match ($value) {
-            'new' => $cases ? 'New case' : 'First visit',
-            'repeat' => $cases ? 'Repeat case' : 'Follow-up',
-            default => 'Visit',
-        };
-        $canOpen = $this->access->allows(['route' => 'clinic.patients.show', 'permissions' => ['patient.view'], 'module' => 'patients']);
+        $today = $this->today();
+        $collected = (float) $this->payments($today, $today)->sum('amount');
+        $refunded = (float) $this->refunds($today, $today)->sum('amount');
 
         return [
-            'total' => $total,
+            'value' => round($collected - $refunded, 2),
+            'format' => 'currency',
+            'currency' => $this->currency(),
+            'detail' => $refunded > 0 ? 'Net of refunds' : null,
+        ];
+    }
+
+    /**
+     * What today's visits still owe: open bills (a balance due, not
+     * cancelled) that belong to a visit made today at the user's branch scope,
+     * either through its consultation or as its check-in charge. An older
+     * visit's balance is the Billing page's, never this list's. Paid and
+     * balance are the bill's own figures as `PaymentService` keeps them (a
+     * refund returns money already paid; it does not reopen the balance).
+     * The total is over every such bill, of which the first few are listed.
+     *
+     * @return array<string, mixed>
+     */
+    protected function pendingPayments(): array
+    {
+        $visits = $this->visits($this->today());
+        $this->applyBranchScope($visits, 'branch_id');
+        $visitIds = $visits->select('id');
+
+        $bills = $this->openBills()->where(fn (Builder $query) => $query
+            ->whereIn('patient_billings.encounter_id', DB::table('clinical_encounters')->whereIn('patient_visit_id', $visitIds)->select('id'))
+            ->orWhereIn('patient_billings.id', DB::table('patient_billing_items')
+                ->where('source_type', (new PatientVisit)->getMorphClass())->whereIn('source_id', $visitIds)->select('patient_billing_id')));
+        $this->applyBranchScope($bills, 'patient_billings.branch_id');
+
+        $summary = (clone $bills)->selectRaw('count(*) as bills, coalesce(sum(outstanding_balance), 0) as due')->first();
+        $rows = $bills->leftJoin('patients', 'patients.id', '=', 'patient_billings.patient_id')
+            ->orderByDesc('patient_billings.outstanding_balance')->orderBy('patient_billings.id')->limit(self::DUES_PREVIEW)
+            ->get(['patient_billings.id', 'patient_billings.billing_number', 'patient_billings.status', 'patient_billings.final_amount',
+                'patient_billings.paid_amount', 'patient_billings.outstanding_balance', 'patients.first_name', 'patients.last_name', 'patients.name as patient_name']);
+
+        return [
+            'currency' => $this->currency(),
+            'total' => (int) $summary->bills,
+            'limit' => self::DUES_PREVIEW,
+            'due' => round((float) $summary->due, 2),
             'items' => $rows->map(fn ($row) => [
                 'id' => $row->id,
-                'primary' => $this->patientName($row),
-                'secondary' => $type($row->registration_type).($row->doctor ? ' · '.$row->doctor : ''),
-                'status' => $row->queue_status ?: 'waiting',
-                'href' => $canOpen && $row->patient_id ? route('clinic.patients.show', $row->patient_id, false) : null,
+                'patient' => $this->patientName($row),
+                'reference' => $row->billing_number,
+                'amount' => round((float) $row->final_amount, 2),
+                'paid' => round((float) $row->paid_amount, 2),
+                'balance' => round((float) $row->outstanding_balance, 2),
+                'status' => $row->status === BillingStatus::PartiallyPaid->value ? 'partially_paid' : 'unpaid',
             ])->values()->all(),
         ];
     }
 
     /**
-     * Investigations as one operational summary: lab work and imaging,
-     * counted by where they stand. Imaging records carry no branch, so they
-     * are counted only for someone who sees the whole clinic.
-     *
-     * @return array<string, mixed>
+     * Lab and imaging work expected back by today. Imaging records carry no
+     * branch, so they are counted only for someone who sees the whole clinic.
      */
-    protected function investigations(): array
+    private function reportsDue(): int
     {
-        $today = $this->today()->toDateString();
-        $counts = ['ordered' => 0, 'pending' => 0, 'due' => 0, 'received' => 0];
+        $due = 0;
 
         if (in_array('lab', $this->access->capabilities(), true)) {
-            $lab = DB::table('lab_orders')->where('clinic_id', $this->clinic()->id);
+            $lab = DB::table('lab_orders')->where('clinic_id', $this->clinic()->id)
+                ->whereIn('status', ['accepted', 'in_production', 'quality_check'])
+                ->whereNotNull('delivery_due_date')->whereDate('delivery_due_date', '<=', $this->today()->toDateString());
             $this->applyBranchScope($lab, 'branch_id');
-
-            $counts['ordered'] += (clone $lab)->whereIn('status', ['draft', 'requested'])->count();
-            $counts['pending'] += (clone $lab)->whereIn('status', ['accepted', 'in_production', 'quality_check'])->count();
-            $counts['due'] += (clone $lab)->whereIn('status', ['accepted', 'in_production', 'quality_check'])
-                ->whereNotNull('delivery_due_date')->whereDate('delivery_due_date', '<=', $today)->count();
-            $counts['received'] += (clone $lab)->whereIn('status', ['ready_for_delivery', 'delivered'])->count();
+            $due += $lab->count();
         }
 
         if (in_array('xray', $this->access->capabilities(), true) && $this->access->clinicWide()) {
-            $xray = DB::table('xray_records')->where('clinic_id', $this->clinic()->id);
-
-            $counts['ordered'] += (clone $xray)->where('status', 'requested')->count();
-            $counts['pending'] += (clone $xray)->where('status', 'scheduled')->count();
-            $counts['due'] += (clone $xray)->where('status', 'captured')->count();
-            $counts['received'] += (clone $xray)->where('status', 'reviewed')->whereDate('reviewed_at', $today)->count();
+            $due += DB::table('xray_records')->where('clinic_id', $this->clinic()->id)->where('status', 'captured')->count();
         }
 
-        return [
-            'stats' => [
-                ['key' => 'ordered', 'label' => 'Ordered', 'value' => $counts['ordered'], 'tone' => 'blue'],
-                ['key' => 'pending', 'label' => 'Pending', 'value' => $counts['pending'], 'tone' => 'amber'],
-                ['key' => 'due', 'label' => 'Reports due', 'value' => $counts['due'], 'tone' => $counts['due'] > 0 ? 'red' : 'slate'],
-                ['key' => 'received', 'label' => 'Received', 'value' => $counts['received'], 'tone' => 'green'],
-            ],
-        ];
+        return $due;
     }
 
     /**
      * What is waiting on someone. Each kind of item is included only when
      * this user may see it, through the same `ClinicAccess` rules as the
-     * widgets: no permission, no query, no item.
+     * widgets: no permission, no query, no item. An item links onward only to
+     * a page that exists and that the user may open; nothing here repeats a
+     * list the dashboard already shows (bookings not yet arrived are in
+     * Appointments; today's dues in Today's pending payments; follow-ups in
+     * Follow-ups due when the user has it). Older balances belong to Billing.
      *
      * @return array<string, mixed>
      */
@@ -290,32 +283,56 @@ class DashboardData
     {
         $items = [];
 
-        if ($this->access->allows(['permissions' => ['billing.view'], 'module' => 'billing'])) {
-            $bills = DB::table('patient_billings')->where('clinic_id', $this->clinic()->id)
-                ->whereIn('status', ['pending', 'partially_paid'])->where('outstanding_balance', '>', 0);
-            $this->applyBranchScope($bills, 'branch_id');
-            $count = (clone $bills)->count();
-            if ($count > 0) {
-                $items[] = ['id' => 'pending_payments', 'primary' => 'Pending payments', 'secondary' => $this->plural($count, 'bill').' with a balance due', 'count' => $count, 'amount' => (float) $bills->sum('outstanding_balance'), 'currency' => $this->currency(), 'status' => 'pending'];
-            }
-        }
-
         if ($this->access->allows(['permissions' => ['clinical.view', 'queue.manage'], 'capabilities' => ['lab', 'xray']])) {
-            $due = collect($this->investigations()['stats'])->firstWhere('key', 'due')['value'];
+            $due = $this->reportsDue();
             if ($due > 0) {
-                $items[] = ['id' => 'reports_due', 'primary' => 'Reports due', 'secondary' => 'Expected back from the lab or imaging', 'count' => $due, 'status' => 'overdue'];
+                $items[] = ['id' => 'reports_due', 'primary' => 'Reports due', 'secondary' => 'Expected back from the lab or imaging', 'count' => $due, 'status' => 'overdue', 'href' => null];
             }
         }
 
-        if ($this->access->allows(['permissions' => ['appointment.view'], 'module' => 'appointments'])) {
-            $late = DB::table('appointments')->where('clinic_id', $this->clinic()->id)
-                ->whereDate('scheduled_at', $this->today()->toDateString())
-                ->where('scheduled_at', '<', ClinicClock::now()->toDateTimeString())
-                ->where('status', 'scheduled');
-            $this->applyBranchScope($late, 'branch_id');
-            $count = $late->count();
+        // Queue exceptions, for the desk and whoever runs the clinic.
+        if ($this->access->allows(['permissions' => ['queue.manage'], 'workspace' => ['front_desk', 'command_center']])) {
+            $frontDesk = $this->link('clinic.reception', [], ['workspace' => ['front_desk']]);
+            $waiting = fn () => $this->queueItems()->whereIn('clinic_queue_items.status', $this->waitingStatuses());
+            $longWait = (int) config('reception.thresholds.long_wait_minutes');
+            $long = $waiting()->where('clinic_queue_items.checked_in_at', '<=', ClinicClock::now()->subMinutes($longWait)->toDateTimeString())->count();
+            if ($long > 0) {
+                $items[] = ['id' => 'long_waits', 'primary' => 'Long waits', 'secondary' => "Waiting over {$longWait} min", 'count' => $long, 'status' => 'overdue', 'href' => $frontDesk];
+            }
+            $unassigned = $waiting()->whereNull('clinic_queue_items.doctor_id')->count();
+            if ($unassigned > 0) {
+                $items[] = ['id' => 'unassigned', 'primary' => 'No doctor yet', 'secondary' => 'Checked in, waiting for any doctor', 'count' => $unassigned, 'status' => 'pending', 'href' => $frontDesk];
+            }
+            $overloaded = $waiting()->whereNotNull('clinic_queue_items.doctor_id')->groupBy('clinic_queue_items.doctor_id')
+                ->havingRaw('count(*) >= ?', [self::OVERLOAD])->select('clinic_queue_items.doctor_id')->get()->count();
+            if ($overloaded > 0) {
+                $items[] = ['id' => 'doctor_overload', 'primary' => 'Doctors with a long queue', 'secondary' => self::OVERLOAD.' or more waiting', 'count' => $overloaded, 'status' => 'alert', 'href' => $frontDesk];
+            }
+        }
+
+        if (! $this->access->allows(DashboardWidgets::FOLLOW_UPS)
+            && $this->access->allows(['permissions' => ['clinical.view', 'appointment.manage'], 'workspace' => ['command_center']])) {
+            $followUps = DB::table('patient_follow_ups')->where('clinic_id', $this->clinic()->id)->where('status', 'due')
+                ->where('due_on', '<=', $this->today()->toDateString());
+            $this->applyBranchScope($followUps, 'branch_id');
+            $count = $followUps->count();
             if ($count > 0) {
-                $items[] = ['id' => 'not_arrived', 'primary' => 'Not arrived yet', 'secondary' => 'Booked earlier today, not checked in', 'count' => $count, 'status' => 'pending'];
+                $items[] = ['id' => 'follow_ups_due', 'primary' => 'Follow-ups due', 'secondary' => 'Due today or earlier, not booked', 'count' => $count, 'status' => 'pending', 'href' => $this->link('clinic.follow-ups.index', ['tab' => 'overdue', 'mine' => '0'])];
+            }
+        }
+
+        if ($this->access->hasExtension('session_packages') && $this->access->allows(['permissions' => ['clinical.view', 'billing.view'], 'workspace' => ['command_center']])) {
+            $count = $this->expiringPackages()->count();
+            if ($count > 0) {
+                $items[] = ['id' => 'packages_expiring', 'primary' => 'Packages ending soon', 'secondary' => 'Validity ends within 7 days', 'count' => $count, 'status' => 'pending', 'href' => null];
+            }
+        }
+
+        // Deletion and other governed requests wait for the owner.
+        if ($this->access->isOwner()) {
+            $count = DB::table('deletion_requests')->where('clinic_id', $this->clinic()->id)->whereIn('status', ['pending', 'clarification_requested'])->count();
+            if ($count > 0) {
+                $items[] = ['id' => 'approvals', 'primary' => 'Approvals waiting', 'secondary' => 'Requests that need your decision', 'count' => $count, 'status' => 'pending', 'href' => $this->link('clinic.approvals.index')];
             }
         }
 
@@ -323,136 +340,93 @@ class DashboardData
     }
 
     /**
-     * Where today's money stands, for the daily closing. A summary only: the
-     * closing itself, and cash handover, are their own workflow.
+     * A page an item may open: only one that exists (`ClinicFrontend`) and
+     * that this user may also open; otherwise the item is not a link.
      *
-     * @return array<string, mixed>
+     * @param  array<string, string>  $query
+     * @param  array<string, mixed>  $requires
      */
-    protected function cashStatus(): array
+    private function link(string $route, array $query = [], array $requires = []): ?string
     {
-        $byMethod = $this->paymentsBetween($this->today()->startOfDay(), $this->today()->endOfDay())
-            ->groupBy('patient_billing_payments.payment_method')
-            ->selectRaw('patient_billing_payments.payment_method as method, SUM(patient_billing_payments.amount) as total')
-            ->pluck('total', 'method');
-
-        $digital = (float) ($byMethod['upi'] ?? 0) + (float) ($byMethod['card'] ?? 0) + (float) ($byMethod['bank_transfer'] ?? 0) + (float) ($byMethod['gateway'] ?? 0);
-
-        return [
-            'rows' => [
-                ['label' => 'Cash in hand', 'amount' => (float) ($byMethod['cash'] ?? 0), 'currency' => $this->currency(), 'tone' => 'green'],
-                ['label' => 'UPI, card and online', 'amount' => $digital, 'currency' => $this->currency(), 'tone' => 'brand'],
-                // There is no handover record yet, so nothing is claimed.
-                ['label' => 'Cash handover', 'value' => 'Not tracked yet', 'tone' => 'slate'],
-            ],
-        ];
+        return ClinicFrontend::available($route) && $this->access->allows(['route' => $route] + $requires)
+            ? route($route, $query, false)
+            : null;
     }
 
     /* ----------------------------------------------------- staff & branches */
 
     /** @return array<string, mixed> */
-    protected function staffOverview(): array
-    {
-        $clinicId = $this->clinic()->id;
-
-        return [
-            'stats' => [
-                ['key' => 'staff', 'label' => 'Active staff', 'value' => DB::table('clinic_employees')->where('clinic_id', $clinicId)->where('status', 'active')->count(), 'tone' => 'brand'],
-                ['key' => 'doctors', 'label' => 'Active doctors', 'value' => DB::table('doctor_profiles')->where('clinic_id', $clinicId)->where('is_active', true)->count(), 'tone' => 'violet'],
-                ['key' => 'invitations', 'label' => 'Pending invitations', 'value' => DB::table('clinic_employee_invitations')->where('clinic_id', $clinicId)->whereNull('accepted_at')->whereNull('revoked_at')->where('expires_at', '>', now())->count(), 'tone' => 'amber'],
-            ],
-        ];
-    }
-
-    /** @return array<string, mixed> */
     protected function branchActivity(): array
     {
         $clinicId = $this->clinic()->id;
-        $today = $this->today()->toDateString();
+        $today = $this->today();
 
         $branches = DB::table('branches')->where('clinic_id', $clinicId)->where('status', 'active')
             ->orderByDesc('is_main')->orderBy('name')->limit(self::BRANCH_LIMIT)->get(['id', 'name']);
         $ids = $branches->pluck('id')->all();
 
         $appointments = DB::table('appointments')->where('clinic_id', $clinicId)->whereIn('branch_id', $ids)
-            ->whereDate('scheduled_at', $today)->whereNotIn('status', ['cancelled'])
+            ->whereOnDate('scheduled_at', $today)->whereNotIn('status', ['cancelled'])
             ->groupBy('branch_id')->selectRaw('branch_id, count(*) as total')->pluck('total', 'branch_id');
-        $visits = DB::table('patient_visits')->where('clinic_id', $clinicId)->whereIn('branch_id', $ids)
-            ->whereDate('visit_date', $today)
+        $visits = $this->visits($today)->whereIn('branch_id', $ids)
             ->groupBy('branch_id')->selectRaw('branch_id, count(*) as total')->pluck('total', 'branch_id');
+        // Money only for whoever may see it: net collected, each record at its own branch.
+        $collected = null;
+        if ($this->access->allows(DashboardWidgets::BILLING_AUDIENCE)) {
+            $paid = $this->payments($today, $today, clinicWide: true)->whereIn('branch_id', $ids)
+                ->groupBy('branch_id')->selectRaw('branch_id, sum(amount) as total')->pluck('total', 'branch_id');
+            $refunded = $this->refunds($today, $today, clinicWide: true)->whereIn('branch_id', $ids)
+                ->groupBy('branch_id')->selectRaw('branch_id, sum(amount) as total')->pluck('total', 'branch_id');
+            $collected = collect($ids)->mapWithKeys(fn (int $id) => [$id => round((float) ($paid[$id] ?? 0) - (float) ($refunded[$id] ?? 0), 2)]);
+        }
 
         return [
+            'currency' => $this->currency(),
             'rows' => $branches->map(fn ($branch) => [
                 'id' => $branch->id,
                 'label' => $branch->name,
-                'values' => [
+                'values' => array_values(array_filter([
                     ['label' => 'Appointments', 'value' => (int) ($appointments[$branch->id] ?? 0), 'tone' => 'blue'],
                     ['label' => 'Visits', 'value' => (int) ($visits[$branch->id] ?? 0), 'tone' => 'brand'],
-                ],
+                    $collected === null ? null : ['label' => 'Collected', 'value' => (float) $collected[$branch->id], 'tone' => 'green', 'format' => 'currency'],
+                ])),
             ])->values()->all(),
         ];
     }
 
     /* ---------------------------------------------------------------- owner */
 
-    /** @return array<string, mixed> */
-    protected function ownerPerformance(): array
+    /**
+     * The owner's money, clinic-wide: billed and net collected today, this
+     * week and this month; what is outstanding and overdue; this month's
+     * refunds and discounts.
+     *
+     * @return array<string, mixed>
+     */
+    protected function ownerFinance(): array
     {
         $clinicId = $this->clinic()->id;
-        $from = $this->today()->subDays(6);
-
-        $visits = DB::table('patient_visits')->where('clinic_id', $clinicId)
-            ->whereDate('visit_date', '>=', $from->toDateString())
-            ->groupBy(DB::raw('DATE(visit_date)'))->selectRaw('DATE(visit_date) as day, count(*) as total')->pluck('total', 'day');
-        $appointments = DB::table('appointments')->where('clinic_id', $clinicId)
-            ->whereDate('scheduled_at', '>=', $from->toDateString())->whereNotIn('status', ['cancelled'])
-            ->groupBy(DB::raw('DATE(scheduled_at)'))->selectRaw('DATE(scheduled_at) as day, count(*) as total')->pluck('total', 'day');
-
-        $points = [];
-        for ($day = $from; $day->lte($this->today()); $day = $day->addDay()) {
-            $key = $day->toDateString();
-            $points[] = ['label' => $day->format('D'), 'date' => $key, 'a' => (int) ($visits[$key] ?? 0), 'b' => (int) ($appointments[$key] ?? 0)];
-        }
-
-        return ['series' => ['a' => 'Visits', 'b' => 'Appointments'], 'points' => $points];
-    }
-
-    /** @return array<string, mixed> */
-    protected function ownerRevenue(): array
-    {
-        $collected = (float) $this->paymentsBetween($this->today()->startOfMonth(), $this->today()->endOfDay(), clinicWide: true)->sum('patient_billing_payments.amount');
-        $outstanding = (float) DB::table('patient_billings')->where('clinic_id', $this->clinic()->id)
-            ->whereIn('status', ['pending', 'partially_paid'])->sum('outstanding_balance');
+        $today = $this->today();
+        $monthStart = $today->startOfMonth();
+        $billed = fn (CarbonImmutable $from, CarbonImmutable $to) => DB::table('patient_billings')->where('clinic_id', $clinicId)->where('status', '!=', BillingStatus::Cancelled->value)
+            ->where('issued_at', '>=', $this->dayStart($from))->where('issued_at', '<', $this->dayStart($to->addDay()));
+        $net = fn (CarbonImmutable $from, CarbonImmutable $to) => (float) $this->payments($from, $to, clinicWide: true)->sum('amount') - (float) $this->refunds($from, $to, clinicWide: true)->sum('amount');
+        $open = $this->openBills();
+        $overdueBefore = $this->dayStart($today->subDays((int) config('clinic_whatsapp.overdue_after_days', 7)));
+        $money = fn (string $key, string $label, float $value, string $tone) => ['key' => $key, 'label' => $label, 'value' => round($value, 2), 'format' => 'currency', 'tone' => $tone];
 
         return [
             'currency' => $this->currency(),
             'stats' => [
-                ['key' => 'collected', 'label' => 'Collected this month', 'value' => $collected, 'format' => 'currency', 'tone' => 'green'],
-                ['key' => 'outstanding', 'label' => 'Outstanding', 'value' => $outstanding, 'format' => 'currency', 'tone' => $outstanding > 0 ? 'amber' : 'green'],
-            ],
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    protected function ownerPlan(): array
-    {
-        $clinic = $this->clinic();
-        $entitlement = $this->entitlements->forClinic($clinic);
-        $window = $entitlement['window'];
-        $limits = $entitlement['limits'];
-
-        $usersUsed = DB::table('clinic_memberships')->where('clinic_id', $clinic->id)->where('status', 'active')->count();
-        $branchesUsed = DB::table('branches')->where('clinic_id', $clinic->id)->where('status', 'active')->count();
-        $doctorsUsed = DB::table('doctor_profiles')->where('clinic_id', $clinic->id)->where('is_active', true)->count();
-
-        $usage = fn (int $used, ?int $limit) => $limit ? "{$used} of {$limit}" : (string) $used;
-
-        return [
-            'rows' => [
-                ['label' => 'Plan', 'value' => $entitlement['plan']['name'] ?? 'No plan on record'],
-                ['label' => 'Status', 'value' => $this->humanize((string) $window['state']).($window['days_remaining'] !== null ? " · {$window['days_remaining']} days left" : ''), 'tone' => in_array($window['state'], ['grace', 'lapsed'], true) ? 'red' : 'green'],
-                ['label' => 'Staff logins', 'value' => $usage($usersUsed, $limits['users'])],
-                ['label' => 'Doctors', 'value' => $usage($doctorsUsed, $limits['doctors'])],
-                ['label' => 'Branches', 'value' => $usage($branchesUsed, $limits['branches'])],
+                $money('billed_today', 'Billed today', (float) $billed($today, $today)->sum('final_amount'), 'brand'),
+                $money('collected_today', 'Net collected today', $net($today, $today), 'green'),
+                $money('collected_week', 'Net collected this week', $net($today->startOfWeek(), $today), 'green'),
+                $money('billed_month', 'Billed this month', (float) $billed($monthStart, $today)->sum('final_amount'), 'brand'),
+                $money('collected_month', 'Net collected this month', $net($monthStart, $today), 'green'),
+                $money('outstanding', 'Outstanding', (float) (clone $open)->sum('outstanding_balance'), 'amber'),
+                $money('overdue', 'Overdue', (float) (clone $open)->where('issued_at', '<', $overdueBefore)->sum('outstanding_balance'), 'red'),
+                $money('refunds_month', 'Refunds this month', (float) $this->refunds($monthStart, $today, clinicWide: true)->sum('amount'), 'slate'),
+                $money('discounts_month', 'Discounts this month', (float) $billed($monthStart, $today)->sum('discount_amount'), 'slate'),
             ],
         ];
     }
@@ -477,7 +451,6 @@ class DashboardData
 
         return [
             'total' => $failures,
-            'summary' => ['value' => $failures, 'format' => 'number', 'label' => 'Failed checks · 7 days', 'tone' => $failures > 0 ? 'red' : 'green'],
             'items' => $rows->map(fn ($row) => [
                 'id' => $row->id,
                 'time' => CarbonImmutable::parse($row->occurred_at)->timezone(ClinicClock::timezone())->format('d M, h:i A'),
@@ -486,6 +459,147 @@ class DashboardData
                 'status' => $row->event === 'owner_mode.activated' ? 'info' : 'alert',
             ])->values()->all(),
         ];
+    }
+
+    /* --------------------------------------------- front office (`FrontDesk`) */
+
+    /** The desk's day at the branch being worked: the same read Reception's desk is built on. */
+    private function desk(): array
+    {
+        return $this->memo['desk'] ??= app(FrontDesk::class)->desk($this->clinic(), $this->context->requireBranch(), auth()->user());
+    }
+
+    /**
+     * Today's patients at the branch, as the Front Desk sees them: who is
+     * waiting (in queue order), who is with a doctor, then who is done, at
+     * most `QUEUE_PREVIEW` rows. `total` is the whole day's, so the preview
+     * never passes for everyone. Each row carries only the queue actions this
+     * user may take (the Queue module and `queue.manage`; every action is
+     * checked again by its route).
+     *
+     * @return array<string, mixed>
+     */
+    protected function todaysPatients(): array
+    {
+        $desk = $this->desk();
+        $rows = collect($desk['waiting'])->concat($desk['with_doctor'])->concat($desk['done'])->take(self::QUEUE_PREVIEW)->values();
+        $kinds = $rows->isEmpty() ? collect() : DB::table('clinic_queue_items')
+            ->join('patient_visits', 'patient_visits.id', '=', 'clinic_queue_items.patient_visit_id')
+            ->whereIn('clinic_queue_items.id', $rows->pluck('id')->all())
+            ->pluck('patient_visits.registration_type', 'clinic_queue_items.id');
+        $canAct = $this->access->allows(['permissions' => ['queue.manage'], 'clinic_module' => 'queue', 'workspace' => ['front_desk']]);
+        // "Case" where the clinic registers cases; a plain visit elsewhere.
+        $cases = $this->access->hasSpecialtyFlag('case_registration');
+        $kindLabel = fn (?string $kind) => match ($kind) {
+            'new' => $cases ? 'New case' : 'First visit',
+            'repeat' => $cases ? 'Repeat case' : 'Follow-up',
+            default => null,
+        };
+
+        return [
+            'counts' => [
+                'waiting' => $desk['counts']['waiting'],
+                'in_room' => $desk['counts']['with_doctor'],
+                'completed' => $desk['counts']['done'],
+            ],
+            // Everyone checked in today (waiting, with a doctor or done), of whom `rows` shows the first few.
+            'total' => $desk['counts']['waiting'] + $desk['counts']['with_doctor'] + $desk['counts']['done'],
+            'limit' => self::QUEUE_PREVIEW,
+            'rows' => $rows->map(fn (array $row) => [
+                'id' => $row['id'],
+                'patient' => $row['patient'] ? ['name' => $row['patient']['name'], 'age' => $row['patient']['age'], 'gender' => $row['patient']['gender']] : null,
+                'kind' => $kinds[$row['id']] ?? null,
+                'kind_label' => $kindLabel($kinds[$row['id']] ?? null),
+                'doctor' => $row['doctor']['name'] ?? null,
+                'status' => $row['status'],
+                'priority' => $row['priority'],
+                'wait_minutes' => $row['wait_minutes'],
+                'actions' => $canAct && in_array($row['status'], $this->waitingStatuses(), true) ? [
+                    ['key' => $row['status'] === QueueItemStatus::Called->value ? 'recall' : 'call', 'label' => $row['status'] === QueueItemStatus::Called->value ? 'Call again' : 'Call to the room', 'url' => $row['links']['status']],
+                    ['key' => 'skip', 'label' => 'Not present', 'url' => $row['links']['status']],
+                ] : [],
+            ])->all(),
+        ];
+    }
+
+    /** Follow-ups due today or overdue, not yet booked: the desk's own read (`FrontDesk::followUps`). @return array<string, mixed> */
+    protected function followUpsDue(): array
+    {
+        $followUps = app(FrontDesk::class)->followUps($this->clinic(), $this->context->requireBranch());
+
+        return [
+            'total' => $followUps['count']['overdue'] + $followUps['count']['today'],
+            'items' => collect($followUps['rows'])->take(self::LIST_LIMIT)->map(fn (array $row) => [
+                'id' => $row['id'],
+                'primary' => $row['patient']['name'] ?? 'Patient',
+                'secondary' => $this->joinParts([$row['reason'], $row['practitioner']]),
+                'status' => $row['days_overdue'] > 0 ? 'overdue' : 'due',
+                'time' => $row['days_overdue'] > 0 ? $this->plural($row['days_overdue'], 'day').' overdue' : 'Due today',
+            ])->values()->all(),
+        ];
+    }
+
+    /* ------------------------------------------ the practitioner (`DoctorToday`) */
+
+    /** The signed-in practitioner's day at the branch being worked: the same read the doctor's Today is built on. */
+    private function doctorDay(): array
+    {
+        return $this->memo['doctor_day'] ??= app(DoctorToday::class)->build($this->clinic(), $this->context->requireBranch(), $this->practitioner());
+    }
+
+    private function practitioner(): ClinicEmployee
+    {
+        return $this->context->currentEmployee() ?? throw new LogicException('A practitioner widget needs the signed-in staff record.');
+    }
+
+    /** @return array<string, mixed> */
+    protected function myWaiting(): array
+    {
+        return ['value' => count($this->doctorDay()['waiting'])];
+    }
+
+    /** @return array<string, mixed> */
+    protected function mySeen(): array
+    {
+        return ['value' => count($this->doctorDay()['completed'])];
+    }
+
+    /** Today's consultations, with the practitioner or finished, whose note is still a draft. @return array<string, mixed> */
+    protected function myNotes(): array
+    {
+        $day = $this->doctorDay();
+
+        return ['value' => collect($day['in_consultation'])->concat($day['completed'])
+            ->filter(fn (array $row) => ($row['encounter']['status'] ?? null) === 'draft')->count()];
+    }
+
+    /** @return array<string, mixed> */
+    protected function myQueue(): array
+    {
+        $waiting = $this->doctorDay()['waiting'];
+
+        return [
+            'total' => count($waiting),
+            'items' => collect($waiting)->take(self::LIST_LIMIT)->map(fn (array $row) => [
+                'id' => $row['key'],
+                'time' => $row['checked_in_at'] ? CarbonImmutable::parse($row['checked_in_at'])->format('h:i A') : null,
+                'primary' => $row['patient']['name'] ?? 'Patient',
+                'secondary' => $this->joinParts([$this->visitReason($row['visit'] ?? []), $row['doctor'] ?? 'Any doctor', $row['wait_minutes'] !== null ? $row['wait_minutes'].' min' : null]),
+                'status' => $row['priority'] !== 'normal' ? $row['priority'] : $row['status'],
+            ])->values()->all(),
+        ];
+    }
+
+    /** @param  array<string, mixed>  $visit */
+    private function visitReason(array $visit): ?string
+    {
+        return $visit['reason'] ?? $visit['type'] ?? null;
+    }
+
+    /** @param  list<string|null>  $parts */
+    private function joinParts(array $parts): string
+    {
+        return implode(' · ', array_values(array_filter($parts, fn ($part) => $part !== null && $part !== '')));
     }
 
     /* -------------------------------------------------------------- helpers */
@@ -514,12 +628,19 @@ class DashboardData
             : [0]);
     }
 
+    /** A day's visits in the clinic, without the cancelled ones. Not branch-scoped. */
+    private function visits(CarbonImmutable $day): Builder
+    {
+        return DB::table('patient_visits')->where('clinic_id', $this->clinic()->id)
+            ->whereOnDate('visit_date', $day)
+            ->where(fn (Builder $query) => $query->whereNull('visit_status')->orWhere('visit_status', '!=', 'cancelled'));
+    }
+
     /** @return array<string, int> */
     private function visitCounts(): array
     {
         return $this->memo['visits'] ??= (function (): array {
-            $query = DB::table('patient_visits')->where('clinic_id', $this->clinic()->id)
-                ->whereDate('visit_date', $this->today()->toDateString());
+            $query = $this->visits($this->today());
             $this->applyBranchScope($query, 'branch_id');
 
             return $query->groupBy('registration_type')->selectRaw('registration_type, count(*) as total')
@@ -532,7 +653,7 @@ class DashboardData
     {
         return $this->memo['appointments'] ??= (function (): array {
             $query = DB::table('appointments')->where('clinic_id', $this->clinic()->id)
-                ->whereDate('scheduled_at', $this->today()->toDateString())->whereNotIn('status', ['cancelled']);
+                ->whereOnDate('scheduled_at', $this->today())->whereNotIn('status', ['cancelled']);
             $this->applyBranchScope($query, 'branch_id');
 
             return $query->groupBy('status')->selectRaw('status, count(*) as total')
@@ -549,39 +670,59 @@ class DashboardData
             ->pluck('total', 'status')->map(fn ($n) => (int) $n)->all();
     }
 
+    /** "Waiting", as the Front Desk's waiting list holds it. @return list<string> */
+    private function waitingStatuses(): array
+    {
+        return array_map(fn (QueueItemStatus $status) => $status->value, FrontDesk::LISTS['waiting']);
+    }
+
     /** Today's queue items in scope, joined to their queue. */
     private function queueItems(): Builder
     {
         $query = DB::table('clinic_queue_items')
             ->join('clinic_queues', 'clinic_queues.id', '=', 'clinic_queue_items.clinic_queue_id')
             ->where('clinic_queues.clinic_id', $this->clinic()->id)
-            ->whereDate('clinic_queues.queue_date', $this->today()->toDateString());
+            ->whereOnDate('clinic_queues.queue_date', $this->today());
         $this->applyBranchScope($query, 'clinic_queues.branch_id');
 
         return $query;
     }
 
-    private function paymentsBetween(CarbonImmutable $from, CarbonImmutable $to, bool $clinicWide = false): Builder
+    /** Bills with a balance due that were not cancelled. Not branch-scoped. */
+    private function openBills(): Builder
     {
-        $query = DB::table('patient_billing_payments')
-            ->join('patient_billings', 'patient_billings.id', '=', 'patient_billing_payments.patient_billing_id')
-            ->where('patient_billings.clinic_id', $this->clinic()->id)
-            ->whereBetween('patient_billing_payments.created_at', [$this->toInstant($from), $this->toInstant($to)]);
+        return DB::table('patient_billings')->where('patient_billings.clinic_id', $this->clinic()->id)->whereNull('patient_billings.cancelled_at')
+            ->whereIn('patient_billings.status', [BillingStatus::Pending->value, BillingStatus::PartiallyPaid->value])->where('patient_billings.outstanding_balance', '>', 0);
+    }
 
+    /** Payments paid on the clinic days `$from`..`$to`, each at its own branch. */
+    private function payments(CarbonImmutable $from, CarbonImmutable $to, bool $clinicWide = false): Builder
+    {
+        $query = DB::table('patient_billing_payments')->where('clinic_id', $this->clinic()->id)
+            ->where('paid_at', '>=', $this->dayStart($from))->where('paid_at', '<', $this->dayStart($to->addDay()));
         if (! $clinicWide) {
-            $this->applyBranchScope($query, 'patient_billings.branch_id');
+            $this->applyBranchScope($query, 'branch_id');
         }
 
         return $query;
     }
 
-    /**
-     * A clinic wall-clock time (as `ClinicClock` gives it) as the real UTC
-     * instant, for comparing with stored timestamps such as `created_at`.
-     */
-    private function toInstant(CarbonImmutable $wallClock): CarbonImmutable
+    /** Refunds recorded on the clinic days `$from`..`$to`, each at its own branch. */
+    private function refunds(CarbonImmutable $from, CarbonImmutable $to, bool $clinicWide = false): Builder
     {
-        return CarbonImmutable::parse($wallClock->format('Y-m-d H:i:s'), ClinicClock::timezone())->utc();
+        $query = DB::table('patient_billing_refunds')->where('clinic_id', $this->clinic()->id)
+            ->where('created_at', '>=', $this->dayStart($from))->where('created_at', '<', $this->dayStart($to->addDay()));
+        if (! $clinicWide) {
+            $this->applyBranchScope($query, 'branch_id');
+        }
+
+        return $query;
+    }
+
+    /** The UTC instant a clinic day begins, for comparing with stored timestamps. */
+    private function dayStart(CarbonImmutable $day): string
+    {
+        return CarbonImmutable::parse($day->toDateString(), ClinicClock::timezone())->startOfDay()->utc()->toDateTimeString();
     }
 
     private function clinic(): Clinic

@@ -24,7 +24,7 @@ beforeEach(function () {
     ]);
 });
 
-test('the dashboard shows a My day band with assigned counts for a practitioner', function () {
+test('Today shows a practitioner their own patients: booked with them today and assigned to them', function () {
     $doctorUser = User::factory()->create(['user_type' => UserType::ClinicUser, 'name' => 'Dr. Nair']);
     $employee = ClinicEmployee::create([
         'clinic_id' => $this->clinic->id, 'user_id' => $doctorUser->id, 'name' => 'Dr. Nair', 'email' => 'nair@example.com', 'status' => 'active',
@@ -41,8 +41,8 @@ test('the dashboard shows a My day band with assigned counts for a practitioner'
     ]);
 
     Appointment::create([
-        'clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => $myPatient->id,
-        // Appointments store clinic wall-clock time, as the dashboard reads it.
+        'clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => $myPatient->id, 'practitioner_id' => $employee->id,
+        // Appointments store clinic wall-clock time, as Today reads it.
         'scheduled_at' => ClinicClock::now(), 'status' => 'scheduled',
     ]);
 
@@ -53,19 +53,21 @@ test('the dashboard shows a My day band with assigned counts for a practitioner'
     $response = $this->actingAs($doctorUser)->withSession([
         ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id,
         ClinicContext::SESSION_BRANCH_ID => $this->branch->id,
-    ])->get('/clinic/dashboard');
+    ])->get('/clinic/consultations');
 
+    // The practitioner's own day is on the one Dashboard (this practitioner also owns the clinic,
+    // so it sits beside the clinic overview), as well as on Today.
     $response->assertStatus(200);
-    // "My day" is now a dashboard widget; its figures arrive as deferred data.
     $response->assertInertia(fn ($page) => $page
-        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('my_day'))
-        ->loadDeferredProps(fn ($reload) => $reload
-            ->where('widgetData.my_day.stats', fn ($stats) => collect($stats)->firstWhere('key', 'today_appointments')['value'] === 1
-                && collect($stats)->firstWhere('key', 'total_assigned')['value'] === 1))
-    );
+        ->component('ClinicPortal/Today/Index', false)
+        ->where('mine.booked_today', 1)
+        ->where('mine.assigned', 1));
+
+    $this->get('/clinic/dashboard')->assertOk()
+        ->assertInertia(fn ($page) => $page->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->intersect(['my_waiting', 'my_queue'])->count() === 2));
 });
 
-test('the dashboard has no My day band for a user with no clinical profile', function () {
+test('someone with no clinical profile gets no own-patients figures on Today and no My day band anywhere', function () {
     $receptionUser = User::factory()->create(['user_type' => UserType::ClinicUser, 'name' => 'Front Desk']);
     $membership = ClinicMembership::factory()->create([
         'clinic_id' => $this->clinic->id, 'user_id' => $receptionUser->id, 'is_primary_owner' => true, 'has_all_branches_access' => true, 'status' => ClinicMembershipStatus::Active,
@@ -78,6 +80,8 @@ test('the dashboard has no My day band for a user with no clinical profile', fun
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->where('widgets', fn ($widgets) => ! collect($widgets)->pluck('key')->contains('my_day'))
-        ->loadDeferredProps(fn ($reload) => $reload->missing('widgetData.my_day')));
+        ->where('widgets', fn ($widgets) => ! collect($widgets)->pluck('key')->contains('my_waiting'))
+        ->missing('widgetData.my_waiting'));
+
+    $this->get('/clinic/consultations')->assertOk()->assertInertia(fn ($page) => $page->where('mine', null));
 });

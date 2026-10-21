@@ -196,7 +196,7 @@ it('can list departments', function () {
     $this->actingAs($user)->get(route('admin.departments.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Admin/Infrastructure/Departments')
+            ->component('Clinic/Admin/Infrastructure/Departments', false)
             ->has('departments', 1)
             ->where('departments.0.name', 'Radiology')
             ->missing('departments.0.clinic_id'));
@@ -234,7 +234,7 @@ it('can list rooms', function () {
     $this->actingAs($user)->get(route('admin.rooms.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Clinic/Admin/Infrastructure/Rooms')
+            ->component('Clinic/Admin/Infrastructure/Rooms', false)
             ->has('rooms', 1)
             ->where('rooms.0.name', 'Consultation Room 1')
             ->where('rooms.0.branch_name', $branch->name)

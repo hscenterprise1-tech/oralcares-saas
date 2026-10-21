@@ -113,6 +113,52 @@ it('never adopts the new plan price on its own', function () {
     expect((float) $this->subscription->fresh()->mrr)->toBe(10000.0);
 });
 
+it('keeps the subscription\'s own limits when only the plan changes', function () {
+    $this->growth->update(['max_users' => 50, 'max_doctors' => 12, 'max_staff' => 4, 'max_branches' => 6]);
+
+    $this->actingAs($this->manager)
+        ->post(route('company.customer-success.subscriptions.change-plan', $this->subscription), ['company_plan_id' => $this->growth->id])
+        ->assertSessionHasNoErrors();
+
+    expect($this->subscription->fresh())
+        ->company_plan_id->toBe($this->growth->id)
+        ->max_users->toBe(10)
+        ->max_branches->toBe(2)
+        ->max_doctors->toBe(3)
+        ->max_staff->toBeNull();
+});
+
+it('adopts the new plan\'s limits only when asked, and a limit named explicitly still wins', function () {
+    $this->growth->update(['max_users' => 50, 'max_doctors' => 12, 'max_staff' => 4, 'max_branches' => 6]);
+
+    $this->actingAs($this->manager)
+        ->post(route('company.customer-success.subscriptions.change-plan', $this->subscription), [
+            'company_plan_id' => $this->growth->id, 'adopt_plan_limits' => true, 'max_users' => 60,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($this->subscription->fresh())
+        ->max_users->toBe(60)
+        ->max_doctors->toBe(12)
+        ->max_staff->toBe(4)
+        ->max_branches->toBe(6);
+    expect(SubscriptionEvent::latest('id')->first()->changes)
+        ->toMatchArray(['adopted_plan_limits' => true, 'max_staff' => ['from' => null, 'to' => 4], 'max_users' => ['from' => 10, 'to' => 60]]);
+});
+
+it('adopting a plan with no staff cap clears the subscription\'s, and is allowed on the same plan', function () {
+    $this->subscription->update(['max_staff' => 3]);
+
+    $this->actingAs($this->manager)
+        ->post(route('company.customer-success.subscriptions.change-plan', $this->subscription), [
+            'company_plan_id' => $this->starter->id, 'adopt_plan_limits' => true,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($this->subscription->fresh()->max_staff)->toBeNull()
+        ->and(SubscriptionEvent::latest('id')->first()->event)->toBe('entitlements_changed');
+});
+
 it('refuses a plan change that changes nothing', function () {
     $this->actingAs($this->manager)
         ->post(route('company.customer-success.subscriptions.change-plan', $this->subscription), [
@@ -140,6 +186,23 @@ it('adjusts seats without moving the customer off their plan', function () {
 
     expect($event->event)->toBe('entitlements_changed')
         ->and($event->changes['max_users'])->toBe(['from' => 10, 'to' => 25]);
+});
+
+it('sets the staff seat cap on its own, and records the change', function () {
+    $this->actingAs($this->manager)
+        ->post(route('company.customer-success.subscriptions.entitlements', $this->subscription), [
+            'max_staff' => 3,
+            'reason' => 'Dental Plan 1: three staff logins.',
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($this->subscription->fresh()->max_staff)->toBe(3)
+        ->and(SubscriptionEvent::latest('id')->first()->changes['max_staff'])->toBe(['from' => null, 'to' => 3]);
+
+    $this->actingAs($this->manager)
+        ->post(route('company.customer-success.subscriptions.entitlements', $this->subscription), ['max_staff' => -1])
+        ->assertSessionHasErrors('max_staff');
+    expect($this->subscription->fresh()->max_staff)->toBe(3);
 });
 
 it('refuses an adjustment that names no limit', function () {

@@ -4,72 +4,60 @@ namespace App\Services;
 
 use App\Models\ClinicalAttachment;
 use App\Models\ClinicalOrderItem;
+use App\Models\ClinicEmployee;
 use App\Models\DiagnosticResult;
 use App\Models\User;
-use Exception;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * Result entry for callers that work with results directly (integrations,
+ * older code). It writes through `ClinicalOrderService`, the one
+ * investigations lifecycle, so the same state rules and audit apply.
+ */
 class DiagnosticResultService
 {
+    public function __construct(protected ClinicalOrderService $orders) {}
+
     /**
-     * Store a new draft result for an order item.
+     * Store (or replace, until reviewed) the result for an order item.
+     *
+     * @param  array<string, mixed>  $content
      */
     public function storeDraft(ClinicalOrderItem $item, array $content, string $type, ?User $reporter = null): DiagnosticResult
     {
-        if ($item->status === 'completed' || $item->status === 'cancelled') {
-            throw new Exception('Cannot add results to a completed or cancelled order item.');
-        }
-
-        return DiagnosticResult::create([
-            'organization_id' => $item->organization_id ?? $item->order?->organization_id,
-            'patient_id' => $item->order->patient_id,
-            'clinical_order_item_id' => $item->id,
-            'status' => 'draft',
-            'result_type' => $type,
-            'reported_by' => $reporter?->id,
-            'content' => $content,
-        ]);
+        return $this->orders->recordResult($item, $this->employeeFor($item, $reporter), [
+            'summary' => is_string($content['text'] ?? null) ? $content['text'] : null,
+            'content' => [...$content, 'type' => $type],
+        ], $reporter);
     }
 
     /**
-     * Verify and finalize a result, automatically completing the parent order item.
+     * Review the result: it becomes final and its order item is reviewed.
      */
     public function verifyAndFinalize(DiagnosticResult $result, User $verifier): DiagnosticResult
     {
-        if ($result->status === 'final') {
-            throw new Exception('Result is already finalized.');
-        }
+        $item = ClinicalOrderItem::query()->withoutGlobalScopes()->findOrFail($result->clinical_order_item_id);
 
-        return DB::transaction(function () use ($result, $verifier) {
-            $result->update([
-                'status' => 'final',
-                'verified_by' => $verifier->id,
-                'verified_at' => now(),
-            ]);
-
-            // Complete the parent order item
-            $result->orderItem->update([
-                'status' => 'completed',
-            ]);
-
-            // Here we would typically emit a PatientTimelineEvent: 'diagnostic_result_published'
-
-            return $result;
-        });
+        return $this->orders->review($item, $this->employeeFor($item, $verifier), null, $verifier);
     }
 
     /**
-     * Attach a generic file to any morphable model (like a DiagnosticResult).
+     * Attach a reference (e.g. a PACS viewer link) to a result. Uploaded
+     * files go through the scanned patient-document upload instead.
      */
     public function attachFile(Model $attachable, string $filePath, string $type, string $title, ?string $description = null): ClinicalAttachment
     {
         return $attachable->attachments()->create([
-            'organization_id' => $attachable->organization_id, // Assumes model has organization_id
+            'organization_id' => $attachable->organization_id,
             'file_path' => $filePath,
             'file_type' => $type,
             'title' => $title,
             'description' => $description,
         ]);
+    }
+
+    private function employeeFor(ClinicalOrderItem $item, ?User $user): ?ClinicEmployee
+    {
+        return $user ? ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $item->clinic_id)->where('user_id', $user->id)->first() : null;
     }
 }

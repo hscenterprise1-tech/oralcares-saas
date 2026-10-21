@@ -20,6 +20,13 @@ return [
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
+     * The connection heavy reports read from (`App\Services\Platform\ReportingDatabase`).
+     * Unset means the default connection; set DB_REPORTING_CONNECTION=reporting
+     * once a replica is configured below.
+     */
+    'reporting_connection' => env('DB_REPORTING_CONNECTION'),
+
+    /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
@@ -52,6 +59,42 @@ return [
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ] + (env('DB_READ_HOST') ? [
+            /*
+             * Read/write split, off unless DB_READ_HOST is set (a comma list of
+             * replicas). Writes and every read after a write in the same
+             * request (`sticky`) stay on the primary, so a user never reads
+             * behind their own change.
+             */
+            'read' => ['host' => explode(',', (string) env('DB_READ_HOST'))],
+            'write' => ['host' => [env('DB_HOST', '127.0.0.1')]],
+            'sticky' => true,
+        ] : []),
+
+        /*
+         * Heavy reports and exports (ADR-001 §N) read through this connection.
+         * It is the primary until DB_REPORTING_HOST points it at a replica, so
+         * month-end reporting never competes with the front desk for the
+         * primary's I/O.
+         */
+        'reporting' => [
+            'driver' => 'mysql',
+            'url' => env('DB_REPORTING_URL'),
+            'host' => env('DB_REPORTING_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_REPORTING_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_REPORTING_DATABASE', env('DB_DATABASE', 'laravel')),
+            'username' => env('DB_REPORTING_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_REPORTING_PASSWORD', env('DB_PASSWORD', '')),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),

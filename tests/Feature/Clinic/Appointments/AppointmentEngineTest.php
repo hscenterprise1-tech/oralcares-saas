@@ -87,7 +87,7 @@ test('reception sees every provider\'s appointments in one date-and-time calenda
     bookedAt('2026-09-29 10:00:00', 30, ['practitioner_id' => $this->f->doctorB->id, 'patient_id' => $this->f->patient('Meena', 'Shah')->id]);
 
     asReception()->get('/clinic/appointments?view=day&date=2026-09-29')->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Appointments/Index')
+        ->component('ClinicPortal/Appointments/Index', true)
         ->where('filters.providers', [])
         ->has('appointments', 2)
         ->where('appointments.0.provider_name', 'Dr. Asha Mehta')

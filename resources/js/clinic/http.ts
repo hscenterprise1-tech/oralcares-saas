@@ -25,6 +25,8 @@ export class ClinicHttpError extends Error {
   constructor(
     public readonly kind: ClinicHttpErrorKind,
     public readonly status: number | null,
+    /** The parsed JSON error body (validation errors, a 409 payload), when there was one. */
+    public readonly body: unknown = null,
   ) {
     super(kind);
     this.name = 'ClinicHttpError';
@@ -83,7 +85,7 @@ function withQuery(url: string, query?: Query): string {
 }
 
 export async function requestJson<T>(
-  method: 'GET' | 'POST' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   url: string,
   options: { query?: Query; body?: Record<string, unknown>; signal?: AbortSignal } = {},
 ): Promise<T> {
@@ -120,7 +122,11 @@ export async function requestJson<T>(
     if (kind === 'unauthenticated' || kind === 'session_expired') {
       window.location.reload();
     }
-    throw new ClinicHttpError(kind, response.status);
+    let body: unknown = null;
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      body = await response.json().catch(() => null);
+    }
+    throw new ClinicHttpError(kind, response.status, body);
   }
 
   return (await response.json()) as T;

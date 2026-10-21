@@ -131,12 +131,12 @@ it('employee index and edit expose the employee\'s active pending invitation', f
     ]);
 
     $this->actingAs($user)->get(route('admin.employees.index'))->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Staff/Index')
+        ->component('ClinicPortal/Staff/Index', false)
         ->where('employees.0.invitation_pending', true)
     );
 
     $this->actingAs($user)->get(route('admin.employees.show', $employee->id))->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Staff/Show')
+        ->component('ClinicPortal/Staff/Show', false)
         ->where('employee.invitation.email', 'invited.person@example.com')
     );
 });

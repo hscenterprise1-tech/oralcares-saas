@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\ClinicMembershipStatus;
+use App\ClinicRole;
+use App\EmploymentStatus;
 use App\Events\LimitReached;
 use App\Exceptions\ResourceLimitExceededException;
 use App\Models\Branch;
@@ -9,47 +12,134 @@ use App\Models\Clinic;
 use App\Models\ClinicMembership;
 use App\Models\CompanySubscription;
 use App\Models\User;
-use App\SubscriptionStatus;
+use App\Services\Provisioning\ClinicSubscriptionSelector;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class ResourceLimitService
 {
+    public function __construct(protected ClinicSubscriptionSelector $subscriptions) {}
+
     /**
-     * Get the active subscription for a clinic.
+     * The subscription seat limits are read from: the clinic's most recent
+     * active one (`ClinicSubscriptionSelector::forSeats`).
      */
     public function getActiveSubscription(Clinic $clinic): ?CompanySubscription
     {
-        return $clinic->subscriptions()
-            ->where('status', SubscriptionStatus::Active)
-            ->first();
+        return $this->subscriptions->forSeats($clinic);
     }
 
     /**
-     * Get current user membership count.
+     * The logins holding a seat: memberships that can sign in.
+     *
+     * A seat is held by an active membership whose staff record, if it has
+     * one, is not inactive, suspended or resigned — the rule sign-in itself
+     * applies (`ClinicLoginController`, `ResolveClinicContext`). An invitation
+     * not yet accepted has no membership, so it holds none either.
      */
     public function getCurrentUserCount(Clinic $clinic): int
     {
-        return ClinicMembership::where('clinic_id', $clinic->id)->count();
+        return $this->seatHolders($clinic)->count();
     }
 
     /**
-     * Get current doctor count.
+     * The seat-holding logins that take a doctor seat: those with a role
+     * `ClinicRole::seat()` maps to the doctor seat, at one of the clinic's
+     * branches.
      */
     public function getCurrentDoctorCount(Clinic $clinic): int
     {
-        return ClinicMembership::where('clinic_id', $clinic->id)
-            ->whereHas('user', function ($query) use ($clinic) {
-                $query->whereIn('id', function ($sub) use ($clinic) {
-                    $sub->select('model_id')
-                        ->from('spatie_model_has_roles')
-                        ->where('model_type', User::class)
-                        ->whereIn('branch_id', $clinic->branches()->pluck('id'))
-                        ->whereIn('role_id', function ($roleSub) {
-                            $roleSub->select('id')->from('spatie_roles')->where('name', 'Doctor');
-                        });
-                });
-            })
-            ->count();
+        return $this->doctorsAmong($this->seatHolders($clinic), $clinic)->count();
+    }
+
+    /**
+     * Whether this login has a role that takes a doctor seat here.
+     */
+    public function holdsDoctorRole(Clinic $clinic, User $user): bool
+    {
+        return $this->doctorRoleHolders($clinic)->where('model_id', $user->id)->exists();
+    }
+
+    /**
+     * The gate before a login starts holding a seat — an invitation accepted,
+     * a login reactivated, a staff login moved into a doctor role: the plan
+     * must have room for one more of that seat (`$asDoctor`) and one more
+     * login overall. `$holder` is a login that already holds a seat and is
+     * only changing its kind; its own seat is left out of the count.
+     *
+     * Call it inside the transaction that grants the seat. It locks the
+     * clinic's row, so two grants for one clinic take turns, and counts with
+     * locking reads, so the second sees the seat the first committed even
+     * when its transaction read something earlier.
+     *
+     * @throws ResourceLimitExceededException
+     */
+    public function assertSeatAvailable(Clinic $clinic, bool $asDoctor, ?User $holder = null): void
+    {
+        Clinic::query()->withoutGlobalScopes()->whereKey($clinic->id)->lockForUpdate()->first(['id']);
+
+        $sub = $this->getActiveSubscription($clinic);
+        if (! $sub) {
+            throw new ResourceLimitExceededException('No active subscription found. Contact your account manager.');
+        }
+
+        $total = $this->seatHolders($clinic, $holder?->id)->sharedLock()->count();
+        $doctors = $this->doctorsAmong($this->seatHolders($clinic, $holder?->id), $clinic)->sharedLock()->count();
+
+        if ($asDoctor) {
+            $limit = $this->getAllowedDoctors($sub);
+            if ($doctors >= $limit) {
+                event(new LimitReached($clinic, 'doctors', $limit, $doctors));
+                throw new ResourceLimitExceededException("Your plan allows up to {$limit} doctors. Contact your account manager to add more seats.");
+            }
+        } else {
+            $limit = $this->getAllowedStaff($sub);
+            if ($limit !== null && $total - $doctors >= $limit) {
+                event(new LimitReached($clinic, 'staff', $limit, $total - $doctors));
+                throw new ResourceLimitExceededException("Your plan allows up to {$limit} staff members. Contact your account manager to add more seats.");
+            }
+        }
+
+        $limit = $this->getAllowedUsers($sub);
+        if ($total >= $limit) {
+            event(new LimitReached($clinic, 'users', $limit, $total));
+            throw new ResourceLimitExceededException("Your plan allows up to {$limit} users in total. Contact your account manager to add more seats.");
+        }
+    }
+
+    /**
+     * @return Builder<ClinicMembership>
+     */
+    private function seatHolders(Clinic $clinic, ?int $exceptUserId = null): Builder
+    {
+        return ClinicMembership::query()->withoutGlobalScopes()
+            ->where('clinic_memberships.clinic_id', $clinic->id)
+            ->where('clinic_memberships.status', ClinicMembershipStatus::Active)
+            ->whereNotExists(fn ($query) => $query->from('clinic_employees')
+                ->whereColumn('clinic_employees.clinic_id', 'clinic_memberships.clinic_id')
+                ->whereColumn('clinic_employees.user_id', 'clinic_memberships.user_id')
+                ->whereIn('clinic_employees.status', EmploymentStatus::accessEnding()))
+            ->when($exceptUserId !== null, fn ($query) => $query->where('clinic_memberships.user_id', '!=', $exceptUserId));
+    }
+
+    /**
+     * @param  Builder<ClinicMembership>  $memberships
+     * @return Builder<ClinicMembership>
+     */
+    private function doctorsAmong(Builder $memberships, Clinic $clinic): Builder
+    {
+        return $memberships->whereIn('clinic_memberships.user_id', $this->doctorRoleHolders($clinic)->select('model_id'));
+    }
+
+    /** Role assignments, at this clinic's branches, to a role that takes a doctor seat. */
+    private function doctorRoleHolders(Clinic $clinic): QueryBuilder
+    {
+        return DB::table('spatie_model_has_roles')
+            ->where('model_type', User::class)
+            ->whereIn('branch_id', Branch::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->select('id'))
+            ->whereIn('role_id', DB::table('spatie_roles')->whereIn('name', ClinicRole::doctorSeatRoles())->select('id'));
     }
 
     /**

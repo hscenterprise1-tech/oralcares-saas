@@ -10,6 +10,8 @@ use App\Services\ClinicContext;
 use App\UserType;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\Response;
 
 class ResolveClinicContext
@@ -26,6 +28,7 @@ class ResolveClinicContext
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $this->bindDomainClinic($request);
         $user = $request->user();
 
         // Resolve from scratch on every request: a context left over from an
@@ -117,9 +120,37 @@ class ResolveClinicContext
                 if ($resolvedBranch) {
                     $this->clinicContext->setBranch($resolvedBranch);
                 }
+
+                // Every log line of this request names its tenant, beside
+                // the request id `AssignRequestId` already added.
+                Log::withContext([
+                    'clinic_id' => $resolvedMembership->clinic_id,
+                    'branch_id' => $resolvedBranch?->id,
+                ]);
             }
         }
 
         return $next($request);
+    }
+
+    /**
+     * Domain mode addresses a clinic as `{clinic}.example.com`. Every link the
+     * server or the browser (Ziggy, from `@routes`) builds for this request
+     * belongs to that clinic, so the slug becomes the URL default; and the
+     * host segment is not a controller argument, so it is taken off the route.
+     */
+    private function bindDomainClinic(Request $request): void
+    {
+        $route = $request->route();
+        // Only the clinic portal's own host: a Company route may name a clinic in its path.
+        if (config('app.routing_mode') !== 'domain' || $route === null || ! str_contains((string) $route->getDomain(), '{clinic}')) {
+            return;
+        }
+
+        $slug = $this->clinicContext->requestedClinicSlug($request);
+        if ($slug !== null) {
+            URL::defaults(['clinic' => $slug]);
+        }
+        $route->forgetParameter('clinic');
     }
 }

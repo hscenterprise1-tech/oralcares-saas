@@ -25,6 +25,7 @@ class Patient extends Model
         // Phase 7 – permanent identity
         'uhid',
         'first_name',
+        'middle_name',
         'last_name',
         'age',
         'blood_group',
@@ -37,6 +38,9 @@ class Patient extends Model
         'gender',
         'status',
         'current_practitioner_id',
+        'archived_at',
+        'archived_by',
+        'archive_reason',
         // Legacy – kept for backward compatibility
         'patient_number',
         'name',
@@ -48,6 +52,7 @@ class Patient extends Model
             'status' => PatientStatus::class,
             'registration_type' => VisitRegistrationType::class,
             'date_of_birth' => 'date',
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -80,9 +85,25 @@ class Patient extends Model
 
     protected static function booted(): void
     {
+        // `name` is the maintained full name the directory searches on: rebuilt
+        // whenever a name part changes. A legacy row that only ever had `name`
+        // (no parts) keeps it untouched.
         static::saving(function (Patient $patient) {
-            if (empty($patient->attributes['name'])) {
-                $patient->attributes['name'] = trim(($patient->first_name ?? '').' '.($patient->last_name ?? '')) ?: 'Patient';
+            // The date of birth is the source of age. The stored `age` is only
+            // the age recorded for a patient whose date of birth is unknown
+            // (and legacy data); once there is a date of birth it is never
+            // written again.
+            if ($patient->getAttributes()['date_of_birth'] ?? null) {
+                if ($patient->isDirty('age')) {
+                    $patient->attributes['age'] = $patient->getRawOriginal('age');
+                }
+            }
+
+            $parts = self::joinName($patient->first_name, $patient->middle_name, $patient->last_name);
+            if ($parts !== '' && ($patient->isDirty(['first_name', 'middle_name', 'last_name']) || empty($patient->attributes['name']))) {
+                $patient->attributes['name'] = $parts;
+            } elseif (empty($patient->attributes['name'])) {
+                $patient->attributes['name'] = 'Patient';
             }
         });
     }
@@ -97,11 +118,44 @@ class Patient extends Model
      */
     public function getFullNameAttribute(): string
     {
-        if ($this->first_name || $this->last_name) {
-            return trim("{$this->first_name} {$this->last_name}");
-        }
+        return self::joinName($this->first_name, $this->middle_name, $this->last_name) ?: ($this->getRawOriginal('name') ?? '');
+    }
 
-        return $this->name ?? '';
+    /**
+     * Age from the date of birth whenever it is known — the canonical source.
+     * Without one, the age recorded at registration (backward compatibility
+     * for patients who did not know it); `ageSource()` says which.
+     */
+    public function getAgeAttribute(?int $value): ?int
+    {
+        $dob = $this->date_of_birth;
+
+        return $dob ? (int) $dob->diffInYears(now()) : $value;
+    }
+
+    /** Where `age` comes from: 'date_of_birth', 'recorded' (legacy/unknown DOB) or null. */
+    public function ageSource(): ?string
+    {
+        return match (true) {
+            $this->date_of_birth !== null => 'date_of_birth',
+            $this->getRawOriginal('age') !== null || ($this->attributes['age'] ?? null) !== null => 'recorded',
+            default => null,
+        };
+    }
+
+    /**
+     * Emails are stored trimmed and lower-cased, so duplicate detection and
+     * lookup can compare them with a plain indexed equality.
+     */
+    public function setEmailAttribute(?string $value): void
+    {
+        $value = $value === null ? null : mb_strtolower(trim($value));
+        $this->attributes['email'] = $value === '' ? null : $value;
+    }
+
+    public static function joinName(?string ...$parts): string
+    {
+        return trim(implode(' ', array_filter(array_map(fn (?string $part) => trim((string) $part), $parts), fn (string $part) => $part !== '')));
     }
 
     /**
@@ -127,11 +181,7 @@ class Patient extends Model
      */
     public function getNameAttribute(?string $value): string
     {
-        if ($this->first_name || $this->last_name) {
-            return trim("{$this->first_name} {$this->last_name}");
-        }
-
-        return $value ?? '';
+        return self::joinName($this->first_name, $this->middle_name, $this->last_name) ?: ($value ?? '');
     }
 
     // -------------------------------------------------------------------------
@@ -173,6 +223,12 @@ class Patient extends Model
         return $this->hasMany(PatientAlert::class);
     }
 
+    /** Conditions, allergies and medications: the canonical clinical record. */
+    public function clinicalEntries(): HasMany
+    {
+        return $this->hasMany(PatientClinicalEntry::class);
+    }
+
     public function encounters(): HasMany
     {
         return $this->hasMany(ClinicalEncounter::class);
@@ -206,6 +262,16 @@ class Patient extends Model
     public function timelineEvents(): HasMany
     {
         return $this->hasMany(PatientTimelineEvent::class);
+    }
+
+    public function specialties(): HasMany
+    {
+        return $this->hasMany(PatientSpecialty::class);
+    }
+
+    public function branchActivity(): HasMany
+    {
+        return $this->hasMany(PatientBranchActivity::class);
     }
 
     /**
@@ -244,9 +310,11 @@ class Patient extends Model
     public function scopeSearchByName(Builder $query, string $name): Builder
     {
         return $query->where(function (Builder $q) use ($name) {
-            $q->where('name', 'like', "%{$name}%")
-                ->orWhere('first_name', 'like', "%{$name}%")
-                ->orWhere('last_name', 'like', "%{$name}%");
+            $name = self::escapeLike(trim($name));
+            $q->where('first_name', 'like', "{$name}%")
+                ->orWhere('middle_name', 'like', "{$name}%")
+                ->orWhere('last_name', 'like', "{$name}%")
+                ->orWhere('name', 'like', "{$name}%");
         });
     }
 
@@ -261,15 +329,16 @@ class Patient extends Model
      * autocomplete and the reception check-in search — both search the same columns and hit the
      * same scale problem, so both use the same strategy.
      *
-     * Name matching uses a MySQL FULLTEXT index (`patients_name_fulltext`)
-     * in boolean mode rather than `LIKE '%term%'`: a leading-wildcard LIKE
-     * can never use a normal index no matter how the table is indexed, so
-     * at hospital scale it becomes a full per-clinic table scan on every
-     * keystroke. FULLTEXT has a floor — MySQL's default
-     * `innodb_ft_min_token_size` ignores words under 3 characters — so a
-     * 1–2 character query falls back to the old `LIKE` behaviour, which is
-     * cheap precisely because it's rare (most searches settle past 2
-     * characters within one debounce cycle).
+     * Names match by word prefix: every typed word must start a word of the
+     * patient's name ("ash sha" finds "Asha Sharma"). The callers always
+     * constrain `clinic_id` first, so the work is bounded by the size of
+     * that one clinic. It used to be a MySQL FULLTEXT match, but a FULLTEXT
+     * index spans every tenant: InnoDB resolves the MATCH across all
+     * clinics' patients before the clinic filter applies, so a 20-patient
+     * clinic's search slowed as the platform grew (measured 12 ms at 1k
+     * clinics, 68 ms at 10k — see docs/architecture). A dedicated search
+     * engine with a mandatory clinic filter is the path for very large
+     * hospitals (ADR-001 §L).
      *
      * Phone/alternate-phone/UHID search was already effectively a "type
      * the start of it" use case (a UHID is read off a card/wristband from
@@ -281,55 +350,44 @@ class Patient extends Model
      */
     public function scopeMatchingSearch(Builder $query, string $search): Builder
     {
-        // The FULLTEXT index this relies on is MySQL/MariaDB-specific (see
-        // the `add_fulltext_search_index_to_patients_table` migration).
-        // `whereFullText` throws on any other driver — notably SQLite,
-        // which the test suite runs on — so this falls back to the same
-        // `LIKE '%term%'` behaviour there rather than breaking every test
-        // that searches patients. Production runs MySQL, so this never
-        // takes the slow path outside of tests.
-        $supportsFullText = in_array(
-            $query->getQuery()->getConnection()->getDriverName(),
-            ['mysql', 'mariadb'],
-            true
-        );
+        $search = trim($search);
+        $words = array_values(array_filter(preg_split('/\s+/', $search) ?: [], fn (string $word) => $word !== ''));
+        $whole = self::escapeLike($search);
 
-        return $query->where(function ($sub) use ($search, $supportsFullText) {
-            $booleanQuery = $supportsFullText ? self::toBooleanPrefixQuery($search) : null;
+        // A number (a phone or the digits of an ID) is looked up only in the indexed
+        // phone and ID columns; text only in names and the ID. Never all six at once.
+        if (preg_match('/^[\d\s+()\-]+$/', $search) === 1) {
+            return $query->where(fn ($sub) => $sub->where('phone', 'like', "{$whole}%")
+                ->orWhere('alternate_phone', 'like', "{$whole}%")
+                ->orWhere('uhid', 'like', "{$whole}%"));
+        }
 
-            if ($booleanQuery !== null) {
-                $sub->whereFullText(['name', 'first_name', 'last_name'], $booleanQuery, ['mode' => 'boolean']);
-            } else {
-                $sub->where('name', 'like', "%{$search}%")
-                    ->orWhere('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%");
-            }
+        // Names: the first word typed is a first or last name (both indexed with clinic_id), which is
+        // what lets the database use an index; each word may then also be a middle name. The `name`
+        // column is not searched: it is the model's own copy of first + middle + last.
+        return $query->where(function ($sub) use ($words, $whole) {
+            $sub->where(function ($names) use ($words) {
+                $first = self::escapeLike($words[0] ?? '');
+                $names->where(fn ($name) => $name->where('first_name', 'like', "{$first}%")->orWhere('last_name', 'like', "{$first}%"));
+                foreach (array_slice($words, 1) as $word) {
+                    $word = self::escapeLike($word);
+                    $names->where(fn ($name) => $name
+                        ->where('first_name', 'like', "{$word}%")
+                        ->orWhere('middle_name', 'like', "{$word}%")
+                        ->orWhere('last_name', 'like', "{$word}%"));
+                }
+            });
 
-            $sub->orWhere('phone', 'like', "{$search}%")
-                ->orWhere('alternate_phone', 'like', "{$search}%")
-                ->orWhere('uhid', 'like', "{$search}%");
+            $sub->orWhere('uhid', 'like', "{$whole}%");
         });
     }
 
     /**
-     * Turns free-typed search text into a MySQL boolean-mode fulltext
-     * query (`+word*` per token — required, prefix-matched), or null when
-     * the text is too short for the fulltext index to help at all.
-     *
-     * Boolean-mode operator characters (`+ - > < ( ) ~ * " @`) are typed
-     * by users far more often as ordinary punctuation (a hyphenated name,
-     * an `@` fumbled into a name field) than as an intentional fulltext
-     * operator, and left in they can throw a MySQL boolean-query syntax
-     * error instead of just returning no rows — so they're stripped from
-     * every token before it's wrapped.
+     * Typed text as a literal LIKE operand: `%` and `_` match themselves.
      */
-    private static function toBooleanPrefixQuery(string $search): ?string
+    private static function escapeLike(string $value): string
     {
-        $tokens = collect(preg_split('/\s+/', trim($search)) ?: [])
-            ->map(fn ($word) => preg_replace('/[+\-><()~*"@]/', '', $word))
-            ->filter(fn ($word) => mb_strlen($word) >= 3);
-
-        return $tokens->isEmpty() ? null : $tokens->map(fn ($word) => '+'.$word.'*')->implode(' ');
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
     }
 
     public function scopeAssignedTo(Builder $query, int $practitionerId): Builder

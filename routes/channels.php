@@ -1,25 +1,40 @@
 <?php
 
+use App\ClinicMembershipStatus;
+use App\ClinicStatus;
+use App\Models\ClinicMembership;
+use App\Models\User;
+use App\UserType;
 use Illuminate\Support\Facades\Broadcast;
+
+/**
+ * Whether a user may listen to a clinic's private channels: a clinic user with
+ * an active membership in that clinic, while the clinic itself is active.
+ * Head office never subscribes to a clinic's live events.
+ */
+$isActiveClinicMember = function (User $user, int|string $clinicId): bool {
+    if ($user->user_type !== UserType::ClinicUser) {
+        return false;
+    }
+
+    return ClinicMembership::withoutGlobalScopes()
+        ->where('clinic_id', (int) $clinicId)
+        ->where('user_id', $user->id)
+        ->where('status', ClinicMembershipStatus::Active)
+        ->whereHas('clinic', fn ($query) => $query->where('status', ClinicStatus::Active))
+        ->exists();
+};
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
 });
 
-// Notifications channel specific to a user within a clinic
-Broadcast::channel('clinic.{clinicId}.user.{userId}', function ($user, $clinicId, $userId) {
-    if ((int) $user->id !== (int) $userId) {
-        return false;
-    }
-
-    // Verify user actually belongs to this clinic (pseudo code assuming ClinicMembership relation)
-    // return $user->clinicMemberships()->where('clinic_id', $clinicId)->exists();
-    return true; // Simplified for now
+// One user's notifications inside one clinic.
+Broadcast::channel('clinic.{clinicId}.user.{userId}', function (User $user, $clinicId, $userId) use ($isActiveClinicMember) {
+    return (int) $user->id === (int) $userId && $isActiveClinicMember($user, $clinicId);
 });
 
-// Notifications channel specific to an entire clinic (for users with specific roles)
-Broadcast::channel('clinic.{clinicId}', function ($user, $clinicId) {
-    // Check if user has permission to listen to clinic-wide events
-    // return $user->hasPermissionTo('view_clinic_notifications', $clinicId);
-    return true; // Simplified for now
+// Clinic-wide events.
+Broadcast::channel('clinic.{clinicId}', function (User $user, $clinicId) use ($isActiveClinicMember) {
+    return $isActiveClinicMember($user, $clinicId);
 });

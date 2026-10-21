@@ -3,17 +3,20 @@
 namespace App\Support\ClinicAccess;
 
 use App\ClinicType;
+use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\Organization;
+use App\Support\Specialty\SpecialtyEntitlements;
+use App\Support\Specialty\SpecialtyRegistry;
 
 /**
  * What a clinic practises (specialties) and which optional capabilities it
  * has switched on, from data the platform already holds. Nothing here is
  * hard-coded per clinic or per role.
  *
- * Specialties come from the organisation's `clinic_type` plus any specialty
- * module the plan grants (`dental`, `physiotherapy`). A clinic whose
- * specialty is unknown is `general`.
+ * Specialties are registry keys (`config/clinic_specialties.php`) from the
+ * branch's or clinic's configured set, plus any specialty a plan module
+ * grants. A clinic whose specialty is unknown gets the registry default.
  *
  * Capabilities (X-ray, dental lab, inventory, analytics, EMR, WhatsApp) are
  * plan features. Unlike the core modules, which a clinic with no subscription
@@ -25,38 +28,52 @@ class ClinicCapabilities
     /** Plan feature keys that switch on an optional capability. */
     public const CAPABILITIES = ['xray', 'lab', 'inventory', 'analytics', 'emr', 'whatsapp'];
 
-    /** Plan feature keys that also declare a specialty. */
-    public const SPECIALTY_MODULES = ['dental', 'physiotherapy'];
-
-    public const GENERAL = 'general';
+    public function __construct(protected SpecialtyRegistry $registry) {}
 
     /**
+     * The specialties practised where the user is working, as registry keys:
+     * the active branch's configured set, else the clinic's, else (clinics
+     * provisioned before specialties were recorded) the organisation's clinic
+     * type — plus any specialty a plan module declares.
+     *
      * @param  array{has_subscription: bool, modules: list<string>}  $entitlement
      * @return list<string>
      */
-    public function specialties(Clinic $clinic, array $entitlement): array
+    public function specialties(Clinic $clinic, array $entitlement, ?Branch $branch = null): array
     {
-        $specialties = [];
+        $specialties = $this->registry->normalize((array) ($branch?->specialties ?? []));
 
-        $type = $clinic->organization_id
-            ? Organization::query()->withoutGlobalScopes()->whereKey($clinic->organization_id)->value('clinic_type')
-            : null;
-        $fromType = self::specialtyForType($type instanceof ClinicType ? $type : ClinicType::tryFrom((string) $type));
-        if ($fromType !== null) {
-            $specialties[] = $fromType;
+        if ($specialties === []) {
+            $specialties = $this->registry->normalize((array) ($clinic->specialties ?? []));
         }
 
-        if ($entitlement['has_subscription']) {
-            foreach (self::SPECIALTY_MODULES as $module) {
-                if (in_array($module, $entitlement['modules'], true)) {
-                    $specialties[] = $module;
-                }
-            }
+        if ($specialties === []) {
+            $type = $clinic->organization_id
+                ? Organization::query()->withoutGlobalScopes()->whereKey($clinic->organization_id)->value('clinic_type')
+                : null;
+            $specialties = $this->registry->normalize([self::specialtyForType($type instanceof ClinicType ? $type : ClinicType::tryFrom((string) $type))]);
         }
 
-        $specialties = array_values(array_unique($specialties));
+        $specialties = $specialties === [] ? [$this->registry->default()] : $specialties;
 
-        return $specialties === [] ? [self::GENERAL] : $specialties;
+        // The plan decides which specialty products may be used (see `SpecialtyEntitlements`).
+        $entitlements = app(SpecialtyEntitlements::class);
+        $entitled = $entitlements->fromEntitlement($entitlement);
+
+        return SpecialtyEntitlements::restrict($specialties, $entitled, $entitled === null ? null : $entitlements->productsOf($entitled));
+    }
+
+    /**
+     * The specialty extensions available here: what the specialties bring,
+     * less any that need a capability the plan does not grant.
+     *
+     * @param  list<string>  $specialties
+     * @param  list<string>  $capabilities
+     * @return list<string>
+     */
+    public function extensions(array $specialties, array $capabilities): array
+    {
+        return $this->registry->availableExtensions($specialties, $capabilities);
     }
 
     /**
@@ -81,7 +98,7 @@ class ClinicCapabilities
             ClinicType::GeneralHospital => 'general_hospital',
             ClinicType::MultiSpecialityHospital => 'multi_specialty',
             null => null,
-            default => self::GENERAL,
+            default => 'general',
         };
     }
 }

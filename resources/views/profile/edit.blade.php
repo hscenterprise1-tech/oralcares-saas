@@ -18,17 +18,8 @@
                     @include('profile.partials.update-password-form')
                 </div>
             </div>
-
-            {{-- Company and HQ accounts are closed administratively, not here. The
-                 card wraps the section rather than the other way round, so nobody is
-                 shown an empty panel where the option used to be. --}}
-            @unless ($user->isMasterAdmin() || $user->user_type === App\UserType::CompanyUser)
-                <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
-                    <div class="max-w-xl">
-                        @include('profile.partials.delete-user-form')
-                    </div>
-                </div>
-            @endunless
+            {{-- No account is closed from its own profile: staff are deactivated by
+                 their clinic and company users retired by HQ (see ProfileController::destroy). --}}
         </div>
     </div>
 </x-app-layout>

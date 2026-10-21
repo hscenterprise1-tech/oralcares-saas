@@ -47,6 +47,9 @@ class SubscriptionActionController extends Controller
             'max_users' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'max_branches' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'max_doctors' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'max_staff' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            // Limits are kept unless this asks, explicitly, for the new plan's.
+            'adopt_plan_limits' => ['nullable', 'boolean'],
             'effective_at' => ['nullable', 'date'],
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
@@ -59,6 +62,8 @@ class SubscriptionActionController extends Controller
                 'max_users' => $validated['max_users'] ?? null,
                 'max_branches' => $validated['max_branches'] ?? null,
                 'max_doctors' => $validated['max_doctors'] ?? null,
+                'max_staff' => $validated['max_staff'] ?? null,
+                'adopt_plan_limits' => (bool) ($validated['adopt_plan_limits'] ?? false),
                 'effective_at' => isset($validated['effective_at']) ? now()->parse($validated['effective_at']) : null,
                 'reason' => $validated['reason'] ?? null,
             ]),
@@ -76,6 +81,7 @@ class SubscriptionActionController extends Controller
             'max_users' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'max_branches' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'max_doctors' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'max_staff' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'mrr' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'reason' => ['nullable', 'string', 'max:500'],
         ]);

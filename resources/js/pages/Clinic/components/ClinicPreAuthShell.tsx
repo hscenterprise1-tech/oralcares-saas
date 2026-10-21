@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
  *   - Five saturated colour fields drifting under a dot grid and concentric
  *     rings, directly behind the form.
  *
- * Every colour is a CRM token (`ovs-crm-*`, from tokens.json). No images,
+ * Every colour is from the clinic palette (`clinic-*`). No images,
  * no canvas: the field is two gradients and two blurred circles.
  */
 
@@ -60,7 +60,7 @@ function BrandField({ className, band = false }: { className?: string; band?: bo
       <div
         className="absolute inset-0"
         style={{
-          background: 'linear-gradient(150deg, var(--ovs-crm-brand-strong) 0%, var(--ovs-crm-ink-soft) 78%)',
+          background: 'linear-gradient(150deg, #0A7181 0%, #191A20 78%)',
         }}
       />
       {/*
@@ -75,13 +75,13 @@ function BrandField({ className, band = false }: { className?: string; band?: bo
        */}
       <div
         className={cn(
-          'absolute -top-[38%] left-[18%] h-[70vmax] w-[70vmax] rounded-full bg-ovs-crm-brand blur-[120px]',
+          'absolute -top-[38%] left-[18%] h-[70vmax] w-[70vmax] rounded-full bg-clinic-brand blur-[120px]',
           band ? 'opacity-25' : 'opacity-45',
         )}
       />
       <div
         className={cn(
-          'absolute -bottom-[35%] right-[8%] h-[60vmax] w-[60vmax] rounded-full bg-ovs-crm-accent-violet blur-[130px]',
+          'absolute -bottom-[35%] right-[8%] h-[60vmax] w-[60vmax] rounded-full bg-clinic-accent-violet blur-[130px]',
           band ? 'opacity-20' : 'opacity-35',
         )}
       />
@@ -273,7 +273,7 @@ const RAIL_MOTION = `
 function ClinicTagline() {
   return (
     <p className="mt-3 text-[18px] font-semibold leading-snug tracking-[-0.02em] text-white xl:mt-4 xl:text-[24px]">
-      Every patient. Every visit. <span className="font-bold text-ovs-crm-accent-teal-border">One record.</span>
+      Every patient. Every visit. <span className="font-bold text-clinic-accent-teal-border">One record.</span>
     </p>
   );
 }
@@ -303,7 +303,7 @@ function VisitRail() {
             className="clinic-rail-stage relative flex flex-col items-center px-1 text-center"
             style={{ animationDelay: `${250 + index * 110}ms` }}
           >
-            <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-ovs-crm-brand-strong shadow-[0_8px_20px_-8px_rgba(0,0,0,0.45)]">
+            <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-clinic-brand-strong shadow-[0_8px_20px_-8px_rgba(0,0,0,0.45)]">
               <stage.icon className="h-5 w-5" aria-hidden="true" />
             </span>
             <span className="mt-3 text-[12px] font-bold text-white">{stage.label}</span>
@@ -339,7 +339,7 @@ export function ClinicPreAuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative min-h-[100dvh] w-full bg-ovs-crm-canvas lg:overflow-hidden">
+    <div className="relative min-h-[100dvh] w-full bg-clinic-canvas lg:overflow-hidden">
       <Head title={title} />
 
       <BrandField className="hidden lg:block" />
@@ -383,14 +383,14 @@ export function ClinicPreAuthShell({
         </section>
 
         <main className="relative -mt-16 flex flex-col items-center px-4 pb-8 sm:px-6 lg:mt-0 lg:justify-center lg:py-10 lg:pl-0 lg:pr-14 xl:pr-20">
-          <div className="w-full max-w-[440px] rounded-[28px] bg-white p-6 shadow-[0_28px_60px_-30px_rgba(11,11,15,0.45)] ring-1 ring-ovs-crm-border sm:p-9 lg:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] lg:ring-white/40">
+          <div className="w-full max-w-[440px] rounded-[28px] bg-white p-6 shadow-[0_28px_60px_-30px_rgba(11,11,15,0.45)] ring-1 ring-clinic-border sm:p-9 lg:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.6)] lg:ring-white/40">
             {(heading || subheading) && (
               <div className="mb-6">
                 {heading && (
-                  <h2 className="text-[20px] font-bold tracking-[-0.025em] text-ovs-crm-text-primary">{heading}</h2>
+                  <h2 className="text-[20px] font-bold tracking-[-0.025em] text-clinic-ink">{heading}</h2>
                 )}
                 {subheading && (
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-ovs-crm-text-secondary">{subheading}</p>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-clinic-secondary">{subheading}</p>
                 )}
               </div>
             )}
@@ -399,13 +399,13 @@ export function ClinicPreAuthShell({
           </div>
 
           {/* The same two facts as the desktop field, set quietly under the card on a phone. */}
-          <ul className="mt-6 grid w-full max-w-[440px] gap-2 px-2 text-[12px] font-medium text-ovs-crm-text-secondary lg:hidden">
+          <ul className="mt-6 grid w-full max-w-[440px] gap-2 px-2 text-[12px] font-medium text-clinic-secondary lg:hidden">
             <li className="flex items-center gap-2.5">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-ovs-crm-brand-strong" aria-hidden="true" />
+              <ShieldCheck className="h-4 w-4 shrink-0 text-clinic-brand-strong" aria-hidden="true" />
               Each staff member sees what their role allows
             </li>
             <li className="flex items-center gap-2.5">
-              <GitBranch className="h-4 w-4 shrink-0 text-ovs-crm-brand-strong" aria-hidden="true" />
+              <GitBranch className="h-4 w-4 shrink-0 text-clinic-brand-strong" aria-hidden="true" />
               Records stay with your clinic and its branches
             </li>
           </ul>

@@ -2,8 +2,8 @@
 
 namespace App\Services\Marketing\Providers;
 
+use App\Contracts\WhatsAppCredentials;
 use App\Contracts\WhatsAppProviderInterface;
-use App\Models\MarketingWhatsAppAccount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -33,10 +33,10 @@ class MetaWhatsAppProvider implements WhatsAppProviderInterface
     /**
      * Send outbound message via Meta Cloud API using configured API version.
      */
-    public function sendMessage(MarketingWhatsAppAccount $account, string $recipientPhone, string $messageBody, array $options = []): array
+    public function sendMessage(WhatsAppCredentials $account, string $recipientPhone, string $messageBody, array $options = []): array
     {
-        $token = $account->access_token;
-        $phoneNumberId = $account->phone_number_id;
+        $token = $account->whatsAppAccessToken();
+        $phoneNumberId = $account->whatsAppPhoneNumberId();
 
         // Sandbox/Test mode fallback if credentials are test placeholders
         if (empty($token) || empty($phoneNumberId) || str_contains($token, 'test_token')) {
@@ -82,7 +82,7 @@ class MetaWhatsAppProvider implements WhatsAppProviderInterface
                 $retryAfter = (int) ($response->header('Retry-After') ?: 60);
 
                 Log::warning('Meta WhatsApp API Rate Limit hit', [
-                    'account_id' => $account->id,
+                    'account' => $account->whatsAppLogKey(),
                     'phone' => $recipientPhone,
                     'retry_after' => $retryAfter,
                 ]);
@@ -117,10 +117,10 @@ class MetaWhatsAppProvider implements WhatsAppProviderInterface
     /**
      * Send an approved WhatsApp template message via Meta Cloud API.
      */
-    public function sendTemplateMessage(MarketingWhatsAppAccount $account, string $recipientPhone, string $templateName, string $language, array $components = []): array
+    public function sendTemplateMessage(WhatsAppCredentials $account, string $recipientPhone, string $templateName, string $language, array $components = []): array
     {
-        $token = $account->access_token;
-        $phoneNumberId = $account->phone_number_id;
+        $token = $account->whatsAppAccessToken();
+        $phoneNumberId = $account->whatsAppPhoneNumberId();
 
         // Sandbox/Test mode fallback if credentials are test placeholders
         if (empty($token) || empty($phoneNumberId) || str_contains($token, 'test_token')) {
@@ -196,10 +196,10 @@ class MetaWhatsAppProvider implements WhatsAppProviderInterface
     /**
      * Test connection credentials against Meta Graph API.
      */
-    public function testConnection(MarketingWhatsAppAccount $account): bool
+    public function testConnection(WhatsAppCredentials $account): bool
     {
-        $token = $account->access_token;
-        $phoneNumberId = $account->phone_number_id;
+        $token = $account->whatsAppAccessToken();
+        $phoneNumberId = $account->whatsAppPhoneNumberId();
 
         if (empty($token) || empty($phoneNumberId)) {
             return false;
@@ -295,10 +295,10 @@ class MetaWhatsAppProvider implements WhatsAppProviderInterface
     /**
      * Fetch message templates from Meta Graph API or return sample templates in sandbox test mode.
      */
-    public function getTemplates(MarketingWhatsAppAccount $account): array
+    public function getTemplates(WhatsAppCredentials $account): array
     {
-        $token = $account->access_token;
-        $wabaId = $account->business_account_id;
+        $token = $account->whatsAppAccessToken();
+        $wabaId = $account->whatsAppBusinessAccountId();
 
         // Test/Sandbox fallback
         if (empty($token) || empty($wabaId) || str_contains($token, 'test_token')) {

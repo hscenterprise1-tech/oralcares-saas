@@ -7,21 +7,21 @@ type AuthNoticeTone = 'error' | 'warning' | 'success';
 const TONES: Record<AuthNoticeTone, { icon: typeof CircleAlert; box: string; icon_: string; text: string }> = {
   error: {
     icon: CircleAlert,
-    box: 'border-ovs-crm-accent-coral/30 bg-ovs-crm-accent-coral-soft',
-    icon_: 'text-ovs-crm-accent-coral',
-    text: 'text-ovs-crm-accent-coral-text',
+    box: 'border-clinic-accent-coral/30 bg-clinic-accent-coral-soft',
+    icon_: 'text-clinic-accent-coral',
+    text: 'text-clinic-accent-coral-text',
   },
   warning: {
     icon: AlertTriangle,
-    box: 'border-ovs-crm-warning-border bg-ovs-crm-warning-soft',
-    icon_: 'text-ovs-crm-warning-text',
-    text: 'text-ovs-crm-warning-text',
+    box: 'border-clinic-warning-border bg-clinic-warning-soft',
+    icon_: 'text-clinic-warning',
+    text: 'text-clinic-warning',
   },
   success: {
     icon: CircleCheck,
-    box: 'border-ovs-crm-success-border bg-ovs-crm-success-soft',
-    icon_: 'text-ovs-crm-success-text',
-    text: 'text-ovs-crm-success-text',
+    box: 'border-clinic-success-border bg-clinic-success-soft',
+    icon_: 'text-clinic-success',
+    text: 'text-clinic-success',
   },
 };
 

@@ -15,6 +15,7 @@ class LabOrder extends Model
     use Auditable, ClinicScoped, HasFactory;
 
     protected $fillable = [
+        'patient_treatment_id',
         'clinic_id',
         'patient_id',
         'encounter_id',
@@ -32,6 +33,15 @@ class LabOrder extends Model
         'requested_teeth',
         'delivery_due_date',
         'created_by',
+        'restoration',
+        'shade',
+        'material',
+        'sent_at',
+        'received_at',
+        'fitted_at',
+        'completed_at',
+        'cancelled_at',
+        'cancellation_reason',
     ];
 
     protected function casts(): array
@@ -41,6 +51,11 @@ class LabOrder extends Model
             'requested_teeth' => 'array',
             'delivery_due_date' => 'date',
             'is_internal' => 'boolean',
+            'sent_at' => 'datetime',
+            'received_at' => 'datetime',
+            'fitted_at' => 'datetime',
+            'completed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 

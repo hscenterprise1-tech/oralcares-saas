@@ -4,6 +4,7 @@ use App\Models\Clinic;
 use App\Models\User;
 use App\Shared\Notification\Models\EnterpriseNotification;
 use App\Shared\Search\Models\SearchDocument;
+use App\UserType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
@@ -30,18 +31,16 @@ test('unindexing removes model from search documents when deleted', function () 
 
 test('global search api returns indexed results for authenticated user', function () {
     /*
-     * The user factory makes a clinic tenant, and the index is now scoped: a
-     * tenant sees documents belonging to its own organisation's clinics and
-     * nothing else. This user is put in the clinic's organisation, which is what
-     * "their own records" means — the test used to pass for any user because the
-     * scope read a `users.clinic_id` column that does not exist, so nothing was
-     * ever filtered.
+     * A clinic record in the index is a head-office document (the account
+     * screen), so this is HQ's search. A clinic user searches only their
+     * active clinic's own patients and invoices — covered in
+     * `Clinic/Security/GlobalSearchIsolationTest`.
      */
     $clinic = Clinic::factory()->create([
         'name' => 'Metro Dental Clinic',
     ]);
 
-    $user = User::factory()->create(['organization_id' => $clinic->organization_id]);
+    $user = User::factory()->create(['user_type' => UserType::CompanyUser, 'organization_id' => null]);
 
     $response = $this->actingAs($user)
         ->getJson('/api/search?q=Metro');

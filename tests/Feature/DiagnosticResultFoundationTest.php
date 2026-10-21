@@ -34,10 +34,10 @@ it('can store a draft diagnostic result with JSON observations', function () {
         'clinical_order_id' => $order->id,
         'item_code' => $procedure->code,
         'item_name' => $procedure->name,
-        'status' => 'pending',
+        'status' => 'ordered',
     ]);
 
-    $service = new DiagnosticResultService;
+    $service = app(DiagnosticResultService::class);
 
     $content = [
         'hemoglobin' => ['value' => 14.5, 'unit' => 'g/dL', 'flag' => 'normal'],
@@ -73,10 +73,10 @@ it('completes the parent order item when finalizing a result', function () {
         'clinical_order_id' => $order->id,
         'item_code' => $procedure->code,
         'item_name' => $procedure->name,
-        'status' => 'in_progress',
+        'status' => 'collected',
     ]);
 
-    $service = new DiagnosticResultService;
+    $service = app(DiagnosticResultService::class);
     $result = $service->storeDraft($orderItem, ['text' => 'Normal X-Ray'], 'imaging');
 
     // Finalize
@@ -84,7 +84,7 @@ it('completes the parent order item when finalizing a result', function () {
 
     expect($finalizedResult->status)->toBe('final')
         ->and($finalizedResult->verified_by)->toBe($doctor->id)
-        ->and($orderItem->fresh()->status)->toBe('completed'); // Asserts side effect
+        ->and($orderItem->fresh()->status)->toBe('reviewed');
 });
 
 it('can attach files polymorphically to a result', function () {
@@ -107,10 +107,10 @@ it('can attach files polymorphically to a result', function () {
         'clinical_order_id' => $order->id,
         'item_code' => $procedure->code,
         'item_name' => $procedure->name,
-        'status' => 'pending',
+        'status' => 'ordered',
     ]);
 
-    $service = new DiagnosticResultService;
+    $service = app(DiagnosticResultService::class);
     $result = $service->storeDraft($orderItem, ['text' => 'Report pending'], 'imaging');
 
     $attachment = $service->attachFile(

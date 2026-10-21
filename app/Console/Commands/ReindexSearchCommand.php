@@ -10,6 +10,9 @@ use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Task;
 use App\Models\User;
+use App\Shared\Search\Jobs\BulkReindexJob;
+use App\Shared\Search\SearchProviders\BillingSearchProvider;
+use App\Shared\Search\SearchProviders\PatientSearchProvider;
 use App\Shared\Search\Services\SearchIndexerService;
 use Illuminate\Console\Command;
 
@@ -76,8 +79,17 @@ class ReindexSearchCommand extends Command
             }
         }
 
+        /*
+         * Clinic records (patients, invoices) are indexed by their providers
+         * on the `search` queue, in pages, rather than here: `--fresh` used to
+         * empty the index of every clinic's patients and never put them back.
+         */
+        foreach ([PatientSearchProvider::class, BillingSearchProvider::class] as $provider) {
+            BulkReindexJob::dispatch($provider);
+        }
+
         $this->newLine();
-        $this->info("Indexing completed! Total records indexed: {$totalIndexed}");
+        $this->info("Indexing completed! Total records indexed: {$totalIndexed}. Clinic records queued for reindexing.");
 
         return Command::SUCCESS;
     }

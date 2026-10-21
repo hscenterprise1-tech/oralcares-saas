@@ -42,6 +42,17 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 /*
+ * The Clinic Portal's old frontend was removed for a rebuild (2026-10-11): the
+ * server still renders the same page components with the same props, and the
+ * browser shows a placeholder for any that has no file yet. Clinic tests keep
+ * asserting the component name and every prop; whether a page file exists is
+ * asserted explicitly (`->component('…', true)`) for the pages that do: the
+ * protected Clinic Login and its auth pages, and the Appointment Calendar.
+ */
+pest()->beforeEach(fn () => config(['inertia.testing.ensure_pages_exist' => false]))
+    ->in('Feature/Clinic');
+
+/*
 |--------------------------------------------------------------------------
 | Expectations
 |--------------------------------------------------------------------------

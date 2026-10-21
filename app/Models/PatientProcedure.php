@@ -3,9 +3,13 @@
 namespace App\Models;
 
 use App\Traits\Auditable;
+use App\Traits\ClinicScoped;
+use App\Traits\InheritsClinicOwnership;
 use App\Traits\OrganizationScoped;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 /**
  * A procedure recorded against a patient in an encounter: planned, done or
@@ -17,15 +21,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class PatientProcedure extends Model
 {
-    use Auditable, OrganizationScoped;
+    use Auditable, ClinicScoped, InheritsClinicOwnership, OrganizationScoped;
 
     protected $fillable = [
+        'patient_treatment_id',
+        'patient_treatment_stage_id',
+        'price_version_id',
+        'charged_amount',
+        'clinic_id',
         'organization_id',
         'encounter_id',
         'patient_id',
         'procedure_master_id',
+        'clinical_procedure_id',
         'code',
         'name',
+        'quantity',
         'description',
         'details',
         'status',
@@ -37,8 +48,25 @@ class PatientProcedure extends Model
     {
         return [
             'details' => 'array',
+            'quantity' => 'integer',
             'performed_at' => 'datetime',
+            'charged_amount' => 'decimal:2',
         ];
+    }
+
+    /** The amount charged is fixed when the procedure is done; it is never re-priced. */
+    protected function performUpdate(Builder $query)
+    {
+        if ($this->isDirty(['charged_amount', 'price_version_id']) && ($this->getRawOriginal('charged_amount') !== null || $this->getRawOriginal('price_version_id') !== null)) {
+            throw new LogicException('A performed procedure keeps the amount it was charged at.');
+        }
+
+        return parent::performUpdate($query);
+    }
+
+    public function patientTreatment(): BelongsTo
+    {
+        return $this->belongsTo(PatientTreatment::class);
     }
 
     public function organization(): BelongsTo
@@ -59,6 +87,12 @@ class PatientProcedure extends Model
     public function master(): BelongsTo
     {
         return $this->belongsTo(ProcedureMaster::class, 'procedure_master_id');
+    }
+
+    /** The clinic's own catalogue service this procedure is (and is billed as). */
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(ClinicalProcedure::class, 'clinical_procedure_id');
     }
 
     public function performer(): BelongsTo

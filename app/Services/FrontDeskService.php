@@ -3,15 +3,22 @@
 namespace App\Services;
 
 use App\AppointmentStatus;
+use App\ClinicDocument;
 use App\Models\Appointment;
+use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\Patient;
 use App\Models\QueueEntry;
 use App\Models\User;
+use App\Services\Numbering\ClinicDocumentNumbers;
 use Exception;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
+/**
+ * @deprecated The first front-desk service, superseded by `Reception\ReceptionCheckIn`,
+ * `Reception\FrontDesk` and `QueueStateMachine`. Only its own test calls it.
+ * Kept until that test is retired with approval; build nothing on it.
+ */
 class FrontDeskService
 {
     /**
@@ -81,7 +88,7 @@ class FrontDeskService
                 'branch_id' => $branchId,
                 'patient_id' => $queue->patient_id,
                 'doctor_id' => $queue->provider_id, // Default to assigned provider, if any
-                'encounter_number' => 'ENC-'.date('Ymd').'-'.strtoupper(Str::random(4)),
+                'encounter_number' => app(ClinicDocumentNumbers::class)->next(ClinicDocument::Encounter, Clinic::query()->findOrFail($clinicId)),
                 'status' => 'in_progress',
                 'started_at' => now(),
             ]);

@@ -49,7 +49,12 @@ return [
              * imported the same file again.
              */
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 900),
-            'after_commit' => false,
+            /*
+             * A job dispatched inside a transaction is pushed only once that
+             * transaction commits, so it can never run against rows that are
+             * not there yet — or that a rollback removed.
+             */
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [
@@ -76,9 +81,15 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
-            'block_for' => null,
-            'after_commit' => false,
+            /*
+             * Redis is the production queue. 90s (the framework default) is
+             * shorter than the import jobs' 600s timeout, so a long job would
+             * be handed to a second worker while still running. Kept equal to
+             * the database connection; worker `--timeout` must stay below it.
+             */
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 900),
+            'block_for' => (int) env('REDIS_QUEUE_BLOCK_FOR', 5),
+            'after_commit' => true,
         ],
 
         'deferred' => [
@@ -98,6 +109,38 @@ return [
         ],
 
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Named Queues (ADR-001 §J)
+    |--------------------------------------------------------------------------
+    |
+    | Jobs pick their queue from this map, never from a literal, so a queue can
+    | be re-pointed per environment. Workers list them in priority order:
+    |
+    |   php artisan queue:work --queue=critical,default,notifications,provisioning,search,imports,reports,maintenance
+    |
+    | Production runs dedicated worker pools for `imports`/`reports` (long jobs)
+    | so they never hold up `critical` mail or interactive work.
+    |
+    */
+
+    'queues' => [
+        'critical' => env('QUEUE_CRITICAL', 'critical'),
+        'default' => env('QUEUE_DEFAULT', 'default'),
+        'notifications' => env('QUEUE_NOTIFICATIONS', 'notifications'),
+        'provisioning' => env('QUEUE_PROVISIONING', 'provisioning'),
+        'search' => env('QUEUE_SEARCH', 'search'),
+        'imports' => env('QUEUE_IMPORTS', 'imports'),
+        'reports' => env('QUEUE_REPORTS', 'reports'),
+        'maintenance' => env('QUEUE_MAINTENANCE', 'maintenance'),
+    ],
+
+    /*
+     * The longest `$timeout` any job declares. `retry_after` on every
+     * connection must exceed it (checked by `security:production-check`).
+     */
+    'max_job_timeout' => 600,
 
     /*
     |--------------------------------------------------------------------------

@@ -18,6 +18,7 @@ use App\Services\Security\Malware\FakeMalwareScanner;
 use App\Services\Security\Malware\ScanResult;
 use App\Services\Security\SecurityAudit;
 use App\UserType;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * @return array{user: User, clinic: Clinic, branch: Branch, membership: ClinicMembership}
@@ -165,9 +166,10 @@ function safeProductionSetup(): void
         'session.secure' => true,
         'session.http_only' => true,
         'session.same_site' => 'lax',
-        'session.driver' => 'database',
+        'session.driver' => 'redis',
+        'cache.default' => 'redis',
         'mail.default' => 'smtp',
-        'queue.default' => 'database',
+        'queue.default' => 'redis',
         'auth.master_admin.password' => 'a-long-unique-seed-password',
         'filesystems.disks.private.driver' => 's3',
         'filesystems.disks.private.bucket' => 'oralcares-documents',
@@ -176,6 +178,8 @@ function safeProductionSetup(): void
         'security.backup.verify_connection' => 'restore_scratch',
         'logging.channels.security' => ['driver' => 'syslog'],
     ]);
+    // Stands in for an installed, configured S3 adapter on the private disk.
+    Storage::fake('private');
     app()->instance(MalwareScannerInterface::class, new class implements MalwareScannerInterface
     {
         public function scan(string $absolutePath): ScanResult
@@ -220,6 +224,11 @@ it('fails the production check when production infrastructure is missing', funct
     'plain http' => [fn () => config(['app.url' => 'http://clinic.example.test'])],
     'legacy clinic without subscription' => [fn () => Clinic::factory()->create()],
     'demo seeding switched on' => [fn () => config(['security.demo_seeding' => true])],
+    'queue on the database' => [fn () => config(['queue.default' => 'database'])],
+    'queue redelivers running jobs' => [fn () => config(['queue.connections.redis.retry_after' => 90])],
+    'cache and locks off redis' => [fn () => config(['cache.default' => 'database'])],
+    'sessions on the database' => [fn () => config(['session.driver' => 'database'])],
+    's3 adapter not installed' => [fn () => Storage::forgetDisk('private')],
 ]);
 
 it('treats production-only checks as warnings for a staging target', function () {

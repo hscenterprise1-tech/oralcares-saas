@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\ClinicDocument;
+use App\Services\Numbering\ClinicDocumentNumbers;
 use App\Traits\Auditable;
 use App\Traits\ClinicScoped;
 use App\XrayCategory;
@@ -50,8 +52,8 @@ class XrayRecord extends Model
     protected static function booted(): void
     {
         static::creating(function (XrayRecord $record) {
-            if (empty($record->xray_number)) {
-                $record->xray_number = 'XR-'.strtoupper(uniqid());
+            if (empty($record->xray_number) && $record->clinic_id) {
+                $record->xray_number = app(ClinicDocumentNumbers::class)->next(ClinicDocument::Imaging, Clinic::query()->findOrFail($record->clinic_id));
             }
         });
     }

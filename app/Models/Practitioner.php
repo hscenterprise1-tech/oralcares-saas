@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Specialty\PracticeAreas;
+use App\Support\Specialty\SpecialtyRegistry;
 use App\Traits\Auditable;
 use App\Traits\ClinicScoped;
 use Illuminate\Database\Eloquent\Builder;
@@ -196,6 +198,93 @@ class Practitioner extends Model
     public function specialties(): BelongsToMany
     {
         return $this->belongsToMany(ClinicalSpecialty::class, 'doctor_specialties', 'doctor_profile_id');
+    }
+
+    /**
+     * The practice areas (registry keys, `PracticeAreas`) this practitioner
+     * practises, primary first. Inactive profiles practise nothing.
+     *
+     * The specialty assignments are the source: the primary and additional
+     * catalogue specialties that carry a `practice_area_key`. A profile
+     * recorded before areas existed is read, without writing, from the names
+     * it does have: its specialty names, then its qualifications'
+     * specializations ("MDS (Orthodontics)"), then its broad title
+     * ("Dentist" → General Dentistry).
+     *
+     * @return list<string>
+     */
+    public function practiceAreaKeys(): array
+    {
+        if (! $this->is_active) {
+            return [];
+        }
+
+        $areas = app(PracticeAreas::class);
+        $primary = $this->primary_specialty_id ? $this->primarySpecialty : null;
+        $additional = $this->relationLoaded('specialties') ? $this->specialties : $this->specialties()->withoutGlobalScopes()->get();
+        $assigned = collect([$primary])->merge($additional)->filter();
+
+        $keyed = $assigned->pluck('practice_area_key')->filter(fn ($key) => $areas->get($key) !== null)->unique()->values()->all();
+        if ($keyed !== []) {
+            return $keyed;
+        }
+
+        $inferred = fn ($names, callable $match) => collect($names)->filter()->map($match)->filter()->unique()->values()->all();
+
+        $qualifications = $this->relationLoaded('qualificationRecords') ? $this->qualificationRecords : $this->qualificationRecords()->withoutGlobalScopes()->get();
+
+        return $inferred([$primary?->name, $this->specialty, ...$assigned->pluck('name')], fn ($name) => $areas->match($name))
+            ?: $inferred($qualifications->pluck('specialization'), fn ($name) => $areas->match($name))
+            ?: $inferred([$this->specialty, $this->profession], fn ($name) => $areas->forTitle($name));
+    }
+
+    /** The practitioner's main practice area, or null when none is known. */
+    public function primaryPracticeArea(): ?string
+    {
+        return $this->practiceAreaKeys()[0] ?? null;
+    }
+
+    /**
+     * The specialty-registry keys this practitioner practises: for each
+     * practice area, the area's own specialty and its module's root (an
+     * orthodontist practises `orthodontics` and `dental`). Inactive
+     * profiles practise nothing.
+     *
+     * @return list<string>
+     */
+    public function specialtyKeys(): array
+    {
+        $areas = app(PracticeAreas::class);
+        $keys = collect($this->practiceAreaKeys())->flatMap(fn (string $area) => $areas->specialtiesFor($area));
+
+        return app(SpecialtyRegistry::class)->normalize($keys);
+    }
+
+    /**
+     * What this practitioner may do clinically: the capabilities of their
+     * practice areas (and those areas' modules). From the specialty
+     * assignment only — a qualification such as MDS grants nothing by itself.
+     *
+     * @return list<string>
+     */
+    public function capabilityKeys(): array
+    {
+        return array_keys(app(PracticeAreas::class)->capabilities($this->practiceAreaKeys()));
+    }
+
+    /**
+     * "BDS · MDS": the practitioner's qualifications, highest last, each
+     * once; the legacy free-text field when none are recorded.
+     */
+    public function credentials(): ?string
+    {
+        $rank = ['certification' => 0, 'other' => 1, 'diploma' => 2, 'bachelor' => 3, 'master' => 4, 'fellowship' => 5, 'doctorate' => 6];
+        $records = $this->relationLoaded('qualificationRecords') ? $this->qualificationRecords : $this->qualificationRecords()->withoutGlobalScopes()->get();
+
+        $names = $records->sortBy(fn (PractitionerQualification $q) => [$rank[$q->degree_type] ?? 1, $q->position])
+            ->pluck('qualification')->map(fn ($name) => trim((string) $name))->filter()->unique()->values();
+
+        return $names->isNotEmpty() ? $names->implode(' · ') : ($this->qualifications ?: null);
     }
 
     /**

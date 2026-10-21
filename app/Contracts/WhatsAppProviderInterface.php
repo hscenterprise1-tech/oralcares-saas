@@ -2,8 +2,6 @@
 
 namespace App\Contracts;
 
-use App\Models\MarketingWhatsAppAccount;
-
 interface WhatsAppProviderInterface
 {
     /**
@@ -14,7 +12,7 @@ interface WhatsAppProviderInterface
     /**
      * Send single outbound message to recipient phone number.
      */
-    public function sendMessage(MarketingWhatsAppAccount $account, string $recipientPhone, string $messageBody, array $options = []): array;
+    public function sendMessage(WhatsAppCredentials $account, string $recipientPhone, string $messageBody, array $options = []): array;
 
     /**
      * Send an approved WhatsApp template message (required for business-initiated
@@ -22,12 +20,12 @@ interface WhatsAppProviderInterface
      *
      * @param  array<int, array<string, mixed>>  $components  Meta template component payload, e.g. body variables.
      */
-    public function sendTemplateMessage(MarketingWhatsAppAccount $account, string $recipientPhone, string $templateName, string $language, array $components = []): array;
+    public function sendTemplateMessage(WhatsAppCredentials $account, string $recipientPhone, string $templateName, string $language, array $components = []): array;
 
     /**
      * Check/test connection with provider API using stored credentials.
      */
-    public function testConnection(MarketingWhatsAppAccount $account): bool;
+    public function testConnection(WhatsAppCredentials $account): bool;
 
     /**
      * Parse raw webhook payload into standardized internal events structure.
@@ -37,5 +35,5 @@ interface WhatsAppProviderInterface
     /**
      * Fetch message templates from provider.
      */
-    public function getTemplates(MarketingWhatsAppAccount $account): array;
+    public function getTemplates(WhatsAppCredentials $account): array;
 }

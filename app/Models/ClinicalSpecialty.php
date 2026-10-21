@@ -13,6 +13,7 @@ class ClinicalSpecialty extends Model
 
     protected $fillable = [
         'name',
+        'practice_area_key',
         'description',
         'is_active',
     ];

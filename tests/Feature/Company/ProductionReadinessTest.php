@@ -1,7 +1,11 @@
 <?php
 
+use App\ClinicMembershipStatus;
 use App\Models\Clinic;
+use App\Models\ClinicMembership;
+use App\Models\Patient;
 use App\Models\User;
+use App\Services\ClinicContext;
 use App\Shared\Search\Models\SearchDocument;
 use App\Shared\Search\Services\SearchEngineService;
 use App\UserType;
@@ -58,8 +62,20 @@ it('keeps a clinic tenant out of head office records in global search', function
     $clinic = Clinic::factory()->create();
     $tenant = readinessUser(UserType::ClinicUser, $clinic->organization_id);
 
+    /*
+     * A clinic user searches the clinic they are working in, and only that
+     * clinic's own records (patients here), so the tenant is signed into
+     * their clinic as its owner.
+     */
+    $membership = ClinicMembership::factory()->create([
+        'clinic_id' => $clinic->id, 'user_id' => $tenant->id, 'is_primary_owner' => true,
+        'status' => ClinicMembershipStatus::Active,
+    ]);
+    app(ClinicContext::class)->setUser($tenant);
+    app(ClinicContext::class)->setMembership($membership);
+
     searchDocument(['title' => 'Head office lead', 'searchable_text' => 'head office lead']);
-    searchDocument(['title' => 'Their own record', 'searchable_text' => 'their own record', 'clinic_id' => $clinic->id]);
+    searchDocument(['title' => 'Their own record', 'searchable_text' => 'their own record', 'clinic_id' => $clinic->id, 'module' => 'patient', 'model_type' => Patient::class]);
 
     /* Creating a clinic indexes it, so read back only what this test wrote. */
     $titles = collect(app(SearchEngineService::class)->search($tenant, 'record')->items())

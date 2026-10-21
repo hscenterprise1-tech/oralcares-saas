@@ -74,7 +74,8 @@ beforeEach(function () {
 
 it('ends a login\'s access to the clinic when their staff record is made inactive', function () {
     [$user, $session] = ($this->member)([ClinicRole::Receptionist->value], [$this->main], [$this->main], 'active');
-    $this->actingAs($user)->withSession($session)->get(route('clinic.dashboard'))->assertOk();
+    // Active: the receptionist's home (the Front Desk) opens.
+    $this->actingAs($user)->withSession($session)->followingRedirects()->get(route('clinic.dashboard'))->assertOk();
 
     ClinicEmployee::withoutGlobalScopes()->where('user_id', $user->id)->update(['status' => 'resigned']);
 

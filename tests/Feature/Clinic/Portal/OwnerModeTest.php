@@ -106,7 +106,8 @@ it('refuses a wrong password, stays off, and records the failure', function () {
 it('never offers or grants Owner Mode to a staff member who is not the owner', function (ClinicRole $role) {
     $member = ownerModeMember($this->clinic, $this->branch, owner: false, role: $role);
 
-    actAsOwnerModeMember($member, $this->branch)->get('/clinic/dashboard')
+    // Whichever workspace is their home (Command Center, Front Desk or Today), Owner Mode is not offered.
+    actAsOwnerModeMember($member, $this->branch)->followingRedirects()->get('/clinic/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page->where('clinic.owner_mode.available', false));
 
     actAsOwnerModeMember($member, $this->branch)->post('/clinic/owner-mode', ['password' => 'correct-horse'])

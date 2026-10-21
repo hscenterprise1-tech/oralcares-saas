@@ -10,6 +10,7 @@ enum PaymentMethod: string
     case Upi = 'upi';
     case Gateway = 'gateway';
     case Cheque = 'cheque';
+    case Insurance = 'insurance';
 
     public function label(): string
     {
@@ -20,6 +21,7 @@ enum PaymentMethod: string
             self::Upi => 'UPI',
             self::Gateway => 'Payment Gateway',
             self::Cheque => 'Cheque',
+            self::Insurance => 'Insurance',
         };
     }
 }

@@ -13,6 +13,7 @@ use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
 use App\Models\User;
 use App\Services\AppointmentConflictService;
+use App\Services\Communication\PatientMessaging;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -43,6 +44,7 @@ class AppointmentBookingService
         protected AppointmentSettingsService $settings,
         protected AppointmentResourceResolver $resources,
         protected AppointmentAvailabilityService $availability,
+        protected PatientMessaging $messages,
     ) {}
 
     /**
@@ -106,6 +108,9 @@ class AppointmentBookingService
                 'occurrences' => $appointments->count(),
             ]);
 
+            // Told only once the booking is committed.
+            DB::afterCommit(fn () => $this->messages->appointmentsBooked($appointments));
+
             return $first;
         });
     }
@@ -153,6 +158,8 @@ class AppointmentBookingService
                 'occurrences' => $moves->count(),
             ]);
 
+            DB::afterCommit(fn () => $moves->each(fn (array $move) => $this->messages->appointmentRescheduled($move[0]->fresh())));
+
             return $moves->count();
         });
     }
@@ -187,6 +194,8 @@ class AppointmentBookingService
                 'late_cancellation' => $late,
                 'occurrences' => $targets->count(),
             ]);
+
+            DB::afterCommit(fn () => $targets->each(fn (Appointment $target) => $this->messages->appointmentCancelled($target)));
 
             return $targets->count();
         });

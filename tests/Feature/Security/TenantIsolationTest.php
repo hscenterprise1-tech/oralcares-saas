@@ -3,6 +3,7 @@
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\ClinicProvisioningRun;
 use App\Models\CompanyQuotation;
 use App\Models\CompanySubscription;
 use App\Models\CompanySupportTicket;
@@ -433,6 +434,9 @@ const UNSCOPED_BY_DESIGN = [
     SubscriptionEvent::class,
     CustomerSuccessSnapshot::class,
     OnboardingProgress::class,
+    // Created before its tenant exists and read by the provisioning job and
+    // company tooling across tenants; never exposed to clinic routes.
+    ClinicProvisioningRun::class,
     TrialUsageSnapshot::class,
     NumberingSequence::class,
     Contact::class,

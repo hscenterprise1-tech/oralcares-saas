@@ -52,6 +52,12 @@ return [
          * is recorded as such and the Integrations page says so out loud.
          */
         'app_secret' => env('META_WHATSAPP_APP_SECRET'),
+
+        /*
+         * The verify token Meta's challenge for `/webhooks/clinic-whatsapp`
+         * must present (a connection's own token is accepted too).
+         */
+        'clinic_verify_token' => env('META_WHATSAPP_CLINIC_VERIFY_TOKEN'),
     ],
 
     'meta_instagram' => [

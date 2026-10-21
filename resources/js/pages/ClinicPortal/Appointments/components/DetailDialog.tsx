@@ -9,7 +9,7 @@ import { patientUrl } from '../lib/navigation';
 import { humanize, initials, providerTone, statusStyle } from '../lib/status';
 import { personName, type AppointmentItem, type CalendarProps, type PatientRef, type StatusValue } from '../lib/types';
 import { Modal } from '@/clinic/ui/Modal';
-import { PatientPicker } from './PatientPicker';
+import { PatientPicker } from '@/clinic';
 
 /**
  * One appointment: its facts, and only the actions this user may take on it
@@ -21,12 +21,15 @@ export function DetailDialog({
   props,
   onReschedule,
   onCancel,
+  onCheckIn,
 }: {
   appointment: AppointmentItem | null;
   onOpenChange: (open: boolean) => void;
   props: CalendarProps;
   onReschedule: (appointment: AppointmentItem) => void;
   onCancel: (appointment: AppointmentItem) => void;
+  /** Check-in is the Front Desk's intake (reason, quick care, payment), opened for this booking. */
+  onCheckIn: (appointment: AppointmentItem) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export function DetailDialog({
     ['Cancellation', appointment.cancellation_reason],
   ];
   const phone = appointment.patient?.phone ?? appointment.new_case?.phone;
-  const canCheckIn = can.check_in && isToday && appointment.patient !== null && ['scheduled', 'confirmed', 'arrived'].includes(appointment.status);
+  const canCheckIn = can.check_in && isToday && ['scheduled', 'confirmed', 'arrived'].includes(appointment.status) && (appointment.patient !== null || (appointment.new_case !== null && can.register_patient));
 
   return (
     <Modal
@@ -133,7 +136,7 @@ export function DetailDialog({
         <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/60 p-3">
           <p className="text-[12.5px] font-bold text-clinic-ink">When they arrive</p>
           <p className="mb-2.5 text-[12px] text-clinic-secondary">
-            Register them (the new case fee is taken there, if your clinic charges one), then link the registration here to check them in.
+            Register them, then link the registration here to check them in. Registering never charges a fee.
           </p>
           {can.register_patient && (
             <Link href={links.registerPatient} className={cn(buttonClasses('secondary', 'sm'), 'mb-2.5')}>
@@ -167,10 +170,9 @@ export function DetailDialog({
           <Button
             tone="primary"
             icon={LogIn}
-            loading={busy === 'check_in'}
-            onClick={() => request('check_in', 'post', links.checkIn, { appointment_id: appointment.id }, 'The patient could not be checked in.')}
+            onClick={() => onCheckIn(appointment)}
           >
-            Check in
+            {appointment.patient ? 'Check in' : 'Register & check in'}
           </Button>
         )}
         {can.manage && allowed('arrived') && isToday && (

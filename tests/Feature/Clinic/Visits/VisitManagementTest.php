@@ -72,7 +72,7 @@ test('visits index lists recorded clinical visits', function () {
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Visits/Index')
+        ->component('Clinic/Visits/Index', false)
         ->has('visits.data', 1)
         ->where('visits.data.0.patient_name', 'Harish Kulkarni')
     );

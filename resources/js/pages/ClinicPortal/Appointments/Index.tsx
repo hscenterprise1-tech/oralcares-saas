@@ -7,10 +7,12 @@ import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Button } from '@/clinic/ui/Button';
 import { Notice } from '@/clinic/ui/Notice';
 import { BookingDialog } from './components/BookingDialog';
+import { CaseButtons } from './components/CaseButtons';
 import { CancelDialog, MoveScopeDialog, RescheduleDialog } from './components/ChangeDialogs';
 import { ContextPanel } from './components/ContextPanel';
 import { DayList } from './components/DayList';
 import { DetailDialog } from './components/DetailDialog';
+import { ReceptionIntakeDialog, type IntakeMode, type PatientIdentity } from '@/pages/Clinic/Reception/intake/ReceptionIntakeDialog';
 import { activeFilterCount, FiltersDialog } from './components/FiltersDialog';
 import { FindNextDialog } from './components/FindNextDialog';
 import { LeaveReviewDialog } from './components/LeaveReviewDialog';
@@ -62,6 +64,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
   const [search, setSearch] = useState(filters.q);
   const [booking, setBooking] = useState<BookingDraft | null>(null);
   const [selected, setSelected] = useState<AppointmentItem | null>(null);
+  const [intake, setIntake] = useState<{ mode: IntakeMode; patient: PatientIdentity | null; appointmentId: number | null } | null>(null);
   const [rescheduling, setRescheduling] = useState<AppointmentItem | null>(null);
   const [scopedMove, setScopedMove] = useState<MoveRequest | null>(null);
   const [cancelling, setCancelling] = useState<AppointmentItem | null>(null);
@@ -76,10 +79,14 @@ export default function AppointmentsIndex(props: CalendarProps) {
   useEffect(() => setPhoneDay(today >= range.start && today <= range.end ? today : range.start), [range.start, range.end, today]);
 
   // Opened from leave review with `?appointment=ID`: show that appointment.
+  // Opened from a "New appointment" quick action with `?book=1`: start a booking.
   useEffect(() => {
-    const wanted = Number(new URLSearchParams(window.location.search).get('appointment'));
+    const query = new URLSearchParams(window.location.search);
+    const wanted = Number(query.get('appointment'));
     if (wanted) {
       setSelected(appointments.find((appointment) => appointment.id === wanted) ?? null);
+    } else if (query.get('book') === '1' && can.create) {
+      setBooking({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -139,39 +146,51 @@ export default function AppointmentsIndex(props: CalendarProps) {
 
   const statusFilter = filters.statuses.length === 1 ? filters.statuses[0] : null;
   const filterCount = activeFilterCount(filters);
-  const multiBranch = (clinic?.accessible_branch_count ?? 1) > 1;
   const onLeave = props.context?.onLeave ?? [];
   const providerFilter = filters.providers.length === 1 ? String(filters.providers[0]) : filters.providers.length > 1 ? 'some' : '';
   const dayStart = toMinutes(settings.day_start);
 
   return (
     <ClinicPortalShell title="Appointments">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-clinic-secondary">
-            Appointments{multiBranch ? ` · ${props.branch.name}` : ''}
-          </p>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-clinic-secondary">Appointments</p>
           <h1 className="text-[22px] font-bold leading-tight tracking-tight text-clinic-ink sm:text-[26px]">
             {rangeLabel(view, range.start, range.end, date)}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
-          {can.settings && (
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Appointment settings"
-              className={cn(CONTROL, 'flex h-11 w-11 items-center justify-center rounded-full text-clinic-secondary hover:text-clinic-ink')}
-            >
-              <Settings2 className="h-4 w-4" aria-hidden="true" />
-            </button>
+        {/*
+          The page's actions stay together at the right, wrapping as one group. Below sm the
+          group dissolves: the walk-in pair takes its own full-width row, as on the Reception header.
+        */}
+        <div className="max-sm:contents sm:ml-auto sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+          {can.check_in && (
+            <div className="order-last w-full sm:order-none sm:w-auto">
+              <CaseButtons
+                canRegister={can.register_patient}
+                onNewCase={() => setIntake({ mode: 'new', patient: null, appointmentId: null })}
+                onRepeatCase={() => setIntake({ mode: 'repeat', patient: null, appointmentId: null })}
+              />
+            </div>
           )}
-          {can.create && (
-            <Button tone="primary" size="lg" icon={CalendarPlus} onClick={() => openBooking({})}>
-              <span className="sm:hidden">Book</span>
-              <span className="hidden sm:inline">Book appointment</span>
-            </Button>
-          )}
+          <div className="ml-auto flex items-center gap-2 sm:ml-0">
+            {can.settings && (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Appointment settings"
+                className={cn(CONTROL, 'flex h-11 w-11 items-center justify-center rounded-full text-clinic-secondary hover:text-clinic-ink')}
+              >
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+            {can.create && (
+              <Button tone="primary" size="lg" icon={CalendarPlus} onClick={() => openBooking({})}>
+                <span className="sm:hidden">Book</span>
+                <span className="hidden sm:inline">Book appointment</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -421,7 +440,26 @@ export default function AppointmentsIndex(props: CalendarProps) {
           setSelected(null);
           setCancelling(appointment);
         }}
+        onCheckIn={(appointment) => {
+          setSelected(null);
+          setIntake(appointment.patient ? { mode: 'repeat', patient: appointment.patient, appointmentId: null } : { mode: 'new', patient: null, appointmentId: appointment.id });
+        }}
       />
+      {can.check_in && (
+        <ReceptionIntakeDialog
+          open={intake !== null}
+          mode={intake?.mode ?? 'repeat'}
+          initialPatient={intake?.patient ?? null}
+          appointmentId={intake?.appointmentId ?? null}
+          branchKey={String(props.branch.id)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setIntake(null);
+              router.reload();
+            }
+          }}
+        />
+      )}
       <RescheduleDialog appointment={rescheduling} props={props} onClose={() => setRescheduling(null)} />
       <MoveScopeDialog move={scopedMove} props={props} onClose={() => setScopedMove(null)} />
       <CancelDialog appointment={cancelling} props={props} onClose={() => setCancelling(null)} />

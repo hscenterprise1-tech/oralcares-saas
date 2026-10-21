@@ -56,7 +56,7 @@ test('doctor can order X-Ray with tooth region mapping and sequential numbering'
         'urgent'
     );
 
-    expect($order->xray_number)->toBe("XR-{$clinic->id}-00001")
+    expect($order->xray_number)->toMatch('/^IMG-[0-9]{4}-000001$/')
         ->and($order->status)->toBe(XrayStatus::Requested)
         ->and($order->category)->toBe(XrayCategory::OPG)
         ->and($order->requested_region)->toBe(XrayRegion::MultipleTeeth)

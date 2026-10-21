@@ -13,6 +13,9 @@ class ClinicalDiagnosis extends Model
 {
     use Auditable, ClinicScoped, InheritsClinicOwnership, OrganizationScoped;
 
+    /** How certain the diagnosis is. */
+    public const STATUSES = ['provisional' => 'Provisional', 'confirmed' => 'Confirmed', 'differential' => 'Differential'];
+
     protected $fillable = [
         'organization_id',
         'clinic_id',
@@ -24,6 +27,7 @@ class ClinicalDiagnosis extends Model
         'description',
         'details',
         'status',
+        'is_primary',
         'diagnosed_by',
     ];
 
@@ -31,6 +35,7 @@ class ClinicalDiagnosis extends Model
     {
         return [
             'details' => 'array',
+            'is_primary' => 'boolean',
         ];
     }
 

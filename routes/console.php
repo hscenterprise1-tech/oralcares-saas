@@ -1,9 +1,11 @@
 <?php
 
 use App\Jobs\CheckUnassignedLeadSlaJob;
+use App\Jobs\DispatchDuePatientMessages;
 use App\Jobs\EscalateOverdueFollowupsJob;
 use App\Jobs\EscalateStalledDealsJob;
 use App\Jobs\ExpireOverdueQuotationsJob;
+use App\Jobs\ExpireOwnerInvitationsJob;
 use App\Jobs\ProcessDueMarketingAutomationDelaysJob;
 use App\Jobs\ProcessDueWinBacksJob;
 use App\Jobs\ProcessTrialLifecycleRemindersJob;
@@ -25,6 +27,7 @@ Schedule::job(new CheckUnassignedLeadSlaJob)->hourly()->withoutOverlapping();
 Schedule::job(new EscalateOverdueFollowupsJob)->hourly()->withoutOverlapping();
 Schedule::command('instagram:maintain-buffers')->hourly();
 Schedule::job(new SendDemoDayRemindersJob)->dailyAt('08:00')->withoutOverlapping();
+Schedule::command('clinic:expire-deletion-requests')->dailyAt('02:30')->onOneServer()->withoutOverlapping();
 
 /*
  * The rep's whole day, in one message, before they start it.
@@ -47,6 +50,7 @@ Schedule::job(new SendDailyRepAgendaJob)
  * sends nothing twice.
  */
 Schedule::job(new SendCustomerDemoRemindersJob)->hourly()->withoutOverlapping();
+Schedule::job(new ExpireOwnerInvitationsJob)->hourly()->withoutOverlapping();
 Schedule::job(new ProcessTrialLifecycleRemindersJob)->dailyAt('08:15')->withoutOverlapping();
 /*
  * Overnight, before the lifecycle pass reads the day's picture. Each run is a
@@ -116,3 +120,50 @@ Schedule::command('finance:capture-mrr')->monthlyOn(1, '00:15')->withoutOverlapp
  * never-checked-in bookings marked no-show. See CloseQueueDay.
  */
 Schedule::command('queue:close-day')->everyFifteenMinutes()->withoutOverlapping();
+
+/*
+ * Patient messages (confirmations, reminders, follow-ups, prescriptions,
+ * reports) that have come due. Each is claimed before sending, so overlapping
+ * runs never send twice.
+ */
+Schedule::job(new DispatchDuePatientMessages)->everyMinute()->withoutOverlapping();
+
+/*
+ * Calendar-driven patient messages (balance due/overdue, follow-up day,
+ * package expiry) for clinics whose WhatsApp sends them. Event keys make
+ * each message once-only, so an hourly run is safe.
+ */
+Schedule::command('clinic:queue-scheduled-messages')->hourly()->withoutOverlapping();
+
+/*
+ * Queue health (config/observability.php). `queue:monitor` raises QueueBusy
+ * when a named queue backs up past its threshold, which the performance log
+ * and metrics record. Failed jobs stay inspectable and retryable
+ * (`queue:retry`) for the retention window, then are pruned so the table
+ * cannot grow without bound at scale.
+ */
+foreach (config('observability.queue_backlog') as $queue => $max) {
+    Schedule::command('queue:monitor', [config('queue.default').':'.config("queue.queues.{$queue}"), '--max' => $max])
+        ->everyMinute()
+        ->name("queue-monitor:{$queue}");
+}
+Schedule::command('queue:prune-failed', ['--hours' => config('observability.failed_job_retention_hours')])->daily()->at('03:15');
+Schedule::command('queue:prune-batches', ['--hours' => 48])->daily()->at('03:20');
+
+/*
+ * Recurring clinic expenses (rent, contracts) that have fallen due, recorded
+ * once per period for approval.
+ */
+Schedule::command('clinic:raise-recurring-expenses')->dailyAt('06:00')->withoutOverlapping();
+
+/*
+ * Every scheduled task runs on one server.
+ *
+ * Production runs the scheduler on more than one app server; without this each
+ * of them would send every reminder, expire every invitation and take every
+ * backup once per server. The lock lives in the shared cache store (Redis in
+ * production). Applied to every event above, so a new entry cannot forget it.
+ */
+foreach (Schedule::events() as $event) {
+    $event->onOneServer();
+}

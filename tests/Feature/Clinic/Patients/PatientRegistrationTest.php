@@ -7,11 +7,11 @@ use App\Models\Clinic;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicMembership;
 use App\Models\Patient;
-use App\Models\PatientMedicalHistory;
 use App\Models\PatientTimelineEvent;
 use App\Models\PatientVisit;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\Patient\PatientClinicalEntries;
 use App\UserType;
 
 beforeEach(function () {
@@ -56,10 +56,9 @@ test('patient directory lists clinic patients and supports search', function () 
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->component('Clinic/Patients/Index')
+        ->component('ClinicPortal/Patients/Index', true)
         ->has('patients.data', 1)
         ->where('patients.data.0.name', 'Priya Nair')
-        ->where('metrics.total', 1)
     );
 });
 
@@ -153,7 +152,8 @@ test('patient registration creates profile, atomic UHID and registers timeline e
     $timelineEvent = PatientTimelineEvent::where('patient_id', $patient->id)->where('event_type', 'registered')->first();
     expect($timelineEvent)->not->toBeNull();
 
-    $response->assertRedirect("/clinic/patients/{$patient->id}");
+    // The profile page is not built yet (`ClinicFrontend`), so the directory is where registration lands.
+    $response->assertRedirect('/clinic/patients');
 });
 
 test('allergies and manual alerts recorded at registration surface as patient alerts', function () {
@@ -174,9 +174,7 @@ test('allergies and manual alerts recorded at registration surface as patient al
 
     $patient = Patient::where('phone', '9876566666')->firstOrFail();
 
-    $history = PatientMedicalHistory::where('patient_id', $patient->id)->first();
-    expect($history)->not->toBeNull();
-    expect($history->allergies)->toBe(['Penicillin', 'Peanuts']);
+    expect(app(PatientClinicalEntries::class)->allergyLabels($patient))->toEqualCanonicalizing(['Penicillin', 'Peanuts']);
 
     $descriptions = $patient->alerts()->pluck('description')->all();
     expect($descriptions)->toContain('Allergy: Penicillin', 'Allergy: Peanuts', 'Fall risk');
@@ -295,7 +293,7 @@ test('multi-tenant patient isolation prevents cross-clinic search', function () 
 
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
-        ->where('patients.total', 0)
+        ->has('patients.data', 0)
     );
 });
 

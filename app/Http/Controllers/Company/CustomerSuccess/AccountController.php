@@ -6,6 +6,7 @@ use App\ActivityType;
 use App\CustomerChurnRisk;
 use App\Http\Controllers\Controller;
 use App\Mail\PasswordSetupMailable;
+use App\Models\ClinicOwnerInvitation;
 use App\Models\CommercialDocument;
 use App\Models\CommercialInvoice;
 use App\Models\CompanyPlan;
@@ -24,6 +25,7 @@ use App\Services\CommercialSubscriptionService;
 use App\Services\CustomerSuccess\AccountSnapshotService;
 use App\Services\LeadWorkspaceService;
 use App\Services\Lifecycle\AccountLifecycleService;
+use App\Services\Onboarding\OwnerInvitationService;
 use App\SubscriptionStatus;
 use App\Support\CrmScope;
 use App\UserType;
@@ -1368,7 +1370,27 @@ class AccountController extends Controller
             return back()->withErrors(['admin' => 'No primary clinic admin user record found for this account.']);
         }
 
-        Mail::to($adminUser->email)->send(new PasswordSetupMailable($adminUser));
+        /*
+         * Clinics provisioned through the onboarding system hand over with an
+         * owner invitation; resending rotates its link. Older clinics keep the
+         * password-setup email.
+         */
+        $ownerInvitation = ClinicOwnerInvitation::withoutGlobalScopes()
+            ->whereIn('clinic_id', $organization->clinics()->withoutGlobalScopes()->pluck('id'))
+            ->where('user_id', $adminUser->id)
+            ->first();
+
+        if ($ownerInvitation && ! $ownerInvitation->status->isAccepted()) {
+            try {
+                app(OwnerInvitationService::class)->send($ownerInvitation, $request->user());
+            } catch (\DomainException $e) {
+                return back()->withErrors(['admin' => $e->getMessage()]);
+            }
+        } elseif ($ownerInvitation) {
+            return back()->withErrors(['admin' => 'The owner has already accepted the invitation and can sign in.']);
+        } else {
+            Mail::to($adminUser->email)->send(new PasswordSetupMailable($adminUser));
+        }
 
         $organization->activities()->create([
             'user_id' => $request->user()?->id,

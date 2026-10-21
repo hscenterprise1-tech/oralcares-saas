@@ -74,16 +74,22 @@ class CustomerProvisioningEngine
      *
      * @throws Exception
      */
-    public function provision(Lead $lead, string $defaultBranchName = 'Main Branch', ?ProvisioningIntent $intent = null): Organization
+    public function provision(Lead $lead, ?string $branchName = null, ?ProvisioningIntent $intent = null, bool $branchNameIsFallback = false): Organization
     {
         $intent ??= ProvisioningIntent::sale();
+
+        // The branch's name: the one supplied, or the fallback. A fallback is
+        // marked as such (`branches.name_is_default`), as is a name the
+        // caller chose only because it had none (a trial named after its company).
+        $branchNameIsDefault = $branchNameIsFallback || ! filled($branchName);
+        $defaultBranchName = filled($branchName) ? $branchName : Branch::DEFAULT_NAME;
 
         // Idempotency: return the customer already provisioned from this lead,
         // and handle any renewal or expansion updates for post-sale won deals.
         if ($lead->customer_organization_id) {
             $existingOrg = Organization::find($lead->customer_organization_id);
             if ($existingOrg) {
-                $this->ensureTenantHierarchy($lead, $existingOrg, $defaultBranchName);
+                $this->ensureTenantHierarchy($lead, $existingOrg, $defaultBranchName, $branchNameIsDefault);
 
                 // Only a sale closes a deal. Re-running trial provisioning must
                 // never renew a subscription or move the lead.
@@ -108,7 +114,7 @@ class CustomerProvisioningEngine
             }
         }
 
-        return DB::transaction(function () use ($lead, $defaultBranchName, $intent) {
+        return DB::transaction(function () use ($lead, $defaultBranchName, $branchNameIsDefault, $intent) {
             // 1. Organization
             $org = Organization::create([
                 'name' => $lead->company_name ?: ($lead->contact_name.' Clinic'),
@@ -235,6 +241,8 @@ class CustomerProvisioningEngine
              */
             $planLimits = array_filter([
                 'max_doctors' => $purchasedPlan?->max_doctors,
+                // The staff sub-cap: null on the plan means none, so it stays null here; 0 is kept.
+                'max_staff' => $purchasedPlan?->max_staff,
                 'storage_limit_gb' => $purchasedPlan?->storage_limit_gb,
                 'mrr' => app(MrrService::class)->snapshotValueFor($purchasedPlan),
             ], fn ($value) => $value !== null);
@@ -280,7 +288,7 @@ class CustomerProvisioningEngine
             }
 
             // 4. Default Primary Branch, owned by the clinic
-            $branch = $this->branchProvisioning->provision($org, $defaultBranchName, true, $clinic);
+            $branch = $this->branchProvisioning->provision($org, $defaultBranchName, true, $clinic, $branchNameIsDefault);
 
             // 4a. The operational floor.
             //
@@ -477,9 +485,9 @@ class CustomerProvisioningEngine
      * clinic link, the subscription's clinic link, and the owner's membership —
      * without creating a second of anything.
      */
-    protected function ensureTenantHierarchy(Lead $lead, Organization $org, string $defaultBranchName): void
+    protected function ensureTenantHierarchy(Lead $lead, Organization $org, string $defaultBranchName, bool $branchNameIsDefault = false): void
     {
-        DB::transaction(function () use ($lead, $org, $defaultBranchName) {
+        DB::transaction(function () use ($lead, $org, $defaultBranchName, $branchNameIsDefault) {
             $clinic = $this->resolveClinic($org);
 
             $branch = Branch::withoutOrganizationScope()
@@ -489,7 +497,7 @@ class CustomerProvisioningEngine
                 ->first();
 
             if (! $branch) {
-                $branch = $this->branchProvisioning->provision($org, $defaultBranchName, true, $clinic);
+                $branch = $this->branchProvisioning->provision($org, $defaultBranchName, true, $clinic, $branchNameIsDefault);
             } elseif (! $branch->clinic_id) {
                 $branch->update(['clinic_id' => $clinic->id]);
             }

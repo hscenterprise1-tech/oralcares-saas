@@ -2,15 +2,19 @@
 
 namespace App\Services\Provisioning;
 
+use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\ClinicMembership;
 use App\Models\CompanyPlan;
 use App\Models\CompanyQuotation;
 use App\Models\Lead;
 use App\Models\ProvisioningAudit;
 use App\Models\Trial;
 use App\Models\User;
+use App\Services\ClinicContext;
 use App\Services\CustomerProvisioningEngine;
 use App\Services\LeadWorkspaceService;
+use App\Services\Onboarding\OnboardingEngine;
 use App\TrialStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -46,6 +50,9 @@ class TrialProvisioningService
         protected AdminHandoverService $handover,
         protected EntitlementResolver $entitlements,
         protected LeadWorkspaceService $workspace,
+        protected OnboardingEngine $onboarding,
+        protected ClinicContext $context,
+        protected DealSpecialties $specialties,
     ) {}
 
     /**
@@ -86,10 +93,12 @@ class TrialProvisioningService
 
             [$startDate, $endDate, $graceEndsAt] = $this->window($trial, $plan);
 
+            // A trial has no branch name of its own: it is named after the company, and marked as a fallback.
             $organization = $this->engine->provision(
                 $lead,
-                $lead->company_name ?: 'Main Branch',
+                $lead->company_name ?: null,
                 ProvisioningIntent::trial($plan, $endDate, $graceEndsAt),
+                branchNameIsFallback: true,
             );
 
             $clinic = $organization->clinics()->oldest('id')->first();
@@ -97,6 +106,8 @@ class TrialProvisioningService
             if (! $clinic) {
                 throw new RuntimeException('Provisioning finished without a clinic tenant.');
             }
+
+            $this->startOnboarding($clinic, $lead);
 
             $trial->forceFill([
                 'company_plan_id' => $plan->id,
@@ -244,6 +255,32 @@ class TrialProvisioningService
      *
      * @return array{delivered: bool, channel: string, reason: ?string}
      */
+    /**
+     * Give the trial clinic the same guided setup a sold clinic gets.
+     *
+     * The engine leaves the account a pending setup checklist, and the portal
+     * keeps a clinic on setup until it is finished; without a session that
+     * meant the legacy checklist, which a new owner could not complete. These
+     * are the calls Deal-Won provisioning makes (`stageSpecialty`, then
+     * `stageOnboardingSession`): the deal's specialty first, so the template
+     * is the one it sold, then the session, idempotent per clinic, so a retry
+     * or a later conversion reuses it. The plan and window are untouched.
+     */
+    protected function startOnboarding(Clinic $clinic, Lead $lead): void
+    {
+        $branch = Branch::withoutGlobalScopes()->where('clinic_id', $clinic->id)->orderByDesc('is_main')->orderBy('id')->first();
+        $ownerId = ClinicMembership::withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('is_primary_owner', true)->value('user_id');
+
+        // The specialty the deal sold, as Deal-Won sets it, so the setup
+        // template matches it. A clinic that already has its specialties (a
+        // retry after a partial run) keeps them.
+        if (array_filter((array) ($clinic->specialties ?? [])) === []) {
+            $this->specialties->apply($lead, $clinic, $branch);
+        }
+
+        $this->context->runForClinic($clinic, $branch, fn () => $this->onboarding->startForClinic($clinic, $ownerId ? User::find($ownerId) : null));
+    }
+
     protected function handOver(Trial $trial, Lead $lead, Clinic $clinic): array
     {
         $admin = $lead->email ? User::where('email', $lead->email)->first() : null;

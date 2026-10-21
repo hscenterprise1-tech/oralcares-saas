@@ -166,20 +166,23 @@ it('leaves the rest of the company profile working', function () {
     expect($user->fresh()->name)->toBe('Renamed Person');
 });
 
-/* ═══════════════ the clinic portal keeps the behaviour it had ══════════════ */
+/* ═══════════════ clinic accounts are closed by the clinic too ══════════════ */
 
-it('still lets a clinic user close their own account', function () {
+it('refuses to let a clinic user delete their own account', function () {
     /*
-     * `/profile` is shared. Only who may delete changed; the route, the form and
-     * the clinic flow are as they were.
+     * Inverted on purpose (2026-10-02). This used to assert that a clinic user
+     * *could* delete their own login. A clinic account authors clinical
+     * records: deleting the user row cascaded away its sign-in history and
+     * the patients' doctor-assignment history, and a clinic's primary owner
+     * could orphan the clinic. Staff are deactivated by their clinic instead.
      */
     $user = profileUser(UserType::ClinicUser);
 
-    $this->actingAs($user)->get('/profile')->assertOk()->assertSee('Delete Account');
+    $this->actingAs($user)->get('/profile')->assertOk()->assertDontSee('Delete Account');
 
     $this->actingAs($user)
         ->delete('/profile', ['password' => 'correct-horse-battery'])
-        ->assertRedirect('/');
+        ->assertForbidden();
 
-    expect(User::whereKey($user->id)->exists())->toBeFalse();
+    expect(User::whereKey($user->id)->exists())->toBeTrue();
 });

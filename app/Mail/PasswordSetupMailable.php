@@ -6,13 +6,14 @@ use App\ClinicPasswordTokenPurpose;
 use App\Models\User;
 use App\Services\Auth\ClinicPasswordTokenService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class PasswordSetupMailable extends Mailable implements ShouldQueue
+class PasswordSetupMailable extends Mailable implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -35,6 +36,10 @@ class PasswordSetupMailable extends Mailable implements ShouldQueue
          */
         $token = app(ClinicPasswordTokenService::class)->issue($user, ClinicPasswordTokenPurpose::Setup);
         $this->setupUrl = route('clinic.password.setup', ['token' => $token]);
+
+        // The setup link is a bearer credential: encrypted in the queue
+        // payload (and in `failed_jobs`), sent ahead of routine work.
+        $this->onQueue(config('queue.queues.critical'));
     }
 
     /**

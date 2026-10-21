@@ -2,14 +2,30 @@
 
 namespace App\Observers\Security;
 
+use App\Models\ClinicalDiagnosis;
 use App\Models\ClinicalEncounter;
+use App\Models\ClinicalEncounterAddendum;
+use App\Models\ClinicalNote;
+use App\Models\ClinicalOrder;
+use App\Models\ClinicalOrderItem;
 use App\Models\ConsentRecord;
+use App\Models\DiagnosticResult;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\PatientBilling;
+use App\Models\PatientBillingItem;
 use App\Models\PatientBillingPayment;
 use App\Models\PatientBillingRefund;
+use App\Models\PatientProcedure;
+use App\Models\PatientSessionPackage;
+use App\Models\PatientToothStatusHistory;
+use App\Models\PhysioAssessment;
+use App\Models\PhysioCarePlan;
+use App\Models\PhysioSession;
 use App\Models\Prescription;
+use App\Models\PrescriptionItem;
+use App\Models\TreatmentPlan;
+use App\Models\TreatmentRecord;
 use App\Services\Security\SecurityAudit;
 use BackedEnum;
 use Illuminate\Database\Eloquent\Model;
@@ -38,11 +54,27 @@ class ClinicalAuditObserver
         Patient::class => [
             'prefix' => 'patient',
             'status' => ['status'],
-            'personal' => ['first_name', 'last_name', 'name', 'phone', 'alternate_phone', 'email', 'date_of_birth', 'age', 'gender', 'blood_group', 'uhid'],
+            'personal' => ['first_name', 'middle_name', 'last_name', 'name', 'phone', 'alternate_phone', 'email', 'date_of_birth', 'age', 'gender', 'blood_group', 'uhid'],
         ],
         ClinicalEncounter::class => ['prefix' => 'encounter', 'status' => ['status']],
+        ClinicalDiagnosis::class => ['prefix' => 'encounter.diagnosis', 'status' => ['status', 'is_primary']],
+        PatientProcedure::class => ['prefix' => 'encounter.procedure', 'status' => ['status', 'quantity']],
+        ClinicalNote::class => ['prefix' => 'encounter.note', 'status' => ['status', 'note_type']],
+        ClinicalEncounterAddendum::class => ['prefix' => 'encounter.addendum', 'status' => ['kind', 'section']],
         Prescription::class => ['prefix' => 'prescription', 'status' => ['status']],
-        PatientBilling::class => ['prefix' => 'billing.invoice', 'status' => ['status'], 'money' => ['total_amount', 'discount_amount', 'final_amount', 'outstanding_balance']],
+        PatientToothStatusHistory::class => ['prefix' => 'dental.tooth', 'status' => ['tooth_number', 'kind', 'status']],
+        TreatmentPlan::class => ['prefix' => 'dental.plan', 'status' => ['status']],
+        TreatmentRecord::class => ['prefix' => 'dental.plan_item', 'status' => ['status', 'tooth_number']],
+        PhysioAssessment::class => ['prefix' => 'physio.assessment', 'status' => ['pain_at_rest', 'pain_on_activity']],
+        PhysioSession::class => ['prefix' => 'physio.session', 'status' => ['pain_before', 'pain_after', 'package_id']],
+        PhysioCarePlan::class => ['prefix' => 'physio.plan', 'status' => ['status']],
+        PatientSessionPackage::class => ['prefix' => 'physio.package', 'status' => ['status', 'sessions_used']],
+        ClinicalOrder::class => ['prefix' => 'investigation.order', 'status' => ['status', 'priority']],
+        ClinicalOrderItem::class => ['prefix' => 'investigation.item', 'status' => ['status', 'category']],
+        DiagnosticResult::class => ['prefix' => 'investigation.result', 'status' => ['status', 'is_abnormal']],
+        PrescriptionItem::class => ['prefix' => 'prescription.line', 'status' => ['frequency', 'duration']],
+        PatientBilling::class => ['prefix' => 'billing.invoice', 'status' => ['status'], 'money' => ['total_amount', 'discount_amount', 'tax_amount', 'final_amount', 'paid_amount', 'refunded_amount', 'outstanding_balance']],
+        PatientBillingItem::class => ['prefix' => 'billing.line', 'money' => ['unit_price', 'discount_amount', 'tax_amount', 'final_amount']],
         Invoice::class => ['prefix' => 'billing.invoice', 'status' => ['status'], 'money' => ['subtotal_amount', 'tax_amount', 'discount_amount', 'total_amount', 'amount_paid', 'balance_due']],
         PatientBillingPayment::class => ['prefix' => 'billing.payment', 'money' => ['amount'], 'status' => ['payment_method']],
         PatientBillingRefund::class => ['prefix' => 'billing.refund', 'money' => ['amount']],
@@ -119,9 +151,17 @@ class ClinicalAuditObserver
                 }
                 break;
 
+            case 'investigation.item':
+                if (in_array($to, ['reviewed', 'cancelled'], true)) {
+                    $events[] = "investigation.{$to}";
+                }
+                break;
+
             case 'prescription':
                 if (in_array($to, ['finalized', 'issued', 'signed'], true)) {
                     $events[] = 'prescription.finalized';
+                } elseif ($to === 'cancelled') {
+                    $events[] = 'prescription.cancelled';
                 }
                 break;
 

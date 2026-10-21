@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { LogIn } from 'lucide-react';
-import { CrmButton, CrmFormField, CrmInput } from '@/pages/Company/design';
+import { AuthButton, AuthField, AuthInput } from '../components/AuthControls';
 import { AuthNotice } from '../components/AuthNotice';
 import { ClinicPreAuthShell } from '../components/ClinicPreAuthShell';
 import { PasswordInput } from '../components/PasswordInput';
@@ -72,8 +72,8 @@ export default function ClinicLogin({
           flashSuccess && <AuthNotice tone="success">{flashSuccess}</AuthNotice>
         )}
 
-        <CrmFormField label="Email" error={emailFieldError}>
-          <CrmInput
+        <AuthField label="Email" error={emailFieldError}>
+          <AuthInput
             type="email"
             name="email"
             inputMode="email"
@@ -88,9 +88,9 @@ export default function ClinicLogin({
             invalid={!!emailFieldError || !!attemptError}
             autoFocus
           />
-        </CrmFormField>
+        </AuthField>
 
-        <CrmFormField label="Password" error={errors.password}>
+        <AuthField label="Password" error={errors.password}>
           <PasswordInput
             name="password"
             value={data.password}
@@ -99,31 +99,31 @@ export default function ClinicLogin({
             readOnly={processing}
             invalid={!!errors.password}
           />
-        </CrmFormField>
+        </AuthField>
 
         <div className="flex flex-wrap items-center justify-between gap-x-4">
-          <label className="flex min-h-[44px] w-fit cursor-pointer items-center gap-2.5 text-[12.5px] font-medium text-ovs-crm-text-secondary">
+          <label className="flex min-h-[44px] w-fit cursor-pointer items-center gap-2.5 text-[12.5px] font-medium text-clinic-secondary">
             <input
               type="checkbox"
               name="remember"
               checked={data.remember}
               onChange={(e) => setData('remember', e.target.checked)}
               disabled={processing}
-              className="h-4 w-4 rounded-[4px] accent-ovs-crm-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ovs-crm-ink/25 focus-visible:ring-offset-2"
+              className="h-4 w-4 rounded-[4px] accent-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-ink/25 focus-visible:ring-offset-2"
             />
             Keep me signed in
           </label>
           <Link
             href={route('clinic.password.request') + window.location.search}
-            className="flex min-h-[44px] items-center rounded text-[12.5px] font-semibold text-ovs-crm-brand-strong hover:text-ovs-crm-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ovs-crm-ink/25"
+            className="flex min-h-[44px] items-center rounded text-[12.5px] font-semibold text-clinic-brand-strong hover:text-clinic-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-ink/25"
           >
             Forgot password?
           </Link>
         </div>
 
-        <CrmButton type="submit" tone="primary" size="lg" icon={LogIn} loading={processing} className="w-full">
+        <AuthButton type="submit" tone="primary" size="lg" icon={LogIn} loading={processing} className="w-full">
           Sign in
-        </CrmButton>
+        </AuthButton>
       </form>
     </ClinicPreAuthShell>
   );
