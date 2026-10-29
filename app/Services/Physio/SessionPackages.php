@@ -5,6 +5,7 @@ namespace App\Services\Physio;
 use App\ClinicPermission;
 use App\Models\Branch;
 use App\Models\Clinic;
+use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
 use App\Models\PatientSessionPackage;
@@ -14,6 +15,7 @@ use App\Models\PhysioSession;
 use App\Models\SessionPackageUsage;
 use App\Models\User;
 use App\Services\BillingService;
+use App\Services\Patient\PatientCareGuard;
 use App\Services\Security\SecurityAudit;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -60,6 +62,9 @@ class SessionPackages
         }
         if (in_array($treatment->status, [PatientTreatment::COMPLETED, PatientTreatment::CANCELLED], true)) {
             throw new DomainException('This treatment is closed; start or reopen a treatment before selling a package for it.');
+        }
+        if ($patient = Patient::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)->find($treatment->patient_id)) {
+            app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         }
         $sessions = (int) ($data['sessions_total'] ?? 0);
         if ($sessions < 1 || $sessions > 200) {
@@ -143,38 +148,24 @@ class SessionPackages
     }
 
     /**
-     * The specialties for which a patient holds a package that can pay for
-     * a session now — any of their live treatments of that specialty with an
-     * active, in-date package that has sessions left. A visit for one of
-     * them is already paid for, so check-in raises no charge for it
-     * (`CheckInCharges`). Two queries for the patient, never a clinic scan.
-     *
-     * @param  list<int>  $patientIds
-     * @return array<int, list<string>> patient id => specialty keys
+     * Whether a session package paid for this consultation: a session in it
+     * was completed against a package of that session's own treatment, and
+     * the completion still stands (a reversed session is no longer
+     * completed). The one rule for a package waiving the consultation fee —
+     * holding a package, or one for another treatment, waives nothing, and a
+     * visit whose treatment is not known yet (at check-in) is never waived.
      */
-    public function coveredSpecialties(int $clinicId, array $patientIds): array
+    public function paidFor(ClinicalEncounter $encounter): bool
     {
-        if ($patientIds === []) {
-            return [];
-        }
-        $packages = PatientSessionPackage::query()->withoutGlobalScopes()
-            ->join('patient_treatments as t', 't.id', '=', 'patient_session_packages.patient_treatment_id')
-            ->where('patient_session_packages.clinic_id', $clinicId)->whereIn('patient_session_packages.patient_id', $patientIds)
-            ->where('patient_session_packages.status', PatientSessionPackage::ACTIVE)
-            ->where('t.status', '!=', PatientTreatment::CANCELLED)->whereNotNull('t.specialty_key')
-            ->get(['patient_session_packages.*', 't.specialty_key as treatment_specialty'])
-            ->reject(fn (PatientSessionPackage $package) => $package->isExpired());
-        if ($packages->isEmpty()) {
-            return [];
-        }
-        $sums = SessionPackageUsage::query()->withoutGlobalScopes()->where('clinic_id', $clinicId)
-            ->whereIn('package_id', $packages->pluck('id'))->groupBy('package_id')->selectRaw('package_id, sum(quantity) as total')->pluck('total', 'package_id');
-
-        return $packages
-            ->filter(fn (PatientSessionPackage $package) => $package->sessions_total + (int) ($sums[$package->id] ?? 0) > 0)
-            ->groupBy('patient_id')
-            ->map(fn (Collection $rows) => $rows->pluck('treatment_specialty')->unique()->values()->all())
-            ->all();
+        return PhysioSession::query()->withoutGlobalScopes()
+            ->where('physio_sessions.clinic_id', $encounter->clinic_id)
+            ->where('physio_sessions.encounter_id', $encounter->id)
+            ->where('physio_sessions.status', PhysioSession::COMPLETED)
+            ->whereExists(fn ($package) => $package->selectRaw('1')->from('patient_session_packages')
+                ->whereColumn('patient_session_packages.id', 'physio_sessions.package_id')
+                ->whereColumn('patient_session_packages.clinic_id', 'physio_sessions.clinic_id')
+                ->whereColumn('patient_session_packages.patient_treatment_id', 'physio_sessions.patient_treatment_id'))
+            ->exists();
     }
 
     /**

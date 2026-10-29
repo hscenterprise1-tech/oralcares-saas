@@ -10,13 +10,20 @@ use App\Models\ClinicalEncounter;
 use App\Models\PatientBilling;
 use App\Models\PatientBillingPayment;
 use App\PaymentMethod;
+use App\Services\Billing\BillingRegister;
 use App\Services\Billing\CheckInCharges;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Billing\PaymentMessages;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
+use App\Services\Patient\Patient360\Patient360Sections;
 use App\Services\PaymentService;
 use App\Services\Reception\IntakeSubmissions;
 use App\Services\Security\SecurityAudit;
+use App\Support\BillingTabs;
+use App\Support\ClinicAccess\BranchReach;
+use App\Support\ClinicAccess\ClinicAccess;
+use Carbon\CarbonImmutable;
 use Closure;
 use DomainException;
 use Illuminate\Http\JsonResponse;
@@ -44,12 +51,23 @@ class CheckoutController extends Controller
         protected EncounterCheckout $checkout,
     ) {}
 
-    public function index(Request $request): Response
+    /**
+     * Bills & Collections: every bill (or every payment received), filtered
+     * on the server and paged, with totals that are the sums of the same
+     * rows. Scope is `BranchReach` for `billing.view`. Detail and actions come
+     * from `bill()`, each action still authorized by its own route.
+     */
+    public function index(Request $request, BillingRegister $register, ClinicAccess $access): Response
     {
         $clinic = $this->clinicContext->clinic() ?? abort(403);
         $branch = $this->clinicContext->branchScopeOrAbort();
-        $status = in_array($request->query('status'), array_column(BillingStatus::cases(), 'value'), true) ? $request->query('status') : null;
-        $search = trim((string) $request->query('q', ''));
+        $reach = $register->reach(ClinicPermission::BillingView);
+        $filters = $register->filters($request);
+        $view = $request->query('view') === 'collections' ? 'collections' : 'bills';
+        $status = $filters['status'];
+        $search = $filters['q'];
+        $bills = $register->bills($clinic->id, $reach, $filters);
+        $collections = $view === 'collections' ? $register->collections($clinic->id, $reach, $filters) : null;
 
         $unpaid = PatientBilling::query()->where('clinic_id', $clinic->id)
             ->when($branch, fn ($query) => $query->where('branch_id', $branch->id))
@@ -79,47 +97,141 @@ class CheckoutController extends Controller
                 'issued_at' => $bill->issued_at?->toIso8601String(),
                 'url' => $bill->encounter_id ? route('clinic.billing.checkout', $bill->encounter_id) : route('clinic.patients.show', $bill->patient_id),
             ])->values(),
-            // Every bill, newest first: the history, by status or number.
-            'bills' => Inertia::scroll(fn () => PatientBilling::query()->where('clinic_id', $clinic->id)
-                ->when($branch, fn ($query) => $query->where('branch_id', $branch->id))
-                ->when($status, fn ($query, $s) => $query->where('status', $s))
-                ->when($search !== '', fn ($query) => $query->where('billing_number', 'like', $search.'%'))
-                ->with(['patient' => fn ($query) => $query->withoutGlobalScopes()->select('id', 'first_name', 'last_name', 'uhid')])
-                ->orderByDesc('id')->cursorPaginate(25)
-                ->through(fn (PatientBilling $bill) => [
+            'view' => $view,
+            // Bills issued in range, newest first, with the patient and branch.
+            'bills' => $view === 'bills' ? (clone $bills)
+                ->leftJoin('patients', 'patients.id', '=', 'patient_billings.patient_id')
+                ->leftJoin('branches', 'branches.id', '=', 'patient_billings.branch_id')
+                ->orderByDesc('patient_billings.issued_at')->orderByDesc('patient_billings.id')
+                ->select('patient_billings.*', 'patients.first_name', 'patients.last_name', 'patients.uhid', 'branches.name as branch_name')
+                ->paginate(BillingRegister::PAGE)->withQueryString()
+                ->through(fn ($bill) => [
                     'id' => $bill->id,
                     'number' => $bill->billing_number,
-                    'patient' => $bill->patient?->short_name,
-                    'uhid' => $bill->patient?->uhid,
-                    'status' => $bill->status->value,
+                    'patient' => trim($bill->first_name.' '.$bill->last_name),
+                    'uhid' => $bill->uhid,
+                    'branch' => $bill->branch_name,
+                    'status' => $bill->status,
                     'total' => (float) $bill->final_amount,
                     'paid' => (float) $bill->paid_amount,
                     'refunded' => (float) $bill->refunded_amount,
                     'adjusted' => (float) $bill->adjusted_amount,
                     'outstanding' => (float) $bill->outstanding_balance,
-                    'issued_at' => $bill->issued_at?->toIso8601String(),
-                    'links' => ['print' => route('clinic.billing.bills.print', $bill->id, false), 'adjust' => route('clinic.billing.adjustments.store', $bill->id, false)],
-                ])),
-            'filters' => ['status' => $status, 'q' => $search],
+                    'issued_at' => $bill->issued_at ? CarbonImmutable::parse($bill->issued_at, 'UTC')->toIso8601String() : null,
+                ]) : null,
+            'totals' => $view === 'bills' ? $register->billTotals($bills) : [
+                'count' => (clone $collections)->count(),
+                'collected' => round((float) (clone $collections)->sum('patient_billing_payments.amount'), 2),
+            ],
+            // Payments received in range: the receipts.
+            'collections' => $collections === null ? null : (clone $collections)
+                ->leftJoin('patients', 'patients.id', '=', 'patient_billings.patient_id')
+                ->leftJoin('branches', 'branches.id', '=', 'patient_billing_payments.branch_id')
+                ->orderByDesc('patient_billing_payments.paid_at')->orderByDesc('patient_billing_payments.id')
+                ->select('patient_billing_payments.*', 'patient_billings.billing_number', 'patients.first_name', 'patients.last_name', 'patients.uhid', 'branches.name as branch_name')
+                ->paginate(BillingRegister::PAGE)->withQueryString()
+                ->through(fn ($payment) => [
+                    'id' => $payment->id,
+                    'bill_id' => $payment->patient_billing_id,
+                    'bill_number' => $payment->billing_number,
+                    'receipt' => $payment->receipt_number,
+                    'patient' => trim($payment->first_name.' '.$payment->last_name),
+                    'uhid' => $payment->uhid,
+                    'branch' => $payment->branch_name,
+                    'method' => $payment->payment_method,
+                    'reference' => $payment->transaction_reference,
+                    'amount' => (float) $payment->amount,
+                    'paid_at' => $payment->paid_at ? CarbonImmutable::parse($payment->paid_at, 'UTC')->toIso8601String() : null,
+                ]),
+            'filters' => $filters,
             'statuses' => collect(BillingStatus::cases())->map(fn (BillingStatus $s) => ['value' => $s->value, 'label' => $s->label()])->values(),
+            'methods' => app(PaymentService::class)->methodOptions($clinic),
+            'branches' => $this->branchOptions($clinic->id, $reach),
+            'tabs' => BillingTabs::for($access, $this->routeParameters($request)),
+            'links' => ['bill' => route('clinic.billing.bills.show', ['bill' => '__ID__'], false)],
             'can' => ['adjust' => $request->user()->hasClinicPermission(ClinicPermission::DiscountApply)],
         ]);
     }
 
-    /** A concession or write-off on what is still due; the bill itself is not edited. */
-    public function adjust(Request $request, PatientBilling $bill): RedirectResponse
+    /**
+     * One bill in full, for the Billing pages' detail view: lines, payments,
+     * refunds and the actions this member may take on it, each decided at the
+     * bill's own branch (`Patient360Sections::bill()`, the same read Patient
+     * 360 uses). The actions are still authorized again by their routes.
+     */
+    public function bill(Request $request, int $bill): JsonResponse
+    {
+        $record = PatientBilling::query()->withoutGlobalScopes()->where('clinic_id', $this->clinicContext->clinic()?->id)->findOrFail($bill);
+        // As in the list: only at a branch where this member holds billing.
+        $this->assertBranchId($record->branch_id, ClinicPermission::BillingView);
+        $record->load(['patient' => fn ($query) => $query->withoutGlobalScopes()]);
+
+        return response()->json([
+            'patient' => $record->patient ? ['name' => $record->patient->full_name, 'uhid' => $record->patient->uhid] : null,
+            ...app(Patient360Sections::class)->bill($record, $request->user()),
+        ]);
+    }
+
+    /**
+     * The branches a Billing filter may name: only those inside the reach.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    private function branchOptions(int $clinicId, BranchReach $reach): array
+    {
+        return Branch::query()->withoutGlobalScopes()->where('clinic_id', $clinicId)->orderByDesc('is_main')->orderBy('name')->get(['id', 'name'])
+            ->filter(fn (Branch $branch) => $reach->covers($branch->id))
+            ->map(fn (Branch $branch) => ['value' => (string) $branch->id, 'label' => $branch->name])->values()->all();
+    }
+
+    /** @return array<string, string> */
+    private function routeParameters(Request $request): array
+    {
+        return array_filter(['clinic' => $request->route('clinic')], fn ($value) => is_string($value));
+    }
+
+    /**
+     * A concession or write-off on what is still due; the bill itself is not
+     * edited. A request key made when the form opened records it once however
+     * often it is sent (the refund's pattern): a refused adjustment frees the
+     * key for the corrected retry, and the key belongs to this clinic, user
+     * and bill. Without a key it still runs, and is logged.
+     */
+    public function adjust(Request $request, PatientBilling $bill, IntakeSubmissions $submissions): RedirectResponse
     {
         abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
-        $this->assertBranchId($bill->branch_id);
-        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'], 'reason' => ['required', 'string', 'max:500']]);
+        $this->assertBranchId($bill->branch_id, ClinicPermission::DiscountApply);
+        app(OwnerMode::class)->requireForSensitiveAction($request->user(), 'billing.adjust', OwnerMode::STANDARD, ['bill_id' => $bill->id, 'branch_id' => $bill->branch_id]);
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:99999999'],
+            'reason' => ['required', 'string', 'max:500'],
+            'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
+        ]);
+        $clinic = $this->clinicContext->clinic();
+        $key = $data['idempotency_key'] ?? null;
 
-        try {
-            app(PaymentService::class)->recordAdjustment($bill, (float) $data['amount'], $data['reason'], $request->user());
-        } catch (DomainException|InvalidArgumentException $e) {
-            return back()->withErrors(['billing' => $e->getMessage()]);
+        // By reference: the key is kept only when the adjustment was recorded.
+        $adjusted = false;
+        $take = function () use ($bill, $data, $request, &$adjusted): RedirectResponse {
+            try {
+                app(PaymentService::class)->recordAdjustment($bill, (float) $data['amount'], $data['reason'], $request->user());
+            } catch (DomainException|InvalidArgumentException $e) {
+                return back()->withErrors(['billing' => $e->getMessage()]);
+            }
+            $adjusted = true;
+
+            return back()->with('success', 'Balance adjusted.');
+        };
+
+        if ($key === null) {
+            $submissions->withoutKey($clinic, 'checkout.adjust');
+
+            return $take();
         }
 
-        return back()->with('success', 'Balance adjusted.');
+        return $submissions->onceRedirect($clinic, $request->user(), $key, "adjust:{$bill->id}", $take, function () use (&$adjusted): bool {
+            return $adjusted;
+        }, 'This adjustment was already recorded; it was not recorded twice.', atomic: true);
     }
 
     public function show(Request $request, ClinicalEncounter $encounter): Response
@@ -197,7 +309,7 @@ class CheckoutController extends Controller
     public function pay(Request $request, PatientBilling $bill, PaymentService $payments, IntakeSubmissions $submissions): RedirectResponse|JsonResponse
     {
         abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
-        $this->assertBranchId($bill->branch_id);
+        $this->assertBranchId($bill->branch_id, ClinicPermission::PaymentCollect);
         $validated = $request->validate([
             'method' => ['required', Rule::enum(PaymentMethod::class)],
             'amount' => ['required', 'numeric', 'gt:0'],
@@ -254,7 +366,7 @@ class CheckoutController extends Controller
     /** Send this payment's failed WhatsApp messages again; anything else is left alone. */
     public function retryPaymentMessages(Request $request, int $payment, PaymentMessages $messages): JsonResponse
     {
-        $payment = $this->paymentHere($payment);
+        $payment = $this->paymentHere($payment, ClinicPermission::PaymentCollect);
         $queued = $messages->retry($payment, $request->user());
 
         return response()->json([
@@ -263,12 +375,12 @@ class CheckoutController extends Controller
         ]);
     }
 
-    /** A payment of this clinic, at a branch this member may work in. */
-    private function paymentHere(int $id): PatientBillingPayment
+    /** A payment of this clinic, at a branch this member may work in (and hold `$permission` at, when named). */
+    private function paymentHere(int $id, ?ClinicPermission $permission = null): PatientBillingPayment
     {
         $payment = PatientBillingPayment::query()->withoutGlobalScopes()
             ->where('clinic_id', $this->clinicContext->clinic()?->id)->findOrFail($id);
-        $this->assertBranchId($payment->branch_id);
+        $this->assertBranchId($payment->branch_id, $permission);
 
         return $payment;
     }
@@ -281,7 +393,8 @@ class CheckoutController extends Controller
     public function refund(Request $request, PatientBilling $bill, PaymentService $payments, IntakeSubmissions $submissions): RedirectResponse
     {
         abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
-        $this->assertBranchId($bill->branch_id);
+        $this->assertBranchId($bill->branch_id, ClinicPermission::RefundProcess);
+        app(OwnerMode::class)->requireForSensitiveAction($request->user(), 'billing.refund', OwnerMode::STANDARD, ['bill_id' => $bill->id, 'branch_id' => $bill->branch_id]);
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
             'reason' => ['required', 'string', 'max:255'],
@@ -370,11 +483,16 @@ class CheckoutController extends Controller
         $this->assertBranchId($encounter->branch_id);
     }
 
-    private function assertBranchId(?int $branchId): void
+    private function assertBranchId(?int $branchId, ?ClinicPermission $permission = null): void
     {
         $membership = $this->clinicContext->membership() ?? abort(403);
         $branch = $branchId ? Branch::query()->withoutGlobalScopes()->find($branchId) : null;
         abort_unless($branch && $membership->hasAccessToBranch($branch), 403);
+
+        // A financial permission counts at the record's own branch, not the session's.
+        if ($permission !== null) {
+            abort_unless(auth()->user()?->hasClinicPermissionAt($permission, $branch) ?? false, 403);
+        }
     }
 
     /**

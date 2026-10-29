@@ -95,7 +95,7 @@ export interface DuplicateOverrideState {
 
 export const NO_OVERRIDE: DuplicateOverrideState = { open: false, confirmed: false, reason: '' };
 
-const GENDERS = [
+export const GENDERS = [
   { value: 'female', label: 'Female' },
   { value: 'male', label: 'Male' },
   { value: 'other', label: 'Other' },
@@ -494,7 +494,8 @@ export function DuplicateSuggestions({
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-bold text-clinic-ink">
                       {match.name}
-                      <StatusBadge status={match.status} />
+                      {/* Only a record marker a desk must not miss; there is no active / inactive state to show. */}
+                      {(match.status === 'deceased' || match.status === 'merged') && <StatusBadge status={match.status} />}
                     </p>
                     <p className="text-[12.5px] text-clinic-secondary">
                       {[match.uhid, [match.age !== null ? `${match.age}` : null, match.gender ? humanize(match.gender) : null].filter(Boolean).join(' · '), match.phone_hint].filter(Boolean).join(' · ')}
@@ -532,10 +533,10 @@ export function DuplicateSuggestions({
   );
 }
 
-/** A section that folds away; it opens itself when it holds a required field or an error. */
-export function Collapsible({ id, title, icon: Icon, summary, open, onOpenChange, children }: { id: string; title: string; icon?: typeof ShieldAlert; summary: ReactNode; open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode }) {
+/** A section that folds away; it opens itself when it holds a required field or an error. `animated`: its body eases in when opened. */
+export function Collapsible({ id, title, icon: Icon, summary, open, onOpenChange, children, animated = false, className }: { id: string; title: string; icon?: typeof ShieldAlert; summary: ReactNode; open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode; animated?: boolean; className?: string }) {
   return (
-    <section className="rounded-2xl border border-clinic-border">
+    <section className={cn('rounded-2xl border border-clinic-border', className)}>
       <button
         type="button"
         aria-expanded={open}
@@ -553,7 +554,7 @@ export function Collapsible({ id, title, icon: Icon, summary, open, onOpenChange
         </span>
       </button>
       {open && (
-        <div id={`${id}-body`} className="border-t border-clinic-border px-4 py-4">
+        <div id={`${id}-body`} className={cn('border-t border-clinic-border px-4 py-4', animated && 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200')}>
           {children}
         </div>
       )}
@@ -655,18 +656,18 @@ export function MedicalSafetyFields({
   );
 }
 
-/** The clinic's optional contact and personal details, in its order. */
-export function MoreDetailsFields({ config, data, setField, errors, idPrefix }: { config: RegistrationConfig; data: PatientForm; setField: SetPatientField; errors: PatientErrors; idPrefix: string }) {
+/** The clinic's optional contact and personal details, in its order. `exclude`: address parts the host shows elsewhere (by form key). */
+export function MoreDetailsFields({ config, data, setField, errors, idPrefix, exclude = [] }: { config: RegistrationConfig; data: PatientForm; setField: SetPatientField; errors: PatientErrors; idPrefix: string; exclude?: string[] }) {
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
       {moreFields(config).map((field) => (
-        <MoreFieldInput key={field} field={field} config={config} data={data} setField={setField} errors={errors} idPrefix={idPrefix} />
+        <MoreFieldInput key={field} field={field} config={config} data={data} setField={setField} errors={errors} idPrefix={idPrefix} exclude={exclude} />
       ))}
     </div>
   );
 }
 
-function MoreFieldInput({ field, config, data, setField, errors, idPrefix }: { field: MoreField; config: RegistrationConfig; data: PatientForm; setField: SetPatientField; errors: PatientErrors; idPrefix: string }) {
+function MoreFieldInput({ field, config, data, setField, errors, idPrefix, exclude }: { field: MoreField; config: RegistrationConfig; data: PatientForm; setField: SetPatientField; errors: PatientErrors; idPrefix: string; exclude: string[] }) {
   const isRequired = required(config, field);
 
   switch (field) {
@@ -692,7 +693,7 @@ function MoreFieldInput({ field, config, data, setField, errors, idPrefix }: { f
       // Each part shows (and is required) on its own setting; the line spans the row.
       return (
         <>
-          {ADDRESS_FIELDS.filter(([setting]) => shown(config, setting)).map(([setting, key, label]) => (
+          {ADDRESS_FIELDS.filter(([setting, key]) => shown(config, setting) && !exclude.includes(key)).map(([setting, key, label]) => (
             <Field
               key={key}
               label={labelOf(config, setting, label)}

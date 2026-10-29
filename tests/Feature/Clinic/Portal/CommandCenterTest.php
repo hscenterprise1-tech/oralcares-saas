@@ -5,13 +5,12 @@ use App\Models\ClinicEmployee;
 use App\Models\ClinicQueueItem;
 use App\PaymentMethod;
 use App\Services\BillingService;
-use App\Services\ClinicContext;
-use App\Services\OwnerMode\OwnerMode;
 use App\Services\PaymentService;
 use App\Services\QueueStateMachine;
 use App\Services\Reception\ReceptionCheckIn;
 use App\Services\Reception\VisitContext;
 use App\Services\Treatment\PatientTreatments;
+use App\Support\Dashboard\OwnerCommandCenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -19,8 +18,8 @@ use Tests\Support\TreatmentFixture;
 
 /**
  * The Command Center: the owner's or administrator's view of the clinic.
- * Aggregates and real exceptions only, from data the clinic already keeps;
- * figures arrive deferred, never in the first response.
+ * Aggregates and real exceptions only, from data the clinic already keeps,
+ * sent with the page in the first response.
  */
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-06 10:00', 'Asia/Kolkata'));
@@ -31,15 +30,17 @@ beforeEach(function () {
             context: VisitContext::fromInput($this->f->clinic, ['visit_specialty' => $specialty])),
         fn (ClinicQueueItem $item) => $doctor === null ? $item->update(['doctor_id' => null]) : null,
     );
-    $this->widgetData = function (callable $as): array {
-        $data = [];
-        $as()->get('/clinic/dashboard')->assertOk()->assertInertia(function (Assert $page) use (&$data) {
-            // The figures come with the page, in the first response.
-            $data = $page->toArray()['props']['widgetData'];
+    $this->sections = function (callable $as): array {
+        $sections = [];
+        $as()->get('/clinic/dashboard')->assertOk()->assertInertia(function (Assert $page) use (&$sections) {
+            // The sections come with the page, in the first response.
+            $sections = $page->component('ClinicPortal/CommandCenter/Index', false)->toArray()['props']['sections'];
         });
 
-        return $data;
+        return $sections;
     };
+    $this->figures = fn (array $sections) => collect($sections['today']['figures'])->keyBy('key');
+    $this->inbox = fn (array $sections) => collect($sections['decisions']['items'])->keyBy('id');
 });
 
 test('the Command Center shows the clinic pulse from real records, flags an overloaded doctor, and shows no reporting', function () {
@@ -56,17 +57,17 @@ test('the Command Center shows the clinic pulse from real records, flags an over
     $physioPatient = $this->f->patient('Care', 'Plan');
     app(PatientTreatments::class)->startAdHoc($physioPatient, 'physiotherapy', 'Knee rehab', $this->t->physio, $this->f->branch, $this->f->owner);
 
-    $data = ($this->widgetData)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session));
+    $sections = ($this->sections)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session));
 
-    expect($data['waiting_now']['value'])->toBe(5)
-        ->and($data['with_doctor_now']['value'])->toBe(1)
-        // A doctor with a long queue is raised in Needs attention; there is no per-doctor list on the dashboard.
-        ->and(collect($data['needs_attention']['items'])->firstWhere('id', 'doctor_overload')['count'])->toBe(1)
-        // Mixes, care activity, doctor lists and the "Right now" repeats are not on the dashboard.
-        ->and($data)->not->toHaveKeys(['doctor_load', 'completed_today', 'care_activity', 'specialty_mix', 'patient_types', 'recent_activity']);
+    expect(($this->figures)($sections)['waiting_now']['value'])->toBe(5)
+        ->and(($this->figures)($sections)['with_doctor_now']['value'])->toBe(1)
+        // A doctor with a long queue is raised in the decision inbox; there is no per-doctor list.
+        ->and(($this->inbox)($sections)['doctor_overload']['count'])->toBe(1)
+        // Only the Command Center's own blocks: no mixes, care activity or reporting.
+        ->and(array_diff(array_keys($sections), ['mine', 'today', 'money', 'spending', 'decisions', 'branches', 'people', 'security', 'activity']))->toBe([]);
 });
 
-test('Needs attention lists only real exceptions: long waits, no doctor, an overloaded doctor, packages ending, approvals; follow-ups have their own list', function () {
+test('the decision inbox lists only real exceptions: long waits, no doctor, an overloaded doctor, packages ending, approvals, follow-ups due', function () {
     ($this->checkIn)('Walkin', null);
     foreach (range(1, 5) as $i) {
         ($this->checkIn)("Queue{$i}", $this->t->physio);
@@ -77,58 +78,57 @@ test('Needs attention lists only real exceptions: long waits, no doctor, an over
     $this->t->actAsOwner();
     $treatment = app(PatientTreatments::class)->startAdHoc($patient, 'physiotherapy', 'Back rehab', $this->t->physio, $this->f->branch, $this->f->owner);
     DB::table('patient_session_packages')->insert(['clinic_id' => $this->f->clinic->id, 'branch_id' => $this->f->branch->id, 'patient_id' => $patient->id, 'patient_treatment_id' => $treatment->id, 'name' => 'Ending', 'sessions_total' => 5, 'status' => 'active', 'valid_until' => '2026-10-09', 'created_at' => now(), 'updated_at' => now()]);
-    DB::table('deletion_requests')->insert(['clinic_id' => $this->f->clinic->id, 'requester_user_id' => $this->f->owner->id, 'action_type' => 'patient.delete', 'target_type' => 'patient', 'target_id' => $patient->id, 'target_label' => 'Follow Up', 'target_fingerprint' => str_repeat('a', 64), 'reason' => 'Duplicate', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+    DB::table('deletion_requests')->insert(['clinic_id' => $this->f->clinic->id, 'requester_user_id' => $this->f->owner->id, 'action_type' => 'patient.merge', 'target_type' => 'patient', 'target_id' => $patient->id, 'target_label' => 'Follow Up', 'target_fingerprint' => str_repeat('a', 64), 'reason' => 'Duplicate', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
 
-    $data = ($this->widgetData)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session));
-    $owner = collect($data['needs_attention']['items'])->keyBy('id');
-    expect($owner->keys()->all())->toContain('long_waits', 'unassigned', 'doctor_overload', 'packages_expiring', 'approvals')
+    $sections = ($this->sections)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session));
+    $owner = ($this->inbox)($sections);
+    expect($owner->keys()->all())->toContain('long_waits', 'unassigned', 'doctor_overload', 'packages_expiring', 'approvals', 'follow_ups_due')
         ->and($owner['long_waits']['count'])->toBe(6)
         ->and($owner['unassigned']['count'])->toBe(1)
         ->and($owner['doctor_overload']['count'])->toBe(1)
-        // Follow-ups are listed once, in their own widget, not repeated here.
-        ->and($owner->keys()->all())->not->toContain('follow_ups_due')
-        ->and($data['follow_ups_due']['total'])->toBe(1)
-        // No item links to a page that is not built (the Reception queue, approvals).
-        ->and($owner->pluck('href')->filter()->all())->toBe([]);
+        // Follow-ups appear once.
+        ->and($owner['follow_ups_due']['count'])->toBe(1)
+        ->and($sections['decisions']['total'])->toBe($owner->sum('count'))
+        // Queue exceptions open the Front Desk; nothing links to a page that is not built (approvals, follow-ups).
+        ->and($owner->pluck('href')->filter()->unique()->values()->all())->toBe(['/clinic/reception']);
 
     // An administrator runs the clinic but does not decide the owner's approvals.
     [$adminUser, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
-    $admin = collect(($this->widgetData)(fn () => $this->actingAs($adminUser)->withSession($adminSession))['needs_attention']['items'])->pluck('id');
+    $admin = ($this->inbox)(($this->sections)(fn () => $this->actingAs($adminUser)->withSession($adminSession)))->keys();
     expect($admin)->toContain('long_waits')->not->toContain('approvals');
 });
 
-test('in Owner Mode the Command Center shows the money: billed, net collected, outstanding, overdue, refunds', function () {
+test('in Owner Mode the Command Center shows the money: billed, collected, refunded, net, outstanding', function () {
     $patient = $this->f->patient('Money', 'Matters');
     $this->t->actAsOwner();
     $bill = app(BillingService::class)->createBill($this->f->clinic, $patient, $this->f->branch, [['description' => 'Consultation', 'quantity' => 1, 'unit_price' => 1000]]);
     app(PaymentService::class)->recordPayment($bill->fresh(), PaymentMethod::Upi, 500);
     app(PaymentService::class)->recordRefund($bill->fresh(), 100, 'Overcharged');
-    $now = now()->getTimestamp();
-    $ownerMode = [OwnerMode::SESSION_KEY => ['user_id' => $this->f->owner->id, 'clinic_id' => $this->f->clinic->id,
-        'membership_id' => $this->f->session[ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID], 'method' => 'password', 'activated_at' => $now, 'last_seen_at' => $now]];
 
-    $data = ($this->widgetData)(fn () => $this->actingAs($this->f->owner)->withSession([...$this->f->session, ...$ownerMode]));
-    $money = collect($data['owner_finance']['stats'])->pluck('value', 'key');
-    // Net collected is the Revenue report's: paid today less refunded today.
-    expect($money['billed_today'])->toEqual(1000)->and($money['collected_today'])->toEqual(400)->and($money['refunds_month'])->toEqual(100)
-        ->and($money['outstanding'])->toEqual((float) $bill->fresh()->outstanding_balance)->and($money['overdue'])->toEqual(0)
-        ->and($data['collections_today']['value'])->toEqual(400)
-        // The plan is the sidebar's (owner only); trends, spending and report shortcuts are Reports'.
-        ->and($data)->not->toHaveKeys(['owner_plan', 'owner_revenue', 'owner_performance', 'owner_collection_methods', 'owner_spending', 'report_shortcuts', 'operations_today', 'dental_activity']);
+    $money = ($this->sections)(fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session)))['money'];
+    // Net collected is paid today less refunded today.
+    expect($money['today']['billed']['value'])->toEqual(1000)
+        ->and($money['today']['collected']['value'])->toEqual(500)
+        ->and($money['today']['refunded']['value'])->toEqual(100)
+        ->and($money['today']['net_collected']['value'])->toEqual(400)
+        ->and($money['outstanding']['value'])->toEqual((float) $bill->fresh()->outstanding_balance);
 
-    // Without Owner Mode, no money widgets at all.
+    // An owner who does not treat patients has the money without Owner Mode.
     $this->flushSession();
-    expect(($this->widgetData)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session)))->not->toHaveKeys(['owner_finance', 'owner_security']);
+    expect(($this->sections)(fn () => $this->actingAs($this->f->owner)->withSession($this->f->session))['money']['today']['net_collected']['value'])->toEqual(400);
 });
 
 test('the owner\'s money stays out of other roles\' homes', function () {
     [$receptionUser, $receptionSession] = $this->f->memberWithRole(ClinicRole::Receptionist);
     [$adminUser, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
 
-    // Reception's home is the one Dashboard, with no owner or clinic-wide Command Center figures.
-    $this->actingAs($receptionUser)->withSession($receptionSession)->get('/clinic/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
-        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->intersect(['owner_finance', 'owner_revenue', 'owner_performance', 'owner_plan', 'owner_security', 'doctor_load', 'operations_today', 'staff_overview'])->isEmpty()));
-    // An administrator's Command Center has no owner-only revenue, plan or security widgets.
-    $this->actingAs($adminUser)->withSession($adminSession)->get('/clinic/dashboard')->assertInertia(fn (Assert $page) => $page
-        ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->intersect(['owner_revenue', 'owner_plan', 'owner_security', 'owner_performance'])->isEmpty()));
+    // Reception's home is the Front Desk: never the Command Center, so no owner or clinic-wide money.
+    $this->actingAs($receptionUser)->withSession($receptionSession)->get('/clinic/dashboard')->assertRedirect(route('clinic.reception'));
+    $this->actingAs($receptionUser)->withSession($receptionSession)->get('/clinic/reception')->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('ClinicPortal/FrontDesk/Index', false)
+        ->missing('sections')
+        ->where('clinic.owner_subscription', null));
+    // An administrator's Command Center has no owner-only block, locked or otherwise.
+    $admin = ($this->sections)(fn () => $this->actingAs($adminUser)->withSession($adminSession));
+    expect(array_intersect(array_keys($admin), OwnerCommandCenter::OWNER_SECTIONS))->toBe([]);
 });

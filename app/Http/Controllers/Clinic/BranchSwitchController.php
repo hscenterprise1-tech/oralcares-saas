@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Scopes\OrganizationScope;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,7 +81,8 @@ class BranchSwitchController extends Controller
         }
 
         if ($validated['branch_id'] === null) {
-            abort_unless($membership->is_primary_owner, 403, 'Only the clinic owner can view all branches at once.');
+            // Clinic-wide is the owner's view: a doctor-owner enters Owner Mode for it.
+            abort_unless(app(OwnerMode::class)->authorized(), 403, 'Only the clinic owner can view all branches at once.');
             $this->clinicContext->setBranch(null);
             $request->session()->forget(ClinicContext::SESSION_BRANCH_ID);
 

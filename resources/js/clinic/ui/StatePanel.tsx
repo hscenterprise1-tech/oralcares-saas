@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, Archive, Inbox, Lock, PackageX, SearchX, WifiOff, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Inbox, Lock, PackageX, SearchX, WifiOff, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton, Spinner } from './Spinner';
 
@@ -10,12 +10,11 @@ import { Skeleton, Spinner } from './Spinner';
  * Every state says what happened and, where there is one, what to do next.
  * None of them shows a raw server message or a stack trace.
  */
-export type StateKind = 'empty' | 'error' | 'forbidden' | 'plan_unavailable' | 'not_found' | 'offline' | 'archived' | 'filtered';
+export type StateKind = 'empty' | 'error' | 'forbidden' | 'plan_unavailable' | 'not_found' | 'offline' | 'filtered';
 
 const PRESETS: Record<StateKind, { icon: LucideIcon; title: string; tone: string }> = {
   empty: { icon: Inbox, title: 'Nothing here yet', tone: 'bg-clinic-inset text-clinic-secondary' },
   filtered: { icon: SearchX, title: 'No matches', tone: 'bg-clinic-inset text-clinic-secondary' },
-  archived: { icon: Archive, title: 'This record is archived', tone: 'bg-clinic-inset text-clinic-ink' },
   error: { icon: AlertTriangle, title: 'Something went wrong', tone: 'bg-clinic-danger-soft text-clinic-danger' },
   forbidden: { icon: Lock, title: 'You do not have access', tone: 'bg-clinic-inset text-clinic-ink' },
   plan_unavailable: {

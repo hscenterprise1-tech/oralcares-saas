@@ -37,6 +37,7 @@ class Patient360SectionPolicy
 {
     public const SECTIONS = [
         'overview' => ['Overview', 'primary'],
+        'visits' => ['Visits & History', 'primary'],
         'clinical' => ['Clinical', 'primary'],
         'dental' => ['Dental', 'specialty'],
         'physio' => ['Physiotherapy', 'specialty'],
@@ -56,14 +57,14 @@ class Patient360SectionPolicy
 
     /** Workspace order per persona; sections the user may not open are dropped. */
     private const ORDER = [
-        'reception' => ['overview', 'dental', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests'],
+        'reception' => ['overview', 'visits', 'dental', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests'],
         'billing' => ['billing', 'dental', 'overview', 'communication', 'timeline', 'requests'],
-        'dental' => ['overview', 'dental', 'clinical', 'treatment', 'prescriptions', 'investigations', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'physio' => ['overview', 'physio', 'clinical', 'treatment', 'follow-ups', 'appointments', 'prescriptions', 'investigations', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'clinical' => ['overview', 'clinical', 'prescriptions', 'investigations', 'treatment', 'dental', 'physio', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'admin' => ['overview', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
-        'owner' => ['overview', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
-        'staff' => ['overview', 'appointments', 'timeline'],
+        'dental' => ['overview', 'visits', 'dental', 'clinical', 'treatment', 'prescriptions', 'investigations', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'physio' => ['overview', 'visits', 'physio', 'clinical', 'treatment', 'follow-ups', 'appointments', 'prescriptions', 'investigations', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'clinical' => ['overview', 'visits', 'clinical', 'prescriptions', 'investigations', 'treatment', 'dental', 'physio', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'admin' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
+        'owner' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
+        'staff' => ['overview', 'visits', 'appointments', 'timeline'],
     ];
 
     private const DEFAULT_SECTION = ['billing' => 'billing', 'dental' => 'dental', 'physio' => 'physio'];
@@ -208,11 +209,10 @@ class Patient360SectionPolicy
             $actions[] = ['key' => 'edit', 'label' => 'Edit details', 'url' => route('clinic.patients.edit', $patient), 'method' => 'get'];
             $actions[] = ['key' => 'transfer', 'label' => 'Assign doctor', 'url' => route('clinic.patients.transfer', $patient), 'method' => 'post'];
         }
-        if ($lens['owner'] || $pendingRequests > 0 || $lens['governance']['patient.archive'] !== null) {
+        // Anyone who can open the patient can print what they see (`Patient360Controller::print`).
+        $actions[] = ['key' => 'print', 'label' => 'Print summary', 'url' => route('clinic.patients.print', $patient), 'method' => 'get'];
+        if ($lens['owner'] || $pendingRequests > 0) {
             $actions[] = ['key' => 'approvals', 'label' => $lens['owner'] ? 'Approval queue' : 'My requests', 'url' => route('clinic.approvals.index'), 'method' => 'get', 'count' => $lens['owner'] ? $pendingRequests : null];
-        }
-        if ($lens['governance']['patient.archive'] !== null && $patient->status?->value !== 'archived') {
-            $actions[] = ['key' => 'archive', 'label' => $lens['governance']['patient.archive'] === 'direct' ? 'Archive patient' : 'Request archive', 'governed' => 'patient.archive', 'mode' => $lens['governance']['patient.archive']];
         }
 
         $primary = match ($persona) {
@@ -263,6 +263,8 @@ class Patient360SectionPolicy
             'prescriptions' => $clinical,
             'investigation_results' => $clinical,
             'investigation_status' => $clinical || $queue,
+            // Visits & History: who came and when — for the desk, the calendar and clinicians.
+            'visits' => $clinical || $appointments || $queue,
             'dental' => $workspaces['dental'],
             // The dental record for the front desk (teeth under treatment, lab status) and for billing (treatment, estimates).
             'dental_operational' => ! $clinical && ($appointments || $queue) && $this->access->specialtyWorkspaces($patient)['dental'],
@@ -294,6 +296,7 @@ class Patient360SectionPolicy
             'treatment' => $fields['clinical'],
             'prescriptions' => $fields['prescriptions'],
             'investigations' => $fields['investigation_status'],
+            'visits' => $fields['visits'],
             'billing' => $fields['financial'],
             'documents' => $fields['admin_documents'] || $fields['clinical_documents'],
             // Whoever opens the patient sees what they agreed to; recording one needs `consent.manage`.

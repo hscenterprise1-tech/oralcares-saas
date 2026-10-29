@@ -8,7 +8,8 @@ type Tone = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const TONE: Record<Tone, string> = {
-  primary: 'bg-clinic-ink text-white hover:bg-clinic-ink-soft',
+  // The approved intake's primary (New Case / Repeat Case): one blue across the portal, never black or navy.
+  primary: 'bg-[#1769AA] text-white shadow-[0_1px_2px_rgba(23,59,96,0.18)] hover:bg-[#135A93]',
   secondary:
     'border border-clinic-border bg-clinic-surface text-clinic-ink hover:border-clinic-border-strong hover:bg-clinic-inset',
   ghost: 'text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
@@ -25,8 +26,8 @@ const SIZE: Record<Size, string> = {
 export function buttonClasses(tone: Tone = 'secondary', size: Size = 'md', className?: string): string {
   return cn(
     'inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold',
-    'motion-safe:transition-colors motion-safe:duration-150',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong focus-visible:ring-offset-2 focus-visible:ring-offset-clinic-canvas',
+    'motion-safe:transition-[background-color,border-color,color,transform] motion-safe:duration-150 motion-safe:active:scale-[0.98]',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal focus-visible:ring-offset-2 focus-visible:ring-offset-clinic-canvas',
     'disabled:pointer-events-none disabled:opacity-50',
     '[@media(pointer:coarse)]:min-h-11',
     TONE[tone],

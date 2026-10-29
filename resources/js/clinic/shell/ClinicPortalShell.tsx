@@ -91,19 +91,27 @@ export function ClinicPortalShell({
         <aside
           className="sticky top-0 hidden h-screen w-[240px] shrink-0 lg:block"
         >
-          <Sidebar clinic={clinic} currentUrl={url} />
+          <Sidebar clinic={clinic} links={portalLinks} currentUrl={url} />
         </aside>
 
         <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
           <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-cx-nav-ink/35 lg:hidden" />
-            <Dialog.Content className="fixed inset-y-0 left-0 z-50 w-[min(272px,86vw)] shadow-cx-raised focus:outline-none lg:hidden">
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-cx-nav-ink/30 lg:hidden" />
+            <Dialog.Content
+              className="fixed inset-y-0 left-0 z-50 w-[min(280px,86vw)] shadow-cx-raised focus:outline-none lg:hidden"
+              // The menu button lives in the top bar, not as this dialog's own trigger, so focus is handed back to it here.
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                document.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"][aria-label="Open navigation"]')?.focus();
+              }}
+            >
               <Dialog.Title className="sr-only">Navigation</Dialog.Title>
               <Dialog.Description className="sr-only">The places in the Clinic Portal you can open.</Dialog.Description>
-              <Sidebar clinic={clinic} currentUrl={url} onNavigate={() => setDrawerOpen(false)} />
+              <Sidebar clinic={clinic} links={portalLinks} currentUrl={url} onNavigate={() => setDrawerOpen(false)} inDrawer />
+              {/* A 44px target, centred in the drawer's 73px header beside the wordmark (which leaves it room). */}
               <Dialog.Close
                 aria-label="Close navigation"
-                className="absolute right-3 top-3.5 flex h-9 w-9 items-center justify-center rounded-md text-cx-nav-muted hover:bg-cx-nav-hover hover:text-cx-nav-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
+                className="absolute right-3 top-[14px] flex h-11 w-11 items-center justify-center rounded-md text-cx-nav-muted transition-colors hover:bg-cx-nav-canvas hover:text-cx-nav-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
               >
                 <X className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
               </Dialog.Close>

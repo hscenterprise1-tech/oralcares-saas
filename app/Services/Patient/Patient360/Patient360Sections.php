@@ -7,6 +7,7 @@ use App\BillingStatus;
 use App\ClinicPermission;
 use App\Models\Appointment;
 use App\Models\AttachedDocument;
+use App\Models\Branch;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicalOrderItem;
 use App\Models\DeletionRequest;
@@ -19,6 +20,7 @@ use App\Models\PatientBillingRefund;
 use App\Models\PatientFollowUp;
 use App\Models\PatientProcedure;
 use App\Models\PatientTimelineEvent;
+use App\Models\PatientVisit;
 use App\Models\PhysioCarePlan;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
@@ -27,13 +29,17 @@ use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\Communication\ManualShare;
 use App\Services\Governance\DeletionGovernance;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\PaymentService;
 use App\Services\TemplateService;
 use App\Services\Treatment\TreatmentReadModel;
 use App\Support\ClinicClock;
+use App\Support\ClinicFrontend;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -138,6 +144,132 @@ class Patient360Sections
             'follow_up_on' => $encounter->follow_up_on?->toDateString(),
             'url' => $user->can('view', $encounter) ? route('clinic.consultations.show', $encounter) : null,
         ]);
+    }
+
+    /** Visit statuses that mean the patient came (`patient_visits.visit_status`). */
+    public const ATTENDED_VISIT = ['checked_in', 'in_queue', 'waiting', 'with_doctor', 'in_progress', 'completed'];
+
+    /**
+     * Visits & History: every visit the patient made, and every booking they
+     * never came for, newest day first, a page at a time.
+     *
+     * - A visit is a `patient_visits` row (check-in writes it). A visit only
+     *   registered, never checked in, or cancelled, is listed as such and is
+     *   not counted as attended.
+     * - A booking is listed only when no visit came of it (no queue item
+     *   carries it): missed, cancelled, or still open on a day already past.
+     *   A booking that was checked in is part of its visit, not a second row.
+     * - Both are limited to the member's branches. The consultation behind a
+     *   visit is named only to clinical roles.
+     *
+     * @return array<string, mixed>
+     */
+    public function visits(Patient $patient, User $user, int $page): array
+    {
+        $today = ClinicClock::today()->toDateString();
+        $branchIds = $this->access->branchIds();
+        $inBranches = fn ($query, string $column) => $branchIds === null ? $query : $query->whereIn($column, $branchIds ?: [0]);
+        $open = [AppointmentStatus::Scheduled->value, AppointmentStatus::Confirmed->value, AppointmentStatus::Arrived->value, AppointmentStatus::CheckedIn->value];
+
+        $visits = DB::table('patient_visits')->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->tap(fn ($query) => $inBranches($query, 'branch_id'))
+            ->selectRaw("'visit' as kind, id, DATE(visit_date) as day, 0 as kind_order");
+        $bookings = DB::table('appointments')->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->tap(fn ($query) => $inBranches($query, 'branch_id'))
+            ->whereNotExists(fn ($query) => $query->selectRaw('1')->from('clinic_queue_items')->whereColumn('clinic_queue_items.appointment_id', 'appointments.id'))
+            ->where(fn ($query) => $query->whereIn('status', [AppointmentStatus::NoShow->value, AppointmentStatus::Cancelled->value])
+                ->orWhere(fn ($past) => $past->whereIn('status', $open)->where('scheduled_at', '<', $today))
+                // Marked done without a visit (older records): listed, never counted as a visit.
+                ->orWhere(fn ($done) => $done->whereIn('status', [AppointmentStatus::InConsultation->value, AppointmentStatus::Completed->value])->where('scheduled_at', '<', ClinicClock::now())))
+            ->selectRaw("'booking' as kind, id, DATE(scheduled_at) as day, 1 as kind_order");
+
+        $rows = DB::query()->fromSub($visits->unionAll($bookings), 'history')
+            ->orderByDesc('day')->orderBy('kind_order')->orderByDesc('id')
+            ->paginate(self::PER_PAGE, ['*'], 'page', $page);
+
+        $ids = collect($rows->items())->groupBy('kind')->map(fn ($items) => $items->pluck('id')->all());
+        $clinical = $this->access->canViewClinical($user);
+        $branch = $this->summary->clinicBranch($patient);
+        $visitModels = PatientVisit::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('id', $ids['visit'] ?? [])
+            ->with(['doctor' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'name']), 'branch' => $branch, 'caseNumber:id,case_number',
+                'queueItem' => fn ($q) => $q->withoutGlobalScopes()->with(['appointment' => fn ($a) => $a->withoutGlobalScopes()->select(['id', 'scheduled_at'])])])
+            ->when($clinical, fn ($q) => $q->with(['encounter' => fn ($e) => $e->withoutGlobalScopes()->select(['id', 'patient_visit_id', 'encounter_number', 'status', 'finalized_at', 'voided_at'])]))
+            ->get()->keyBy('id');
+        $bookingModels = Appointment::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('id', $ids['booking'] ?? [])
+            ->with(['practitioner' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'name']), 'branch' => $branch])
+            ->get()->keyBy('id');
+
+        // The day in Appointments is the one real page a row can open (for members who may see appointments).
+        $calendar = ClinicFrontend::available('clinic.appointments.index') && $this->access->canViewAppointments($user)
+            ? fn (string $day) => route('clinic.appointments.index', ['date' => $day]) : fn () => null;
+
+        $counts = [
+            'visits' => DB::table('patient_visits')->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+                ->tap(fn ($query) => $inBranches($query, 'branch_id'))->whereIn('visit_status', self::ATTENDED_VISIT)->count(),
+            'not_attended' => DB::query()->fromSub($bookings, 'b')->count(),
+        ];
+
+        return $this->page($rows, fn ($row) => $row->kind === 'visit'
+            ? $this->visitRow($visitModels[$row->id], $clinical, $calendar)
+            : $this->bookingRow($bookingModels[$row->id], $calendar), ['counts' => $counts]);
+    }
+
+    /** @return array<string, mixed> */
+    private function visitRow(PatientVisit $visit, bool $clinical, \Closure $calendar): array
+    {
+        $status = (string) ($visit->visit_status ?? 'registered');
+        $queue = $visit->queueItem;
+        // Check-in time is clinic wall-clock digits; a visit with no queue entry shows when it was written.
+        $at = $queue?->checked_in_at ?? ($visit->created_at ? ClinicClock::fromUtc($visit->created_at) : null);
+        $encounter = $clinical ? $visit->encounter : null;
+
+        return [
+            'kind' => 'visit',
+            'id' => $visit->id,
+            'date' => $visit->visit_date?->toDateString(),
+            'time_label' => $at?->format('h:i A'),
+            'practitioner' => $visit->doctor?->name,
+            'branch' => $visit->branch?->name,
+            'status' => $status,
+            'attended' => in_array($status, self::ATTENDED_VISIT, true),
+            'case_number' => $visit->caseNumber?->case_number,
+            'registration_type' => $visit->registration_type?->value,
+            'visit_type' => $visit->visit_type_key ? Str::headline($visit->visit_type_key) : null,
+            'reason' => $visit->visit_reason,
+            'booked_for' => $queue?->appointment?->scheduled_at?->format('h:i A'),
+            'consultation' => $encounter ? [
+                'number' => $encounter->encounter_number,
+                'status' => $encounter->voided_at ? 'voided' : ($encounter->finalized_at ? 'signed' : 'open'),
+                // The consultation screen is not built yet (`ClinicFrontend`).
+                'url' => null,
+            ] : null,
+            'calendar_url' => $queue?->appointment ? $calendar($visit->visit_date?->toDateString() ?? '') : null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function bookingRow(Appointment $appointment, \Closure $calendar): array
+    {
+        $status = $appointment->status?->value;
+
+        return [
+            'kind' => 'booking',
+            'id' => $appointment->id,
+            'date' => $appointment->scheduled_at->format('Y-m-d'),
+            'time_label' => $appointment->scheduled_at->format('h:i A'),
+            'practitioner' => $appointment->practitioner?->name,
+            'branch' => $appointment->branch?->name,
+            // Why it is not a visit: missed, cancelled, never checked in, or marked done with no visit recorded.
+            'status' => match ($status) {
+                AppointmentStatus::NoShow->value => 'missed',
+                AppointmentStatus::Cancelled->value => 'cancelled',
+                AppointmentStatus::InConsultation->value, AppointmentStatus::Completed->value => 'no_visit_recorded',
+                default => 'not_attended',
+            },
+            'attended' => false,
+            'type' => $appointment->appointment_type,
+            'calendar_url' => $calendar($appointment->scheduled_at->format('Y-m-d')),
+        ];
     }
 
     /**
@@ -263,7 +395,7 @@ class Patient360Sections
                 'timing' => $line->timing ? (config("clinic_prescriptions.timings.{$line->timing}") ?? $line->timing) : null,
                 'instructions' => $line->instructions,
             ])->values(),
-            'view_url' => $rx->encounter_id ? route('clinic.consultations.show', $rx->encounter_id) : null,
+            'view_url' => $rx->encounter_id && ClinicFrontend::available('clinic.consultations.show') ? route('clinic.consultations.show', $rx->encounter_id) : null,
             'print_url' => $user->can('print', $rx) ? route('clinic.prescriptions.print', $rx) : null,
             'pdf_url' => $user->can('print', $rx) ? route('clinic.prescriptions.print', [$rx, 'download' => 1]) : null,
         ]);
@@ -328,7 +460,8 @@ class Patient360Sections
                 'attachments' => $item->documents->filter->isCleared()->map(fn (AttachedDocument $doc) => [
                     'name' => $doc->file_name, 'url' => route('clinic.patients.documents.download', [$patient->id, $doc->id]),
                 ])->values(),
-                'url' => route('clinic.orders.show', $item->clinical_order_id),
+                // Linked once the orders page is built (`ClinicFrontend`).
+                'url' => ClinicFrontend::available('clinic.orders.show') ? route('clinic.orders.show', $item->clinical_order_id) : null,
             ]),
             'counts' => [
                 'pending' => $base()->whereIn('status', [ClinicalOrderItem::ORDERED, ClinicalOrderItem::COLLECTED])->count(),
@@ -376,8 +509,16 @@ class Patient360Sections
     public function bill(PatientBilling $bill, User $user): array
     {
         $bill->load(['items', 'payments', 'refunds', 'doctor:id,name']);
-        $collect = $user->hasClinicPermission(ClinicPermission::PaymentCollect);
-        $refund = $user->hasClinicPermission(ClinicPermission::RefundProcess);
+        // Offered only as the server will allow them: the permission held at the
+        // bill's own branch, and a refund by the owner only in Owner Mode.
+        $branch = Branch::query()->withoutGlobalScopes()->where('clinic_id', $bill->clinic_id)->find($bill->branch_id);
+        $ownerMode = app(OwnerMode::class);
+        $collect = $branch !== null && $user->hasClinicPermissionAt(ClinicPermission::PaymentCollect, $branch);
+        // The owner refunds and adjusts only in Owner Mode (T1); outside it the
+        // actions are withheld and the page says why (`owner_mode_needed`).
+        $ownerLocked = $ownerMode->isOwner() && ! $ownerMode->authorized();
+        $refund = $branch !== null && $user->hasClinicPermissionAt(ClinicPermission::RefundProcess, $branch) && ! $ownerLocked;
+        $adjust = $branch !== null && $user->hasClinicPermissionAt(ClinicPermission::DiscountApply, $branch) && ! $ownerLocked;
         $live = $bill->status !== BillingStatus::Cancelled;
 
         return [
@@ -403,6 +544,9 @@ class Patient360Sections
             'actions' => [
                 'pay_url' => $collect && $live && (float) $bill->outstanding_balance > 0 ? route('clinic.billing.payments.store', $bill) : null,
                 'refund_url' => $refund && $live && (float) $bill->paid_amount - (float) $bill->refunded_amount > 0 ? route('clinic.billing.refunds.store', $bill) : null,
+                // A concession or write-off on what is still due (`PaymentService::recordAdjustment`).
+                'adjust_url' => $adjust && $live && (float) $bill->outstanding_balance > 0 ? route('clinic.billing.adjustments.store', $bill) : null,
+                'owner_mode_needed' => $ownerLocked && $live,
                 'print_url' => route('clinic.billing.bills.print', $bill),
                 'checkout_url' => $bill->encounter_id ? route('clinic.billing.checkout', $bill->encounter_id) : null,
                 // Voiding a bill is governed: the owner acts, anyone else asks.
@@ -447,7 +591,16 @@ class Patient360Sections
                 'download_url' => $doc->isCleared() ? route('clinic.patients.documents.download', [$patient->id, $doc->id]) : null,
                 'remove_mode' => $removeMode,
             ];
-        });
+        }, [
+            // Uploading needs documents.manage (the route checks it again). Intraoral photos only where Dental is part of the plan.
+            'upload' => $user->hasClinicPermission(ClinicPermission::DocumentsManage) ? [
+                'url' => route('clinic.patients.documents.store', $patient->id),
+                'types' => collect(self::DOCUMENT_TYPES)->except($this->policy->field($user, $patient, 'dental') ? [] : ['intraoral_photo'])
+                    ->except($clinicalDocs ? [] : $clinicalTypes)->map(fn (string $label, string $key) => ['value' => $key, 'label' => $label])->values()->all(),
+                'max_mb' => 10,
+                'accept' => '.pdf,.jpg,.jpeg,.png,.webp',
+            ] : null,
+        ]);
     }
 
     /**
@@ -471,7 +624,7 @@ class Patient360Sections
                 'status' => $followUp->status,
                 'overdue' => $followUp->isOpen() && $followUp->due_on->toDateString() < $today,
                 'source' => $followUp->encounter?->encounter_number,
-                'source_url' => $followUp->encounter_id && $user->can('view', $followUp->encounter) ? route('clinic.consultations.show', $followUp->encounter_id) : null,
+                'source_url' => $followUp->encounter_id && ClinicFrontend::available('clinic.consultations.show') && $user->can('view', $followUp->encounter) ? route('clinic.consultations.show', $followUp->encounter_id) : null,
                 'booked_for' => $followUp->appointment?->scheduled_at?->format('D, d M Y h:i A'),
                 'actions' => $manage && $followUp->isOpen() ? [
                     'reschedule_url' => route('clinic.patients.follow-ups.update', [$patient->id, $followUp->id]),
@@ -525,6 +678,11 @@ class Patient360Sections
                 ];
             }),
             'provider_connected' => (bool) $provider,
+            // What this member may send by hand now, with the text and any reason WhatsApp cannot (`ManualShare`).
+            'share' => [
+                'url' => route('clinic.patients.messages.share', $patient->id),
+                'options' => app(ManualShare::class)->options($patient, $user),
+            ],
         ];
     }
 
@@ -597,7 +755,7 @@ class Patient360Sections
         return [
             ...$this->page($requests, fn (DeletionRequest $request) => [
                 'id' => $request->id,
-                'action' => ($this->governance->actions()[$request->action_type] ?? null)?->label() ?? $request->action_type,
+                'action' => $this->governance->labelFor($request->action_type),
                 'target' => $request->target_label,
                 'reason' => $request->reason,
                 'status' => $request->isExpired() ? DeletionRequest::EXPIRED : $request->status,
@@ -719,6 +877,9 @@ class Patient360Sections
             'endodontic_started', 'endodontic_status_changed', 'implant_started', 'implant_status_changed', 'orthodontic_started', 'orthodontic_status_changed' => ($c['label'] ?? 'Dental record').(! empty($c['status']) ? ' — '.str_replace('_', ' ', $c['status']) : '').(! empty($c['encounter_number']) ? " ({$c['encounter_number']})" : '').'.',
             'orthodontic_visit_recorded' => 'Adjustment in '.($c['encounter_number'] ?? 'a consultation').(! empty($c['phase']) ? " · {$c['phase']} phase" : '').'.',
             'lab_order_created', 'lab_case_send', 'lab_case_start', 'lab_case_receive', 'lab_case_remake', 'lab_case_fit', 'lab_case_complete', 'lab_case_cancel' => ($c['lab_order_number'] ?? 'Lab case').(! empty($c['restoration']) ? " · {$c['restoration']}" : '').(! empty($c['teeth']) ? ' · teeth '.implode(', ', (array) $c['teeth']) : '').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
+            'patient_archive_cleared' => 'Patient archiving was removed from OralCares; this record is a current patient again.',
+            'patient_death_recorded' => 'Date of death '.($c['date_of_death'] ?? '').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
+            'patient_death_corrected' => 'The recorded death'.(! empty($c['previous_date_of_death']) ? " ({$c['previous_date_of_death']})" : '').' was corrected'.(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
             'patient_archived', 'document_removed', 'encounter_voided', 'tooth_entry_voided', 'dental_record_voided' => ($c['label'] ?? 'Record').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
             default => Str::headline($event->event_type).'.',
         };
@@ -814,7 +975,11 @@ class Patient360Sections
         'follow_up_completed' => ['follow_up', 'Follow-up completed'],
         'follow_up_cancelled' => ['follow_up', 'Follow-up cancelled'],
         'message_queued' => ['communication', 'Message to the patient'],
+        // History from before patient archiving was removed (2026-10-25); kept so old timelines still read.
         'patient_archived' => ['governance', 'Patient archived'],
+        'patient_archive_cleared' => ['governance', 'Returned to current patients'],
+        'patient_death_recorded' => ['governance', 'Death recorded'],
+        'patient_death_corrected' => ['governance', 'Death record corrected'],
         'document_removed' => ['governance', 'Document removed'],
         'encounter_voided' => ['consultation', 'Consultation voided'],
         'tooth_entry_voided' => ['dental', 'Chart entry voided'],

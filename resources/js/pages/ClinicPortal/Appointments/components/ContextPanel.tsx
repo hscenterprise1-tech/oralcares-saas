@@ -56,7 +56,7 @@ export function ContextPanel({
               <button
                 type="button"
                 onClick={() => onBook({})}
-                className="flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-clinic-ink px-3 py-2.5 text-[12.5px] font-semibold text-white hover:bg-clinic-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
+                className="flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#1769AA] px-3 py-2.5 text-[12.5px] font-semibold text-white hover:bg-[#135A93] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong"
               >
                 <CalendarPlus className="h-4 w-4 shrink-0" aria-hidden="true" /> Book
               </button>
@@ -86,7 +86,7 @@ export function ContextPanel({
                     onClick={() => onPickStatus(active ? null : item.status)}
                     className={cn(
                       'flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
-                      active ? 'bg-clinic-ink text-white' : 'bg-clinic-canvas text-clinic-ink hover:bg-clinic-inset',
+                      active ? 'bg-cx-nav-active font-semibold text-cx-nav-teal-strong ring-1 ring-inset ring-cx-nav-teal/40' : 'bg-clinic-canvas text-clinic-ink hover:bg-clinic-inset',
                     )}
                   >
                     <span className="flex min-w-0 items-center gap-2">

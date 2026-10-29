@@ -12,6 +12,8 @@ use App\Models\Patient;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
 use App\Models\WhatsAppTemplate;
+use App\Services\Communication\PatientMessageEligibility;
+use App\Services\NotificationService;
 use App\Services\Provisioning\EntitlementResolver;
 use App\Services\Security\SecurityAudit;
 use App\Support\Specialty\SpecialtyRegistry;
@@ -237,6 +239,19 @@ class ClinicWhatsApp
             $connection = $this->connectionFor($clinic, $settings);
             $template = $connection && $message->automation_key ? $this->templateFor($connection, $clinic, $message->automation_key) : null;
             $patient = $message->patient_id ? Patient::query()->withoutGlobalScopes()->find($message->patient_id) : null;
+
+            // A patient who may no longer be contacted is not retried: the
+            // message and its patient message become `skipped` with the reason
+            // (a lifecycle stop, not a delivery failure).
+            if ($message->patient_id && ($lifecycle = app(PatientMessageEligibility::class)->blockReason($patient)) !== null) {
+                $message->update(['status' => ClinicWhatsAppMessage::SKIPPED, 'failure_reason' => $lifecycle]);
+                if ($message->notification_id) {
+                    Notification::query()->whereKey($message->notification_id)->update(['status' => NotificationService::SKIPPED, 'failed_reason' => $lifecycle]);
+                }
+
+                return [$message, false];
+            }
+
             $skip = match (true) {
                 ! $message->automation_key || ! $this->carries($clinic, $message->automation_key) => 'WhatsApp is off for this message.',
                 $connection === null => 'No active WhatsApp number for this clinic.',
@@ -302,6 +317,44 @@ class ClinicWhatsApp
         $values = [...$placeholders, 'clinic' => $clinic->name];
 
         return array_map(fn (string $name) => (string) ($values[$name] ?? ''), (array) $definition['variables']);
+    }
+
+    /**
+     * Why WhatsApp cannot send this message to this patient now, in the
+     * words `deliver()` records when it skips; null when it can. Used before
+     * a member sends one by hand, so nothing is promised that will not go.
+     */
+    public function blockedReason(Clinic $clinic, Patient $patient, string $code): ?string
+    {
+        $settings = $this->settings($clinic);
+        $connection = $this->connectionFor($clinic, $settings);
+
+        return match (true) {
+            ! array_key_exists($code, self::catalog()) || ! $this->carries($clinic, $code) => 'WhatsApp is off for this message.',
+            $connection === null => 'No active WhatsApp number for this clinic.',
+            $this->templateFor($connection, $clinic, $code) === null => 'No approved template for this message.',
+            self::normalizePhone($patient->phone) === null => 'The patient has no mobile number.',
+            ! $this->agreed($patient, $settings) => 'The patient has not agreed to WhatsApp messages.',
+            default => null,
+        };
+    }
+
+    /**
+     * The text the patient would receive: the approved template's body (or
+     * the catalogue's while none is approved) with the values filled in.
+     *
+     * @param  array<string, string>  $placeholders
+     */
+    public function preview(Clinic $clinic, string $code, array $placeholders): string
+    {
+        $definition = self::catalog()[$code] ?? null;
+        if (! $definition) {
+            return '';
+        }
+        $connection = $this->connectionFor($clinic);
+        $template = $connection ? $this->templateFor($connection, $clinic, $code) : null;
+
+        return self::render($template?->body ?? (string) ($definition['body'] ?? ''), $this->variables($definition, $placeholders, $clinic));
     }
 
     /** @param list<string> $variables */

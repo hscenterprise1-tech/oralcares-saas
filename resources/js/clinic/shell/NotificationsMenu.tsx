@@ -107,7 +107,7 @@ export function NotificationsMenu({ links }: { links: PortalLinks }) {
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
         aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full text-cx-nav-muted hover:bg-cx-nav-bg hover:text-cx-nav-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white text-cx-nav-muted shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-inset ring-[#DCE6F3] motion-safe:transition-[color,box-shadow] motion-safe:duration-150 hover:text-cx-nav-blue hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),0_8px_18px_-12px_rgba(23,59,96,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-blue data-[state=open]:text-cx-nav-blue data-[state=open]:ring-cx-nav-blue/40"
       >
         <Bell className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
         {unread ? (

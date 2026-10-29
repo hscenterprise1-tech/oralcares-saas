@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
+use App\Models\ClinicQueueItem;
 use App\Models\ClinicRoom;
 use App\Models\Patient;
 use App\Models\PatientSessionPackage;
@@ -17,6 +18,10 @@ use App\Models\PhysioExercise;
 use App\Models\PhysioSession;
 use App\Models\PhysioSessionExercise;
 use App\Models\User;
+use App\QueueItemStatus;
+use App\Services\Clinical\EncounterWorkspace;
+use App\Services\Patient\PatientCareGuard;
+use App\Services\QueueStateMachine;
 use App\Services\Security\SecurityAudit;
 use App\Services\Treatment\LegacyTreatmentMirror;
 use App\Services\Treatment\PatientTreatments;
@@ -123,6 +128,8 @@ class PhysioRecord
         if ($encounter && ($encounter->patient_id !== $treatment->patient_id || $encounter->clinic_id !== $treatment->clinic_id)) {
             throw new InvalidArgumentException('The consultation is for a different patient.');
         }
+        // A new plan of care is new care: refused once the patient is recorded as deceased.
+        app(PatientCareGuard::class)->assertCanReceiveCare(Patient::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)->findOrFail($treatment->patient_id));
 
         return DB::transaction(function () use ($treatment, $data, $exercises, $therapist, $encounter) {
             $treatment = $this->lockOpenTreatment($treatment);
@@ -256,6 +263,8 @@ class PhysioRecord
             throw new InvalidArgumentException('The consultation is for a different patient.');
         }
         $this->access->assertCanUseConsultation($encounter);
+        // A new session is new care, even in a consultation opened before the death was recorded.
+        app(PatientCareGuard::class)->assertEncounterCanTakeNewCare($encounter);
 
         return DB::transaction(function () use ($treatment, $encounter, $therapist) {
             $encounter = $this->lockOpen($encounter);
@@ -345,37 +354,115 @@ class PhysioRecord
         $treatment = $this->sessionTreatment($session);
         $this->assertTreatmentWork($treatment, 'soap_notes', $therapist, $by);
 
-        return DB::transaction(function () use ($session, $packageId, $therapist, $by) {
-            $locked = PhysioSession::query()->withoutGlobalScopes()->whereKey($session->id)->lockForUpdate()->firstOrFail();
-            if ($locked->status === PhysioSession::COMPLETED) {
-                return $locked; // idempotent retry
-            }
-            if ($locked->status !== PhysioSession::DRAFT) {
-                throw new DomainException('A reversed session cannot be completed again.');
-            }
-            $this->lockOpen(ClinicalEncounter::query()->withoutGlobalScopes()->findOrFail($locked->encounter_id));
-            $treatment = $this->lockOpenTreatment(PatientTreatment::query()->withoutGlobalScopes()->findOrFail($locked->patient_treatment_id));
+        return DB::transaction(fn () => $this->completeLocked($session, $packageId, $therapist, $therapist, $by));
+    }
 
-            if ($packageId !== null) {
-                $this->packages->consume($locked, $packageId, $therapist, $by);
-            }
-            $number = (int) PhysioSession::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)
-                ->where('patient_treatment_id', $treatment->id)->max('session_number') + 1;
-            $locked->forceFill([
-                'status' => PhysioSession::COMPLETED,
-                'session_number' => $number,
-                'package_id' => $packageId,
-                'completed_at' => now(),
-                'completed_by' => $therapist->id,
-            ])->save();
-            $this->treatments->refreshSessionCount($treatment);
+    /**
+     * The front desk confirming that a session took place, for a
+     * practitioner who need not sign in: the patient was in today's queue
+     * with that practitioner, and the session of this treatment is recorded
+     * as given by them, completed — numbered and, when a package of this
+     * treatment is named, paid from it — exactly as `completeSession` would.
+     *
+     * What it never does: write a note, a diagnosis or an exercise, or sign
+     * the consultation. The consultation is opened in the practitioner's
+     * name only as the container the session belongs to; the desk member is
+     * recorded as the one who confirmed it (`completed_by`, audit). When the
+     * desk opened that consultation, the queue entry is finished here too (no
+     * one else will finish it); a practitioner's own open consultation is
+     * left for them to finish. A retry returns the session already confirmed.
+     */
+    public function confirmAtDesk(ClinicQueueItem $item, PatientTreatment $treatment, ?int $packageId, ClinicEmployee $confirmer, User $by): PhysioSession
+    {
+        $extensions = $this->specialties->get((string) $treatment->specialty_key)['extensions'] ?? [];
+        if (! in_array('soap_notes', $extensions, true)) {
+            throw new DomainException('This treatment\'s specialty does not use physiotherapy records.');
+        }
+        $practitioner = $item->doctor_id ? ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)->find($item->doctor_id) : null;
+        if (! $practitioner) {
+            throw new DomainException('Choose the therapist who gave the session first.');
+        }
+        $this->access->assertCanConfirmSession($by, $treatment, $practitioner);
+        $visit = $item->patientVisit()->withoutGlobalScopes()->first();
+        if (! $visit || $visit->patient_id !== $treatment->patient_id || $visit->clinic_id !== $treatment->clinic_id) {
+            throw new InvalidArgumentException('That treatment is not this patient\'s.');
+        }
 
-            $this->timeline($locked->clinic_id, $locked->patient_id, 'physio_session_completed', [
-                'patient_treatment_id' => $treatment->id, 'title' => $treatment->title, 'session_number' => $number, 'package_id' => $packageId,
+        return DB::transaction(function () use ($item, $treatment, $packageId, $confirmer, $by, $practitioner) {
+            $item = ClinicQueueItem::query()->withoutGlobalScopes()->whereKey($item->id)->lockForUpdate()->firstOrFail();
+            $existing = $item->encounter_id ? PhysioSession::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)
+                ->where('encounter_id', $item->encounter_id)->where('patient_treatment_id', $treatment->id)->first() : null;
+            if ($existing?->status === PhysioSession::COMPLETED) {
+                return $existing; // idempotent retry
+            }
+            if (! in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called, QueueItemStatus::InConsultation], true)) {
+                throw new DomainException('This patient is no longer in today\'s queue.');
+            }
+            app(PatientCareGuard::class)->assertCanReceiveCare(Patient::query()->withoutGlobalScopes()->findOrFail($treatment->patient_id));
+
+            $deskOpened = $item->encounter_id === null;
+            $encounter = app(EncounterWorkspace::class)->startFromQueue($item, $practitioner);
+            $session = $existing ?? PhysioSession::query()->withoutGlobalScopes()->create([
+                'clinic_id' => $treatment->clinic_id,
+                'patient_id' => $treatment->patient_id,
+                'encounter_id' => $encounter->id,
+                'patient_treatment_id' => $treatment->id,
+                'care_plan_id' => $this->activePlanQuery($treatment)->value('id'),
+                'therapist_id' => $practitioner->id,
+                'status' => PhysioSession::DRAFT,
             ]);
+            $session = $this->completeLocked($session, $packageId, $practitioner, $confirmer, $by);
 
-            return $locked;
+            $this->audit->record('physio.session.confirmed_at_desk', $session, [
+                'patient_treatment_id' => $treatment->id, 'session_number' => $session->session_number, 'package_id' => $packageId,
+                'practitioner_id' => $practitioner->id, 'confirmed_by' => $confirmer->id, 'queue_item_id' => $item->id, 'encounter_id' => $encounter->id,
+            ], ['clinic_id' => $treatment->clinic_id]);
+
+            if ($deskOpened) {
+                app(QueueStateMachine::class)->complete($item->fresh(), $confirmer, 'Session confirmed at the desk');
+            }
+
+            return $session;
         });
+    }
+
+    /**
+     * Complete a draft session, inside the caller's transaction: numbered
+     * within its treatment, paid from the named package (which must be this
+     * treatment's), counted. `$practitioner` gave the session (the package
+     * ledger's user); `$completedBy` recorded the completion.
+     */
+    private function completeLocked(PhysioSession $session, ?int $packageId, ClinicEmployee $practitioner, ClinicEmployee $completedBy, User $by): PhysioSession
+    {
+        $locked = PhysioSession::query()->withoutGlobalScopes()->whereKey($session->id)->lockForUpdate()->firstOrFail();
+        if ($locked->status === PhysioSession::COMPLETED) {
+            return $locked; // idempotent retry
+        }
+        if ($locked->status !== PhysioSession::DRAFT) {
+            throw new DomainException('A reversed session cannot be completed again.');
+        }
+        $this->lockOpen(ClinicalEncounter::query()->withoutGlobalScopes()->findOrFail($locked->encounter_id));
+        $treatment = $this->lockOpenTreatment(PatientTreatment::query()->withoutGlobalScopes()->findOrFail($locked->patient_treatment_id));
+
+        if ($packageId !== null) {
+            $this->packages->consume($locked, $packageId, $practitioner, $by);
+        }
+        $number = (int) PhysioSession::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)
+            ->where('patient_treatment_id', $treatment->id)->max('session_number') + 1;
+        $locked->forceFill([
+            'status' => PhysioSession::COMPLETED,
+            'session_number' => $number,
+            'package_id' => $packageId,
+            'completed_at' => now(),
+            'completed_by' => $completedBy->id,
+        ])->save();
+        $this->treatments->refreshSessionCount($treatment);
+
+        $this->timeline($locked->clinic_id, $locked->patient_id, 'physio_session_completed', [
+            'patient_treatment_id' => $treatment->id, 'title' => $treatment->title, 'session_number' => $number, 'package_id' => $packageId,
+        ]);
+
+        return $locked;
     }
 
     /**

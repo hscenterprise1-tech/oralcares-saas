@@ -15,15 +15,30 @@ export type DirectoryPatient = {
   id: number;
   uhid: string | null;
   name: string;
+  /** The full number only for members whose work is contacting patients; null otherwise. */
   phone: string | null;
+  /** The last four digits, sent to everyone who may see the patient. */
+  phone_last_digits: string | null;
   email: string | null;
   gender: string | null;
   age: number | null;
+  /** The stored lifecycle value. Only deceased and merged are shown. */
   status: string;
+  /** The assigned doctor (`current_practitioner_id`); null when nobody is assigned. */
+  assigned_doctor: { id: number; name: string; at_clinic: boolean } | null;
   specialties: string[];
   active_care: ActiveCare[];
   last_activity_at: string | null;
+  /** The branch of the last activity, among the member's own branches. */
   last_branch: string | null;
+  /** How many more of the member's branches the patient has been seen at. */
+  other_branch_count: number;
+  /** In the Today view: today's visit, at one of the member's branches. */
+  today_visit: { branch: string | null; status: string } | null;
+  /** The latest attended visit's case (`patient_visits.registration_type`): new on the first visit, repeat after; null before any visit. */
+  case_type: 'new' | 'repeat' | null;
+  /** From `patient_treatments`: ongoing while any treatment is open, complete once one is done and none open; null otherwise. */
+  treatment_progress: 'ongoing' | 'complete' | null;
   critical_alerts: number;
   registered_on: string | null;
 };
@@ -35,13 +50,19 @@ export type DirectoryPage = {
   per_page: number;
 };
 
+export type DirectoryView = 'mine' | 'today' | 'all';
+
+export type DirectoryAudience = 'owner' | 'doctor' | 'reception' | 'staff';
+
 export type DirectoryFilters = {
   q: string;
   status: string;
   specialty: string;
   branch_id: string;
+  /** A doctor's id, or `none` for patients nobody is assigned to. */
+  practitioner_id: string;
   active_care: string;
-  tab: 'mine' | 'all';
+  view: DirectoryView;
 };
 
 export type DirectoryProps = {
@@ -49,8 +70,15 @@ export type DirectoryProps = {
   filters: DirectoryFilters;
   options: {
     specialties: { key: string; label: string }[];
+    /** Lifecycle choices besides the default "Current patients". */
     statuses: { value: string; label: string }[];
+    /** The views offered to this member, the default first. */
+    views: DirectoryView[];
+    doctors: { id: number; name: string }[];
   };
+  audience: DirectoryAudience;
+  /** The clinic's local date (YYYY-MM-DD), what "Today" means. */
+  today: string;
   isPractitioner: boolean;
   can: { create: boolean };
   links: {

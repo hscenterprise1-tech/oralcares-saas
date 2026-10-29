@@ -10,9 +10,8 @@ class ClinicalDomainValidationService
     public function validatePatientStatusTransition(string $old, string $new): bool
     {
         $allowed = [
-            'active' => ['inactive', 'archived'],
-            'inactive' => ['active', 'archived'],
-            'archived' => ['active'],
+            'active' => ['inactive'],
+            'inactive' => ['active'],
         ];
 
         return in_array($new, $allowed[$old] ?? []);

@@ -107,9 +107,9 @@ test('a clinician manages clinical entries, resolving rather than deleting, but 
     $asDoctor()->put('/clinic/admin/settings/patient-fields', ['email' => 'required'])->assertForbidden();
 });
 
-test('clinical entries of an archived patient, or another clinic\'s, cannot be changed', function () {
-    $archived = $this->f->patient('Old', 'Record', ['status' => 'archived']);
-    ($this->asOwner)()->putJson("/clinic/patients/{$archived->id}/clinical-entries/allergy", ['entries' => []])->assertForbidden();
+test('clinical entries of a merged patient, or another clinic\'s, cannot be changed', function () {
+    $merged = $this->f->patient('Old', 'Record', ['status' => 'merged']);
+    ($this->asOwner)()->putJson("/clinic/patients/{$merged->id}/clinical-entries/allergy", ['entries' => []])->assertForbidden();
 
     $other = ReceptionFixture::make('other-clinic');
     $theirs = $other->patient();
@@ -267,7 +267,7 @@ test('a failed check-in leaves no patient, visit, queue entry, enrolment, activi
     expect($counts())->toBe($before);
 });
 
-test('check-in refuses a patient already queued, an archived record, an unknown specialty, and members without the queue permission', function () {
+test('check-in refuses a patient already queued, a merged record, an unknown specialty, and members without the queue permission', function () {
     $patient = $this->f->patient();
     $checkIn = fn (array $body, $as = null) => ($as ?? ($this->asReception)())->postJson('/clinic/reception/check-in', $body);
 
@@ -275,8 +275,8 @@ test('check-in refuses a patient already queued, an archived record, an unknown 
     $checkIn(['patient_id' => $patient->id, 'visit_specialty' => 'dental'])->assertStatus(422)->assertJsonValidationErrors('patient_id');
     expect(ClinicQueueItem::count())->toBe(1)->and(PatientVisit::count())->toBe(1);
 
-    $archived = $this->f->patient('Old', 'Record', ['status' => 'archived']);
-    $checkIn(['patient_id' => $archived->id])->assertStatus(422);
+    $merged = $this->f->patient('Old', 'Record', ['status' => 'merged']);
+    $checkIn(['patient_id' => $merged->id])->assertStatus(422);
 
     $other = $this->f->patient('Third', 'One');
     $checkIn(['patient_id' => $other->id, 'visit_specialty' => 'ophthalmology'])->assertStatus(422)->assertJsonValidationErrors('visit_specialty');

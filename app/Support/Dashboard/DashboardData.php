@@ -3,6 +3,8 @@
 namespace App\Support\Dashboard;
 
 use App\BillingStatus;
+use App\ClinicPermission;
+use App\EmploymentStatus;
 use App\Models\Clinic;
 use App\Models\ClinicEmployee;
 use App\Models\PatientVisit;
@@ -10,6 +12,8 @@ use App\QueueItemStatus;
 use App\Services\Clinical\DoctorToday;
 use App\Services\ClinicContext;
 use App\Services\Reception\FrontDesk;
+use App\Services\ResourceLimitService;
+use App\Support\ClinicAccess\BranchReach;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\ClinicClock;
 use App\Support\ClinicFrontend;
@@ -328,6 +332,44 @@ class DashboardData
             }
         }
 
+        // Spending waiting on someone: every pending expense (deciding is
+        // someone other than its recorder, `ClinicExpenses`), and every
+        // approved one not yet paid. Counted as the Expenses list will show
+        // them, so the figure and the list it opens agree.
+        if ($this->access->allows(['permissions' => ['expense.approve'], 'workspace' => ['command_center']])) {
+            $pending = $this->expensesInReach()->where('status', 'pending')->count();
+            if ($pending > 0) {
+                $items[] = ['id' => 'expenses_to_decide', 'primary' => 'Expenses to decide', 'secondary' => 'Recorded, waiting for an approver', 'count' => $pending, 'status' => 'pending', 'href' => $this->link('clinic.expenses.index', ['status' => 'pending', 'period' => 'all'])];
+            }
+        }
+        if ($this->access->allows(['permissions' => ['expense.manage'], 'workspace' => ['command_center']])) {
+            $unpaid = $this->expensesInReach()->where('status', 'approved')->count();
+            if ($unpaid > 0) {
+                $items[] = ['id' => 'expenses_to_pay', 'primary' => 'Expenses to pay', 'secondary' => 'Approved, not yet paid', 'count' => $unpaid, 'status' => 'pending', 'href' => $this->link('clinic.expenses.index', ['status' => 'approved', 'period' => 'all'])];
+            }
+        }
+
+        // Payroll: a month opened but not finalised, and finalised pay not yet paid.
+        if ($this->access->allows(['permissions' => ['payroll.manage'], 'workspace' => ['command_center']])) {
+            $drafts = DB::table('clinic_payroll_periods')->where('clinic_id', $this->clinic()->id)->where('status', 'draft')->count();
+            if ($drafts > 0) {
+                $items[] = ['id' => 'payroll_to_finalise', 'primary' => 'Payroll to finalise', 'secondary' => 'A month is open, not yet finalised', 'count' => $drafts, 'status' => 'pending', 'href' => $this->link('clinic.payroll.index')];
+            }
+            $unpaidSlips = DB::table('clinic_payroll_entries')->where('clinic_id', $this->clinic()->id)->where('status', 'approved')->count();
+            if ($unpaidSlips > 0) {
+                $items[] = ['id' => 'payslips_to_pay', 'primary' => 'Payslips to pay', 'secondary' => 'Finalised, not yet paid', 'count' => $unpaidSlips, 'status' => 'pending', 'href' => $this->link('clinic.payroll.index')];
+            }
+        }
+
+        // Patient messages that failed in the last 7 days, for whoever runs the clinic's WhatsApp.
+        if ($this->access->allows(['permissions' => ['settings.manage'], 'workspace' => ['command_center']])) {
+            $failed = DB::table('clinic_whatsapp_messages')->where('clinic_id', $this->clinic()->id)->where('status', 'failed')
+                ->where('created_at', '>=', now()->subDays(7))->count();
+            if ($failed > 0) {
+                $items[] = ['id' => 'messages_failed', 'primary' => 'Messages not delivered', 'secondary' => 'WhatsApp messages that failed in the last 7 days', 'count' => $failed, 'status' => 'overdue', 'href' => $this->link('clinic.whatsapp.index', ['status' => 'failed'])];
+            }
+        }
+
         // Deletion and other governed requests wait for the owner.
         if ($this->access->isOwner()) {
             $count = DB::table('deletion_requests')->where('clinic_id', $this->clinic()->id)->whereIn('status', ['pending', 'clarification_requested'])->count();
@@ -337,6 +379,26 @@ class DashboardData
         }
 
         return ['total' => (int) array_sum(array_column($items, 'count')), 'items' => $items];
+    }
+
+    /**
+     * The clinic's expenses as the Expenses list shows them to this member
+     * (`BranchReach` for `expense.manage`, the list's own rule), so a count and
+     * the list it opens agree: the whole clinic for the owner; otherwise the
+     * branches where they hold the permission, and clinic-wide expenses only
+     * for a member working across every branch.
+     */
+    private function expensesInReach(): Builder
+    {
+        $query = DB::table('clinic_expenses')->where('clinic_id', $this->clinic()->id);
+        $membership = $this->context->membership();
+        $user = auth()->user();
+        if ($membership === null || $user === null) {
+            return $query->whereRaw('1 = 0');
+        }
+        BranchReach::for($membership, $user, ClinicPermission::ExpenseManage)->apply($query, 'clinic_expenses.branch_id');
+
+        return $query;
     }
 
     /**
@@ -427,7 +489,97 @@ class DashboardData
                 $money('overdue', 'Overdue', (float) (clone $open)->where('issued_at', '<', $overdueBefore)->sum('outstanding_balance'), 'red'),
                 $money('refunds_month', 'Refunds this month', (float) $this->refunds($monthStart, $today, clinicWide: true)->sum('amount'), 'slate'),
                 $money('discounts_month', 'Discounts this month', (float) $billed($monthStart, $today)->sum('discount_amount'), 'slate'),
+                // Balances written off or conceded after billing (`PaymentService::recordAdjustment`).
+                $money('adjustments_month', 'Adjusted this month', (float) DB::table('patient_billing_adjustments')->where('clinic_id', $clinicId)
+                    ->where('created_at', '>=', $this->dayStart($monthStart))->where('created_at', '<', $this->dayStart($today->addDay()))->sum('amount'), 'slate'),
+                // Spending, for whoever may see expenses: approved or paid this month, and what is approved but not yet paid.
+                ...($this->access->allows(['permissions' => ['expense.manage']]) ? [
+                    $money('expenses_month', 'Expenses this month', (float) DB::table('clinic_expenses')->where('clinic_id', $clinicId)
+                        ->whereIn('status', ['approved', 'paid'])->whereBetween('spent_on', [$monthStart->toDateString(), $today->toDateString()])->sum('amount'), 'violet'),
+                    $money('payables', 'Expenses to pay', (float) DB::table('clinic_expenses')->where('clinic_id', $clinicId)->where('status', 'approved')->sum('amount'), 'amber'),
+                ] : []),
             ],
+        ];
+    }
+
+    /**
+     * The owner's people and plan, clinic-wide: logins held against the plan's
+     * limits (as `ResourceLimitService` enforces them, nothing approximated),
+     * branches against the branch limit, profiles that hold no login (payroll
+     * and treating-only staff, never a seat) and who is on approved leave today.
+     *
+     * @return array<string, mixed>
+     */
+    protected function ownerPeople(): array
+    {
+        $clinic = $this->clinic();
+        $limits = app(ResourceLimitService::class);
+        $subscription = $limits->getActiveSubscription($clinic);
+        $of = fn (int $used, ?int $allowed) => $allowed === null ? "{$used} in use" : "{$used} of {$allowed}";
+
+        $doctors = $limits->getCurrentDoctorCount($clinic);
+        $logins = $limits->getCurrentUserCount($clinic);
+        $staffAllowed = $subscription ? $limits->getAllowedStaff($subscription) : null;
+        $noLogin = DB::table('clinic_employees')->where('clinic_id', $clinic->id)->whereNull('user_id')
+            ->whereNotIn('status', EmploymentStatus::accessEnding())->count();
+        $today = $this->today()->toDateString();
+        $onLeave = DB::table('leaves')->where('clinic_id', $clinic->id)->where('status', 'approved')
+            ->where('start_date', '<=', $today)->where('end_date', '>=', $today)->distinct()->count('employee_id');
+
+        return [
+            'rows' => array_values(array_filter([
+                ['label' => 'Plan', 'value' => $subscription ? ($subscription->plan?->name ?? 'Plan on record') : 'No active plan on record'],
+                ['label' => 'Doctor logins', 'value' => $of($doctors, $subscription ? $limits->getAllowedDoctors($subscription) : null)],
+                $staffAllowed === null ? null : ['label' => 'Staff logins', 'value' => $of($logins - $doctors, $staffAllowed)],
+                ['label' => 'All logins', 'value' => $of($logins, $subscription ? $limits->getAllowedUsers($subscription) : null)],
+                ['label' => 'Branches', 'value' => $of($limits->getCurrentBranchCount($clinic), $subscription ? $limits->getAllowedBranches($subscription) : null)],
+                ['label' => 'Profiles without a login', 'value' => (string) $noLogin],
+                ['label' => 'On leave today', 'value' => (string) $onLeave],
+            ])),
+        ];
+    }
+
+    /**
+     * Money, access and governance changes in the last 7 days, newest first:
+     * the trail the owner reviews. Read from the security audit log, which
+     * every one of these actions writes.
+     *
+     * @return array<string, mixed>
+     */
+    protected function ownerActivity(): array
+    {
+        $labels = [
+            'billing.refunded' => 'Refund recorded',
+            'billing.adjusted' => 'Balance adjusted',
+            'expense.approved' => 'Expense approved',
+            'expense.rejected' => 'Expense rejected',
+            'expense.paid' => 'Expense paid',
+            'expense.paid_sole_owner_direct' => 'Expense paid directly by the owner',
+            'payroll.period_finalised' => 'Payroll finalised',
+            'payroll.paid' => 'Payslip paid',
+            'payroll.salary_set' => 'Salary changed',
+            'access.roles_changed' => 'Staff roles changed',
+            'access.branches_changed' => 'Staff branch access changed',
+            'deletion.executed' => 'Record removed or voided',
+            'owner_mode.action_refused' => 'Sensitive action refused',
+        ];
+        $query = DB::table('security_audit_logs')->where('clinic_id', $this->clinic()->id)
+            ->whereIn('event', array_keys($labels))->where('occurred_at', '>=', now()->subDays(7));
+        $total = (clone $query)->count();
+        $rows = $query->orderByDesc('occurred_at')->orderByDesc('id')->limit(6)->get(['id', 'event', 'occurred_at', 'actor_user_id']);
+        $actors = DB::table('users')->whereIn('id', $rows->pluck('actor_user_id')->filter()->unique())->pluck('name', 'id');
+
+        return [
+            'total' => $total,
+            'items' => $rows->map(fn ($row) => [
+                'id' => $row->id,
+                'time' => CarbonImmutable::parse($row->occurred_at)->timezone(ClinicClock::timezone())->format('d M, h:i A'),
+                'primary' => $labels[$row->event] ?? $row->event,
+                'secondary' => $actors[$row->actor_user_id] ?? null,
+                'status' => $row->event === 'owner_mode.action_refused' ? 'alert' : 'info',
+                // The event's family (billing, expense, payroll, access, deletion, owner_mode), for its icon.
+                'kind' => strtok($row->event, '.'),
+            ])->values()->all(),
         ];
     }
 
@@ -457,6 +609,8 @@ class DashboardData
                 'primary' => $labels[$row->event] ?? $row->event,
                 'secondary' => null,
                 'status' => $row->event === 'owner_mode.activated' ? 'info' : 'alert',
+                // The event's family (auth, owner_mode), for its icon.
+                'kind' => strtok($row->event, '.'),
             ])->values()->all(),
         ];
     }

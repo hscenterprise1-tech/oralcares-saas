@@ -139,7 +139,7 @@ class PatientRegistrar
             }
             $this->medicalHistory->syncManualAlerts($patient, array_values(array_filter($manualAlerts)));
             foreach ($alertFlags as $flag) {
-                $patient->alerts()->create(['clinic_id' => $patient->clinic_id, 'type' => 'flag', 'description' => $flag['label'], 'severity' => $flag['severity']]);
+                $patient->alerts()->create(['clinic_id' => $patient->clinic_id, 'type' => 'flag', 'description' => $flag['label'], 'severity' => $flag['severity'], 'created_by' => $by?->id]);
             }
             if ($allergyStatus !== null || isset($clinical[DefaultClinicalCatalogue::KIND_ALLERGY])) {
                 $patient->profile()->updateOrCreate([], ['clinic_id' => $patient->clinic_id, 'organization_id' => $clinic->organization_id, 'allergy_status' => isset($clinical[DefaultClinicalCatalogue::KIND_ALLERGY]) ? 'recorded' : $allergyStatus]);

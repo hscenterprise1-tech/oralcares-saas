@@ -11,6 +11,7 @@ use App\Models\ClinicSalaryAdvance;
 use App\Models\ClinicSalaryStructure;
 use App\Models\Leave;
 use App\Models\User;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\Security\SecurityAudit;
 use Carbon\CarbonImmutable;
 use DomainException;
@@ -33,13 +34,17 @@ use Illuminate\Support\Facades\DB;
  */
 class ClinicPayroll
 {
-    public function __construct(protected SecurityAudit $audit) {}
+    public function __construct(
+        protected SecurityAudit $audit,
+        protected OwnerMode $ownerMode,
+    ) {}
 
     /**
      * @param  array{salary_type: string, base_amount: float|string, commission_percent?: float|string|null, per_session_rate?: float|string|null, effective_from: string, notes?: ?string}  $data
      */
     public function setSalary(ClinicEmployee $employee, array $data, User $by): ClinicSalaryStructure
     {
+        $this->ownerMode->requireForSensitiveAction($by, 'payroll.salary', OwnerMode::STANDARD, ['employee_id' => $employee->id]);
         if (! in_array($data['salary_type'], ClinicSalaryStructure::TYPES, true)) {
             throw new DomainException('Choose how this person is paid.');
         }
@@ -73,6 +78,7 @@ class ClinicPayroll
 
     public function giveAdvance(ClinicEmployee $employee, float $amount, string $givenOn, ?string $method, ?string $notes, User $by): ClinicSalaryAdvance
     {
+        $this->ownerMode->requireForSensitiveAction($by, 'payroll.advance', OwnerMode::STANDARD, ['employee_id' => $employee->id]);
         if ($amount <= 0) {
             throw new DomainException('An advance must be more than zero.');
         }
@@ -224,6 +230,8 @@ class ClinicPayroll
     /** Lock the period and number its payslips. */
     public function finalise(ClinicPayrollPeriod $period, User $by): ClinicPayrollPeriod
     {
+        $this->ownerMode->requireForSensitiveAction($by, 'payroll.finalise', OwnerMode::FRESH, ['payroll_period_id' => $period->id]);
+
         return DB::transaction(function () use ($period, $by) {
             $locked = ClinicPayrollPeriod::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($period->id);
             $this->assertDraft($locked);
@@ -245,6 +253,7 @@ class ClinicPayroll
     /** Record one person's pay as paid, and recover the advances it deducted. */
     public function markPaid(ClinicPayrollEntry $entry, string $method, ?string $reference, User $by): ClinicPayrollEntry
     {
+        $this->ownerMode->requireForSensitiveAction($by, 'payroll.pay', OwnerMode::FRESH, ['payroll_entry_id' => $entry->id]);
         if (! in_array($method, ClinicExpenses::METHODS, true)) {
             throw new DomainException('Choose how it was paid.');
         }

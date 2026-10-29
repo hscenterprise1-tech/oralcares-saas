@@ -29,7 +29,8 @@ beforeEach(function () {
     // The owner also practises physiotherapy here: the staff record that bills, sells and treats.
     $this->me = $this->f->doctor('Dr. Owner', $this->f->owner);
     $this->me->practitionerProfile()->withoutGlobalScopes()->update(['specialty' => 'Physiotherapist', 'consultation_fee' => 500]);
-    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession($this->f->session);
+    // Refunds are the owner's Owner Mode action; payments and sales are not affected by it.
+    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
     $this->patient = $this->f->patient('Asha', 'Rao');
     $this->bill = fn (float $amount = 500) => app(BillingService::class)->createBill($this->f->clinic, $this->patient, $this->f->branch,
         [['description' => 'Consultation', 'quantity' => 1, 'unit_price' => $amount]], doctor: $this->me);

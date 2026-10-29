@@ -85,7 +85,7 @@ class PatientPolicy
             }
         }
 
-        // An archived record is kept read-only; a merged one lives on in its survivor.
+        // A merged record lives on in its survivor; it is never edited itself.
         if (! in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true)) {
             return false;
         }

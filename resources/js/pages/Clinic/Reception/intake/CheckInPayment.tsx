@@ -145,7 +145,7 @@ export function BillingResult({ result }: { result: CheckInResult }) {
   const receipt = billing.receipt;
 
   return (
-    <div className={cn('w-full max-w-md rounded-2xl border p-4 text-left', receipt ? 'border-emerald-300 bg-emerald-50/60' : 'border-clinic-border')}>
+    <div className={cn('w-full max-w-md rounded-2xl p-4 text-left ring-1', receipt ? 'bg-gradient-to-br from-[#F2FAF8] to-[#F3F7FD] ring-[#CDEBE5]' : 'bg-[#F7F9FD] ring-[#E3E8F4]')}>
       <p className="flex items-center gap-1.5 text-[13px] font-bold text-clinic-ink">
         {receipt ? <CheckCircle2 className="h-4 w-4 text-clinic-success" aria-hidden="true" /> : <IndianRupee className="h-4 w-4" aria-hidden="true" />}
         {receipt ? 'Payment successful' : 'Consultation charged'}
@@ -170,7 +170,7 @@ export function BillingResult({ result }: { result: CheckInResult }) {
       </dl>
       <div className="mt-3 flex flex-wrap gap-2">
         {receipt?.print_url && (
-          <a href={receipt.print_url} target="_blank" rel="noreferrer" className={cn(linkPill, 'border-clinic-ink bg-clinic-ink text-white hover:bg-clinic-ink/90')}>
+          <a href={receipt.print_url} target="_blank" rel="noreferrer" className={cn(linkPill, 'border-[#1769AA] bg-[#1769AA] text-white hover:bg-[#135A93]')}>
             <Printer className="h-3.5 w-3.5" aria-hidden="true" />
             Print receipt
           </a>

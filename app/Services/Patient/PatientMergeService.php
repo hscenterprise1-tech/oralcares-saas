@@ -8,6 +8,8 @@ use App\Models\PatientMerge;
 use App\Models\PatientTimelineEvent;
 use App\Models\User;
 use App\PatientStatus;
+use App\Services\Communication\PatientMessageEligibility;
+use App\Services\Communication\PatientMessaging;
 use App\Services\Security\SecurityAudit;
 use Carbon\Carbon;
 use DomainException;
@@ -96,6 +98,11 @@ class PatientMergeService
             $survivor = $locked[$survivor->id];
             $this->assertMergeable($source, $survivor);
             $clinicId = $source->clinic_id;
+
+            // Messages still waiting for the duplicate are not sent — stopped
+            // before its WhatsApp rows move to the survivor (they carry the
+            // duplicate's number), and undone with the rest if the merge fails.
+            app(PatientMessaging::class)->skipPendingFor($source, PatientMessageEligibility::MERGED_REASON);
 
             $moved = [];
             $conflicts = [];

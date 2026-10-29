@@ -55,6 +55,7 @@ class FollowUps
 
     public function add(Patient $patient, string $dueOn, ?string $reason, ?ClinicEmployee $practitioner, ?int $branchId): PatientFollowUp
     {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         if ($practitioner && $practitioner->clinic_id !== $patient->clinic_id) {
             throw new InvalidArgumentException('Choose a practitioner of this clinic.');
         }

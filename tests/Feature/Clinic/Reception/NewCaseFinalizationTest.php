@@ -232,7 +232,7 @@ test('old vitals settings, even required ones, neither appear nor block a check-
         ->and($intake['can'])->not->toHaveKey('record_vitals')
         ->and(PatientVisit::query()->whereNotNull('intake_vitals')->count())->toBe(0)
         // Saving Quick Care keeps the old keys as stored (no destructive rewrite), and still ignores them.
-        ->and(tap($this->flow)->updateQuickCare($this->f->clinic, ['alerts' => false], $this->f->owner)->quickCare($this->f->clinic->fresh()))->toBe(['allergy_status' => 'optional', 'alerts' => false, 'alert_roles' => null])
+        ->and(tap($this->flow)->updateQuickCare($this->f->clinic, ['alerts' => false], $this->f->owner)->quickCare($this->f->clinic->fresh()))->toBe(['allergy_status' => 'optional', 'alerts' => false, 'alert_roles' => null, 'conditions_from_catalogue' => false])
         ->and($this->f->clinic->fresh()->patient_flow_config['quick_care']['vitals']['pulse']['state'])->toBe('required');
 });
 

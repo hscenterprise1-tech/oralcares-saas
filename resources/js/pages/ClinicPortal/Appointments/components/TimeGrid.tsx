@@ -268,7 +268,7 @@ export function TimeGrid({
                 <span
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full text-[14px] font-bold tabular-nums',
-                    isToday ? 'bg-clinic-ink text-white' : 'text-clinic-ink',
+                    isToday ? 'bg-[#0F7C6E] text-white' : 'text-clinic-ink',
                   )}
                 >
                   {dayNumber(date)}

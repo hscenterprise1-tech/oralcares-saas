@@ -53,6 +53,12 @@ class PatientClinicalEntry extends Model
         return $this->belongsTo(Patient::class);
     }
 
+    /** Who recorded it (null when reported at registration without a signed-in recorder, or the user was removed). */
+    public function recorder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recorded_by');
+    }
+
     /**
      * @param  Builder<self>  $query
      * @return Builder<self>

@@ -72,12 +72,4 @@ class PatientRegistrationService
             return $patient;
         });
     }
-
-    /**
-     * Archive a patient. Never physically delete patient records.
-     */
-    public function archivePatient(Patient $patient): void
-    {
-        $patient->update(['status' => 'archived']);
-    }
 }

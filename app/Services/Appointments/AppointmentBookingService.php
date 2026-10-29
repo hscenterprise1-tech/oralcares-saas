@@ -14,6 +14,7 @@ use App\Models\PatientTimelineEvent;
 use App\Models\User;
 use App\Services\AppointmentConflictService;
 use App\Services\Communication\PatientMessaging;
+use App\Services\Patient\PatientCareGuard;
 use App\Support\ClinicClock;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -55,6 +56,9 @@ class AppointmentBookingService
      */
     public function book(Clinic $clinic, Branch $branch, ?Patient $patient, ClinicEmployee $provider, array $data, ?User $actor): Appointment
     {
+        if ($patient) {
+            app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+        }
         $recurrence = $data['recurrence'] ?? null;
         $starts = $recurrence
             ? $this->occurrences($data['scheduled_at'], $recurrence['frequency'], $recurrence['occurrences'])
@@ -126,6 +130,10 @@ class AppointmentBookingService
     public function reschedule(Clinic $clinic, Branch $branch, Appointment $appointment, array $data, string $scope, ?User $actor): int
     {
         $this->assertUpcoming($appointment, 'moved');
+        // Moving a booking is a new time with the patient: not for a patient recorded as deceased.
+        if ($appointment->patient_id && ($patient = Patient::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->find($appointment->patient_id))) {
+            app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+        }
 
         $shift = (int) $appointment->scheduled_at->diffInMinutes($data['scheduled_at'], false);
         $targets = $this->inScope($appointment, $scope);
@@ -207,6 +215,7 @@ class AppointmentBookingService
      */
     public function linkPatient(Clinic $clinic, Appointment $appointment, Patient $patient, ?User $actor): void
     {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         if ($appointment->patient_id !== null) {
             throw ValidationException::withMessages(['patient_id' => 'This appointment already belongs to a registered patient.']);
         }

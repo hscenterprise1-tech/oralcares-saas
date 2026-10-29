@@ -13,7 +13,6 @@ enum ClinicPermission: string
     case PatientView = 'patient.view';
     case PatientCreate = 'patient.create';
     case PatientEdit = 'patient.edit';
-    case PatientDelete = 'patient.delete';
     case PatientSearch = 'patient.search';
 
     // Appointment & Queue Capabilities
@@ -37,6 +36,9 @@ enum ClinicPermission: string
     // Treatment engine
     case TreatmentStart = 'treatment.start';
     case TreatmentExecute = 'treatment.execute';
+    // Confirming at the desk that a physiotherapy session took place (and which package paid for it).
+    // Not clinical: no notes, no diagnosis, no sign-off, no other treatment work.
+    case PhysioSessionConfirm = 'physio.session.confirm';
     case CatalogManage = 'catalog.manage';
     case SpecialtyConfigure = 'specialty.configure';
 
@@ -110,6 +112,7 @@ enum ClinicPermission: string
                 self::BillingView->value,
                 self::BillingCreate->value,
                 self::PaymentCollect->value,
+                self::PhysioSessionConfirm->value,
                 self::DocumentsManage->value,
                 self::ConsentManage->value,
                 self::PatientMerge->value,

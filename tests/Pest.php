@@ -1,11 +1,14 @@
 <?php
 
 use App\Models\Activity;
+use App\Models\ClinicMembership;
 use App\Models\CustomerSuccessSnapshot;
 use App\Models\Demo;
 use App\Models\Lead;
 use App\Models\User;
 use App\Observers\CRM\LeadObserver;
+use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\UserType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -334,4 +337,28 @@ function unownedLead(array $attributes = []): Lead
     } finally {
         LeadObserver::$suppressAutoAssignment = false;
     }
+}
+
+/**
+ * A clinic session with Owner Mode on, as `OwnerMode::activate()` leaves it,
+ * for tests of actions that need it. `$verifiedMinutesAgo` ages the owner's
+ * last password confirmation (T2 actions need it fresh).
+ *
+ * @param  array<string, int>  $session  a clinic session (membership and branch ids)
+ * @return array<string, mixed>
+ */
+function withOwnerMode(array $session, int $verifiedMinutesAgo = 0): array
+{
+    $membership = ClinicMembership::query()->withoutGlobalScopes()->findOrFail($session[ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID]);
+    $now = now()->getTimestamp();
+
+    return $session + [OwnerMode::SESSION_KEY => [
+        'user_id' => $membership->user_id,
+        'clinic_id' => $membership->clinic_id,
+        'membership_id' => $membership->id,
+        'method' => 'password',
+        'activated_at' => $now - $verifiedMinutesAgo * 60,
+        'verified_at' => $now - $verifiedMinutesAgo * 60,
+        'last_seen_at' => $now,
+    ]];
 }

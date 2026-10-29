@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Exceptions\OwnerModeRequired;
 use App\Exceptions\TenantContextMissingException;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureClinicEntitled;
@@ -37,6 +38,13 @@ class ClinicPortalErrors
         $status = $response->statusCode();
 
         if (! self::isClinicPortalRequest($request) || ($request->expectsJson() && ! $request->header('X-Inertia'))) {
+            return null;
+        }
+
+        // The owner's step-up answer is a contract the page acts on (it asks for
+        // the password and sends the action again), never an error page.
+        $exception = $response->exception;
+        if ($exception instanceof OwnerModeRequired || $exception?->getPrevious() instanceof OwnerModeRequired) {
             return null;
         }
 

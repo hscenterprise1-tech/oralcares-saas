@@ -85,9 +85,8 @@ class EncounterCheckout
             })->values()->all();
 
         $fee = (float) (ClinicEmployee::query()->withoutGlobalScopes()->find($encounter->doctor_id)?->practitionerProfile?->consultation_fee ?? 0);
-        // A visit a session package already pays for (the patient's package for this specialty) is not charged a consultation again.
-        $packageCovered = $encounter->specialty !== null
-            && in_array($encounter->specialty, app(SessionPackages::class)->coveredSpecialties((int) $encounter->clinic_id, [(int) $encounter->patient_id])[(int) $encounter->patient_id] ?? [], true);
+        // A consultation a session package actually paid for (a completed session of the package's own treatment) is not charged again.
+        $packageCovered = app(SessionPackages::class)->paidFor($encounter);
         if ($fee > 0 && ! $packageCovered && ! $this->consultationBilled($encounter)) {
             array_unshift($lines, [
                 'key' => 'consultation',

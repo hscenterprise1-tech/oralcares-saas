@@ -1,24 +1,36 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { router } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, MapPin, Search, SearchX, SlidersHorizontal, TriangleAlert, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useClinic } from '@/clinic/context';
+import { DsButton, DsButtonLink, DsDialog, EmptyNote, FOCUS_RING, Pill, TONE, type DsTone } from '@/clinic/ds';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { useIntake } from '@/clinic/shell/IntakeContext';
-import { Button, ButtonLink } from '@/clinic/ui/Button';
-import { Card } from '@/clinic/ui/Card';
-import { PageHeader } from '@/clinic/ui/PageHeader';
-import { EmptyState, ErrorState } from '@/clinic/ui/states';
-import { DirectoryToolbar, type FilterOptions } from './components/directory/DirectoryToolbar';
-import { PatientList, PatientListSkeleton } from './components/directory/PatientList';
-import type { DirectoryFilters, DirectoryProps } from './components/types';
+import { Select, Switch } from '@/clinic/ui/controls';
+import { deskMode } from '@/pages/ClinicPortal/FrontDesk/components/desk';
+import { PatientTable, PatientTableSkeleton, type RowActions } from './components/directory/PatientTable';
+import { useDirectoryQuery } from './components/directory/useDirectoryQuery';
+import type { DirectoryFilters, DirectoryPatient, DirectoryProps, DirectoryView } from './components/types';
 
-/** The page-wide props a directory visit reloads; the rest stay as they are. */
-const RELOADED = ['patients', 'filters'];
+/** The views, in the order the directory offers them; each shows only when the server offers it to this member. */
+const VIEWS: { key: DirectoryView; label: string; tone: DsTone }[] = [
+  { key: 'today', label: 'Today', tone: 'amber' },
+  { key: 'all', label: 'All patients', tone: 'blue' },
+  { key: 'mine', label: 'My patients', tone: 'violet' },
+];
+
+/** The filters inside "Filters" (search and the view sit outside it). There is no patient-status filter. */
+// `specialty` has no control here, but an old link can still carry it: it is counted so "Clear filters" shows and removes it.
+const FILTER_KEYS = ['branch_id', 'practitioner_id', 'active_care', 'specialty'] as const;
 
 /**
- * The patient directory: everyone this member may see at the clinic, newest
- * first, one cursor page at a time (`PatientDirectory`). Search and filters
- * run on the server; the page never filters, counts or invents rows.
+ * Patients: the clinic's patient directory.
+ *
+ * Search by name, patient ID or mobile; the views this member is offered
+ * (Today, All, My patients — `PatientDirectoryAudience`); filters for
+ * clinician, branch and active care; and the patients newest-first, a cursor
+ * page at a time (`PatientDirectory`). Every row opens Patient 360; Edit and
+ * Check in appear only for members and records they apply to, and the
+ * server authorises each of them again. Nothing is counted or invented here.
  */
 export default function PatientsIndex(props: DirectoryProps) {
   return (
@@ -28,154 +40,359 @@ export default function PatientsIndex(props: DirectoryProps) {
   );
 }
 
-function Directory({ patients, filters, options, isPractitioner, links }: DirectoryProps) {
+function Directory({ patients, filters, options, links }: DirectoryProps) {
   const clinic = useClinic();
   const intake = useIntake();
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const lastVisit = useRef<Record<string, string>>({});
+  const mode = deskMode(clinic);
+  const directory = useDirectoryQuery(filters, links.index);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
+  const views = VIEWS.filter((view) => options.views.includes(view.key));
+  const multiBranch = (clinic?.accessible_branch_count ?? 0) > 1;
   // Branches the member may open; a list cut short by the shared limit is not offered as a filter.
-  const branches = useMemo<FilterOptions['branches']>(() => {
-    if (!clinic || clinic.accessible_branch_count <= 1 || clinic.accessible_branches.length < clinic.accessible_branch_count) {
-      return [];
-    }
+  const branches = clinic && multiBranch && clinic.accessible_branches.length >= clinic.accessible_branch_count ? clinic.accessible_branches : [];
+  // In a doctor's own list the doctor is the filter.
+  const doctors = filters.view === 'mine' ? [] : options.doctors;
+  const activeFilters = FILTER_KEYS.filter((key) => filters[key]).length;
+  const searching = filters.q !== '';
+  const branchName = branches.find((branch) => String(branch.id) === filters.branch_id)?.name;
+  const canEdit = (clinic?.permissions ?? []).includes('patient.edit');
+  const clearFilters = () => directory.change({ branch_id: '', practitioner_id: '', active_care: '', specialty: '' });
 
-    return clinic.accessible_branches.map((b) => ({ id: b.id, name: b.name }));
-  }, [clinic]);
-
-  const visit = useCallback(
-    (params: Record<string, string>) => {
-      lastVisit.current = params;
-      setFailed(false);
-      router.get(links.index, params, {
-        only: RELOADED,
-        preserveState: true,
-        preserveScroll: true,
-        replace: true,
-        onStart: () => setLoading(true),
-        onFinish: () => setLoading(false),
-        onHttpException: () => {
-          setFailed(true);
-
-          return false;
-        },
-        onNetworkError: () => {
-          setFailed(true);
-
-          return false;
-        },
-      });
-    },
-    [links.index],
-  );
-
-  /** The query a set of filters is: empty values left out, the tab only for practitioners. */
-  const paramsFor = useCallback(
-    (next: DirectoryFilters, cursor?: string | null) => {
-      const params: Record<string, string> = {};
-      (['q', 'status', 'specialty', 'branch_id', 'active_care'] as const).forEach((key) => {
-        if (next[key]) {
-          params[key] = next[key];
-        }
-      });
-      if (isPractitioner) {
-        params.tab = next.tab;
-      }
-      if (cursor) {
-        params.cursor = cursor;
-      }
-
-      return params;
-    },
-    [isPractitioner],
-  );
-
-  const change = (patch: Partial<DirectoryFilters>) => visit(paramsFor({ ...filters, ...patch }));
-  const page = (cursor: string | null) => {
-    if (cursor) {
-      visit(paramsFor(filters, cursor));
-    }
+  const actions: RowActions = {
+    profileHref: (patient) => (links.profile ? links.profile.replace('__ID__', String(patient.id)) : null),
+    editHref: (patient: DirectoryPatient) => (canEdit && patient.status !== 'merged' ? route('clinic.patients.edit', patient.id) : null),
+    checkIn: intake.available ? (patient) => intake.open('repeat', { id: patient.id, uhid: patient.uhid, name: patient.name }) : null,
   };
 
-  const filtered = Boolean(filters.q || filters.status || filters.specialty || filters.branch_id || filters.active_care);
-  const profileHref = (id: number) => (links.profile ? links.profile.replace('__ID__', String(id)) : null);
+  // New patient: at the front desk the desk's own intake (register and check in in one step); anyone else the full form.
+  const newPatient =
+    intake.available && intake.canRegister ? (
+      <DsButton variant="primary" size="lg" icon={UserPlus} onClick={() => intake.open('new')}>
+        New patient
+      </DsButton>
+    ) : links.create ? (
+      <DsButtonLink href={links.create} variant="primary" size="lg" icon={UserPlus}>
+        New patient
+      </DsButtonLink>
+    ) : null;
 
-  // Add a patient: at the front desk (where New Case is offered) the desk's own popup, so
-  // registering and checking in stay one step; anyone else gets the full registration page.
-  const addPatient = intake.available && intake.canRegister ? (
-    <>
-      {links.create && (
-        <ButtonLink href={links.create} tone="ghost">
-          Full form
-        </ButtonLink>
-      )}
-      <Button tone="primary" icon={UserPlus} onClick={() => intake.open('new')}>
-        Add patient
-      </Button>
-    </>
-  ) : links.create ? (
-    <ButtonLink href={links.create} tone="primary" icon={UserPlus}>
-      Add patient
-    </ButtonLink>
-  ) : null;
-
-  const title = isPractitioner && filters.tab === 'mine' ? 'My patients' : 'Patient directory';
-  const description =
-    isPractitioner && filters.tab === 'mine'
-      ? 'Patients assigned to you. Switch to All patients to search the whole clinic.'
-      : 'Search the clinic’s patients by name, mobile number or UHID.';
+  const filterFields = (
+    <FilterFields
+      filters={filters}
+      doctors={doctors}
+      branches={branches}
+      doctorLabel={mode.doctor}
+      onChange={(patch) => directory.change(patch)}
+    />
+  );
 
   return (
-    <>
-      <PageHeader eyebrow={<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-cx-nav-teal-strong">Patients</span>} title={title} description={description} actions={addPatient} />
-
-      <Card as="div" className="overflow-hidden">
-        <DirectoryToolbar filters={filters} options={{ statuses: options.statuses, specialties: options.specialties, branches }} isPractitioner={isPractitioner} loading={loading} onChange={change} />
-
-        <div aria-live="polite" aria-busy={loading || undefined}>
-          {failed ? (
-            <ErrorState title="Patients could not be loaded" onRetry={() => visit(lastVisit.current)} />
-          ) : loading && patients.data.length === 0 ? (
-            <PatientListSkeleton />
-          ) : patients.data.length === 0 ? (
-            filtered ? (
-              <EmptyState
-                filtered
-                title="No patients match"
-                description={filters.q ? `Nothing starts with “${filters.q}”. Try a mobile number, a UHID or the first letters of a name.` : 'Nothing matches these filters.'}
-                onClearFilters={() => visit(paramsFor({ q: '', status: '', specialty: '', branch_id: '', active_care: '', tab: filters.tab }))}
-              />
-            ) : isPractitioner && filters.tab === 'mine' ? (
-              <EmptyState title="No patients assigned to you yet" description="Patients appear here once they are assigned to you at check-in or by transfer." action={<Button onClick={() => change({ tab: 'all' })}>See all patients</Button>} />
-            ) : (
-              <EmptyState title="No patients yet" description="Registered patients appear here, newest first." action={addPatient} />
-            )
-          ) : (
-            <div className={loading ? 'pointer-events-none opacity-60 motion-safe:transition-opacity' : undefined}>
-              <PatientList patients={patients.data} profileHref={profileHref} />
+    <div className="space-y-5 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+      {/* The header card in the front desk's treatment. */}
+      <section aria-labelledby="patients-title" className="rounded-3xl border border-[#DCE6F3] bg-gradient-to-br from-[#EAF2FF] via-[#F5F1FF] to-[#E6F6F2] px-4 py-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_40px_-28px_rgba(23,59,96,0.45)] sm:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#E3F6F2] to-[#E6F0FB] text-[#0F7C6E] ring-1 ring-inset ring-white/70">
+              <Users className="h-5 w-5" strokeWidth={2} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <h1 id="patients-title" className="text-[22px] font-bold leading-8 tracking-tight text-cx-nav-ink sm:text-[24px]">
+                Patients
+              </h1>
+              <p className="text-[14px] leading-[22px] text-[#475569]">Manage patient records and access patient history</p>
             </div>
+          </div>
+          {/* One way to add a patient: the registration flow holds both the quick fields and "More details". */}
+          {newPatient && <div className="shrink-0">{newPatient}</div>}
+        </div>
+      </section>
+
+      {/* Search, views and filters. */}
+      <section aria-label="Find patients" className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 basis-64">
+            <label htmlFor="patients-search" className="sr-only">
+              Search patients by name, patient ID or mobile
+            </label>
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[#64748B]" aria-hidden="true" />
+            <input
+              id="patients-search"
+              type="search"
+              value={directory.query}
+              onChange={(event) => directory.search(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && directory.query !== '') {
+                  event.preventDefault();
+                  directory.search('');
+                }
+              }}
+              placeholder="Name, patient ID or mobile"
+              autoComplete="off"
+              className="h-12 w-full rounded-xl border border-[#DCE6F3] bg-white pl-11 pr-12 text-[15px] text-[#173B60] shadow-[0_1px_2px_rgba(15,23,42,0.04)] placeholder:text-[#64748B] focus:border-[#1769AA] focus:outline-none focus:ring-2 focus:ring-[#1769AA]/25"
+            />
+            {directory.query !== '' && (
+              <button type="button" onClick={() => directory.search('')} aria-label="Clear search" className={cn('absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#F1F5F9]', FOCUS_RING)}>
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {/* Phones: the filters live in a sheet. */}
+          <DsButton size="lg" icon={SlidersHorizontal} onClick={() => setSheetOpen(true)} aria-haspopup="dialog" className="md:hidden">
+            {activeFilters > 0 ? `Filters (${activeFilters})` : 'Filters'}
+          </DsButton>
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {views.length > 1 ? (
+            <div role="tablist" aria-label="Which patients" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-[#EEF2F7] p-1 [scrollbar-width:none]">
+              {views.map((view) => {
+                const current = view.key === filters.view;
+
+                return (
+                  <button
+                    key={view.key}
+                    type="button"
+                    role="tab"
+                    id={`view-${view.key}`}
+                    aria-selected={current}
+                    aria-controls="patients-list"
+                    onClick={() => !current && directory.change({ view: view.key })}
+                    className={cn(
+                      'flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold motion-safe:transition-colors [@media(pointer:coarse)]:h-11',
+                      FOCUS_RING,
+                      current ? 'bg-white text-[#173B60] shadow-[0_1px_3px_rgba(15,23,42,0.12)]' : 'text-[#64748B] hover:text-[#173B60]',
+                    )}
+                  >
+                    <span aria-hidden="true" className={cn('h-2 w-2 rounded-full', TONE[view.tone].solid)} />
+                    {view.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <span />
+          )}
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
+            {filterFields}
+            {activeFilters > 0 && (
+              <button type="button" onClick={clearFilters} className={cn('h-9 rounded-lg px-2 text-[13px] font-semibold text-[#1769AA] hover:bg-[#EAF2FA]', FOCUS_RING)}>
+                Clear filters ({activeFilters})
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <DsDialog
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        title="Filters"
+        description="Narrow the list. Search and the view stay as they are."
+        footer={
+          <>
+            {activeFilters > 0 && (
+              <DsButton variant="ghost" onClick={clearFilters}>
+                Clear filters
+              </DsButton>
+            )}
+            <DsButton variant="primary" onClick={() => setSheetOpen(false)}>
+              Done
+            </DsButton>
+          </>
+        }
+      >
+        <div className="grid gap-3">{filterFields}</div>
+      </DsDialog>
+
+      {/* The list. */}
+      <section
+        id="patients-list"
+        role={views.length > 1 ? 'tabpanel' : undefined}
+        aria-labelledby={views.length > 1 ? `view-${filters.view}` : 'patients-list-title'}
+        className="relative min-w-0 overflow-hidden rounded-2xl border border-[#E6EBF1] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-22px_rgba(23,59,96,0.35)]"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6EBF1] bg-gradient-to-r from-[#F4F8FD] to-white px-4 py-3.5 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#E3F6F2] to-[#E6F0FB] text-[#0F7C6E] ring-1 ring-inset ring-white/70">
+              {searching ? <Search className="h-5 w-5" aria-hidden="true" /> : <Users className="h-5 w-5" aria-hidden="true" />}
+            </span>
+            <div className="min-w-0">
+              <h2 id="patients-list-title" className="truncate text-[17px] font-semibold leading-6 text-[#173B60]">
+                {listTitle(filters, searching)}
+              </h2>
+              <p className="truncate text-[12.5px] leading-5 text-[#64748B]">{searching ? `Matching “${filters.q}”` : listSubtitle(filters.view)}</p>
+            </div>
+          </div>
+          {multiBranch && (
+            <Pill tone="violet" icon={MapPin}>
+              {branchName ?? `All ${clinic?.accessible_branch_count} branches`}
+            </Pill>
+          )}
+        </header>
+        {directory.loading && <span aria-hidden="true" className="absolute inset-x-0 top-0 z-10 h-0.5 bg-[#1769AA] motion-safe:animate-pulse" />}
+
+        <div aria-live="polite" aria-busy={directory.loading || undefined}>
+          {directory.failed ? (
+            <EmptyNote
+              icon={TriangleAlert}
+              tone="rose"
+              title="Patients could not be loaded"
+              action={
+                <DsButton variant="secondary" onClick={directory.retry}>
+                  Try again
+                </DsButton>
+              }
+            >
+              Nothing was changed. Check the connection and try again.
+            </EmptyNote>
+          ) : patients.data.length === 0 && directory.loading ? (
+            <PatientTableSkeleton />
+          ) : patients.data.length === 0 ? (
+            <Empty
+              searchingOrFiltered={searching || activeFilters > 0 || filters.specialty !== ''}
+              query={filters.q}
+              view={filters.view}
+              canSeeAll={options.views.includes('all') && filters.view !== 'all'}
+              onClear={() => directory.clearAll()}
+              onSeeAll={() => directory.change({ view: 'all' })}
+              newPatient={newPatient}
+            />
+          ) : (
+            <PatientTable patients={patients.data} mode={mode} actions={actions} busy={directory.loading} />
           )}
         </div>
 
-        {!failed && (patients.prev_cursor || patients.next_cursor) && (
-          <nav aria-label="Pages of patients" className="flex items-center justify-between gap-3 border-t border-cx-line px-4 py-3 sm:px-5">
-            <p className="text-[12.5px] text-cx-text-2">
+        {!directory.failed && (patients.prev_cursor || patients.next_cursor) && (
+          <nav aria-label="Pages of patients" className="flex items-center justify-between gap-3 border-t border-[#E6EBF1] px-4 py-3 sm:px-5">
+            <DsButton size="sm" icon={ChevronLeft} disabled={!patients.prev_cursor || directory.loading} onClick={() => directory.page(patients.prev_cursor)}>
+              Newer
+            </DsButton>
+            <span className="text-[12.5px] tabular-nums text-[#64748B]">
               {patients.data.length} {patients.data.length === 1 ? 'patient' : 'patients'} on this page
-            </p>
-            <div className="flex gap-2">
-              <Button size="sm" icon={ChevronLeft} disabled={!patients.prev_cursor || loading} onClick={() => page(patients.prev_cursor)}>
-                Newer
-              </Button>
-              <Button size="sm" disabled={!patients.next_cursor || loading} onClick={() => page(patients.next_cursor)}>
-                <span className="inline-flex items-center gap-1.5">
-                  Older <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </Button>
-            </div>
+            </span>
+            <DsButton size="sm" disabled={!patients.next_cursor || directory.loading} onClick={() => directory.page(patients.next_cursor)}>
+              Older
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </DsButton>
           </nav>
         )}
-      </Card>
+      </section>
+    </div>
+  );
+}
+
+function listTitle(filters: DirectoryFilters, searching: boolean): string {
+  if (searching) {
+    return 'Search results';
+  }
+
+  return filters.view === 'today' ? 'Today’s patients' : filters.view === 'mine' ? 'My patients' : 'All patients';
+}
+
+function listSubtitle(view: DirectoryView): string {
+  return view === 'today' ? 'Everyone who attended today, new and repeat' : view === 'mine' ? 'Patients assigned to you' : 'Newest registrations first';
+}
+
+/** The filters, the same fields beside the views from `md` and in the phone's sheet. */
+function FilterFields({
+  filters,
+  doctors,
+  branches,
+  doctorLabel,
+  onChange,
+}: {
+  filters: DirectoryFilters;
+  doctors: { id: number; name: string }[];
+  branches: { id: number; name: string }[];
+  doctorLabel: string;
+  onChange: (patch: Partial<DirectoryFilters>) => void;
+}) {
+  return (
+    <>
+      {doctors.length > 0 && (
+        <FilterSelect
+          label={doctorLabel}
+          value={filters.practitioner_id}
+          anyLabel={`Any ${doctorLabel.toLowerCase()}`}
+          options={[{ value: 'none', label: 'Not assigned' }, ...doctors.map((doctor) => ({ value: String(doctor.id), label: doctor.name }))]}
+          onChange={(value) => onChange({ practitioner_id: value })}
+        />
+      )}
+      {branches.length > 1 && (
+        <FilterSelect label="Branch" value={filters.branch_id} anyLabel="All my branches" options={branches.map((branch) => ({ value: String(branch.id), label: branch.name }))} onChange={(value) => onChange({ branch_id: value })} />
+      )}
+      <div className="flex h-11 items-center rounded-xl border border-[#D5DDE7] bg-white px-3.5 md:h-10">
+        <Switch checked={filters.active_care === '1'} onCheckedChange={(on) => onChange({ active_care: on ? '1' : '' })} label="Ongoing treatment" />
+      </div>
     </>
+  );
+}
+
+function FilterSelect({ label, value, anyLabel, options, onChange }: { label: string; value: string; anyLabel: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
+  const id = `filter-${label.toLowerCase().replace(/\W+/g, '-')}`;
+
+  return (
+    <div className="min-w-0 md:w-44">
+      <label htmlFor={id} className="mb-1.5 block text-[12px] font-semibold text-[#334155] md:sr-only">
+        {label}
+      </label>
+      <Select id={id} value={value} placeholder={anyLabel} options={options} onChange={(event) => onChange(event.target.value)} className={cn('md:h-10', value && 'border-[#1769AA]/50 bg-[#F5F9FF] font-semibold text-[#1769AA]')} />
+    </div>
+  );
+}
+
+function Empty({
+  searchingOrFiltered,
+  query,
+  view,
+  canSeeAll,
+  onClear,
+  onSeeAll,
+  newPatient,
+}: {
+  searchingOrFiltered: boolean;
+  query: string;
+  view: DirectoryView;
+  canSeeAll: boolean;
+  onClear: () => void;
+  onSeeAll: () => void;
+  newPatient: ReactNode;
+}) {
+  if (searchingOrFiltered) {
+    return (
+      <EmptyNote
+        icon={SearchX}
+        tone="slate"
+        title={query ? `No patient matches “${query}”` : 'No patient matches these filters'}
+        action={
+          <DsButton variant="secondary" onClick={onClear}>
+            Clear search and filters
+          </DsButton>
+        }
+      >
+        {query ? 'Search matches the start of a name, a patient ID or a mobile number. Try fewer letters, or the mobile number from its first digit.' : 'Loosen a filter to see more patients.'}
+      </EmptyNote>
+    );
+  }
+  if (view === 'today') {
+    return (
+      <EmptyNote icon={Users} tone="amber" title="Nobody has attended yet today" action={canSeeAll ? <DsButton variant="secondary" onClick={onSeeAll}>See all patients</DsButton> : undefined}>
+        New and returning patients appear here once they are checked in today.
+      </EmptyNote>
+    );
+  }
+  if (view === 'mine') {
+    return (
+      <EmptyNote icon={UserRound} tone="violet" title="No patients assigned to you yet" action={canSeeAll ? <DsButton variant="secondary" onClick={onSeeAll}>See all patients</DsButton> : undefined}>
+        Patients appear here once they are assigned to you.
+      </EmptyNote>
+    );
+  }
+
+  return (
+    <EmptyNote icon={Users} tone="blue" title="No patients registered yet" action={newPatient}>
+      Register the first patient to start their record.
+    </EmptyNote>
   );
 }

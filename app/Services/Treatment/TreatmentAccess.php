@@ -69,10 +69,10 @@ class TreatmentAccess
         $this->assertSpecialty($patient->clinic_id, $specialtyKey, $practitioner);
     }
 
-    /** Treatment work happens on a working record only: an archived or merged patient is read-only. */
+    /** Treatment work happens on a working record only: a merged patient is read-only. */
     private function assertWorkingRecord(Patient $patient): void
     {
-        $this->require(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 'This patient record is archived or merged; it is read-only.');
+        $this->require(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 'This patient record was merged into another; it is read-only.');
     }
 
     public function assertCanExecute(User $user, PatientTreatment $treatment, ClinicEmployee $performer): void
@@ -89,6 +89,29 @@ class TreatmentAccess
         }
         if ($treatment->catalog_treatment_id) {
             $this->assertCapability(CatalogTreatment::query()->withoutGlobalScopes()->whereKey($treatment->catalog_treatment_id)->value('required_capability'), $performer);
+        }
+    }
+
+    /**
+     * Confirming at the desk that a session of this treatment took place,
+     * with the practitioner who gave it. Its own permission, never
+     * `treatment.execute`: it grants no notes, diagnosis, sign-off or other
+     * treatment work. The patient, branch, record and practitioner checks are
+     * the same as for recording the treatment.
+     */
+    public function assertCanConfirmSession(User $user, PatientTreatment $treatment, ClinicEmployee $practitioner): void
+    {
+        $this->require($user->hasClinicPermission(ClinicPermission::PhysioSessionConfirm), 'You cannot confirm treatment sessions.');
+        $patient = Patient::query()->withoutGlobalScopes()->findOrFail($treatment->patient_id);
+        $branch = Branch::query()->withoutGlobalScopes()->find($treatment->branch_id);
+        $this->assertCommon($user, $patient, $branch);
+        $this->assertWorkingRecord($patient);
+        $this->assertSameClinic($treatment->clinic_id, $practitioner->clinic_id);
+        if ($treatment->specialty_key !== null) {
+            $this->assertSpecialty($treatment->clinic_id, $treatment->specialty_key, $practitioner);
+        }
+        if ($treatment->catalog_treatment_id) {
+            $this->assertCapability(CatalogTreatment::query()->withoutGlobalScopes()->whereKey($treatment->catalog_treatment_id)->value('required_capability'), $practitioner);
         }
     }
 

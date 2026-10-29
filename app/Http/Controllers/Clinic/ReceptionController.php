@@ -11,6 +11,7 @@ use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicQueueItem;
 use App\Models\Patient;
+use App\Models\PatientTreatment;
 use App\PatientStatus;
 use App\PaymentMethod;
 use App\Services\Billing\CheckInCharges;
@@ -25,6 +26,8 @@ use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\PatientFieldConfigService;
 use App\Services\PaymentService;
+use App\Services\Physio\PhysioCareSummary;
+use App\Services\Physio\PhysioRecord;
 use App\Services\QueueStateMachine;
 use App\Services\Reception\DoctorQueue;
 use App\Services\Reception\FrontDesk;
@@ -260,6 +263,58 @@ class ReceptionController extends Controller
      * already queued, who they would be sent to, and the safety flags the
      * member may see. No query, or under three characters: nothing.
      */
+    /**
+     * A patient's physiotherapy at a glance, for Repeat Case: open
+     * treatments, sessions done, package balances, what they owe. Read-only;
+     * null when the clinic does not practise physiotherapy.
+     */
+    public function physioSummary(Request $request, Patient $patient, PhysioCareSummary $summary): JsonResponse
+    {
+        [$clinic, $branch] = $this->context();
+        abort_unless($patient->clinic_id === $clinic->id, 404);
+        $this->authorize('view', $patient);
+
+        return response()->json(['physio' => $summary->forPatient($patient, $request->user(), $branch)]);
+    }
+
+    /**
+     * Confirm at the desk that the queued patient's physiotherapy session took
+     * place, with the therapist they are queued with (who need not sign in),
+     * and which of that treatment's packages paid for it — or none. Needs
+     * `physio.session.confirm` (route) and an explicit confirmation; writes no
+     * clinical notes and signs nothing (`PhysioRecord::confirmAtDesk`).
+     */
+    public function confirmPhysioSession(Request $request, ClinicQueueItem $item, PhysioRecord $physio, IntakeSubmissions $submissions): JsonResponse
+    {
+        [$clinic, $branch] = $this->context();
+        $this->assertOwned($item, $clinic, $branch);
+        $data = $request->validate([
+            'patient_treatment_id' => ['required', 'integer'],
+            'package_id' => ['nullable', 'integer'],
+            'confirm' => ['accepted'],
+            'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
+        ]);
+        $treatment = PatientTreatment::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->findOrFail($data['patient_treatment_id']);
+        $confirmer = $this->clinicContext->currentEmployee() ?? abort(403, 'Only clinic staff can confirm sessions.');
+
+        $confirm = function () use ($item, $treatment, $data, $confirmer, $request, $physio): JsonResponse {
+            try {
+                $session = $physio->confirmAtDesk($item, $treatment, isset($data['package_id']) ? (int) $data['package_id'] : null, $confirmer, $request->user());
+            } catch (DomainException|InvalidArgumentException $e) {
+                return response()->json(['message' => $e->getMessage(), 'errors' => ['session' => [$e->getMessage()]]], 422);
+            }
+
+            return response()->json([
+                'message' => "Session {$session->session_number} of {$treatment->title} confirmed.",
+                'session' => ['id' => $session->id, 'number' => $session->session_number, 'package_id' => $session->package_id, 'completed_at' => $session->completed_at?->toIso8601String()],
+            ], 201);
+        };
+
+        return isset($data['idempotency_key'])
+            ? $submissions->once($clinic, $request->user(), $data['idempotency_key'], "pss:{$item->id}", $confirm)
+            : $confirm();
+    }
+
     public function search(Request $request, ReceptionPatientLookup $lookup): JsonResponse
     {
         [$clinic, $branch] = $this->context();
@@ -423,7 +478,7 @@ class ReceptionController extends Controller
         $patient = Patient::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->findOrFail($appointment?->patient_id ?? $validated['patient_id']);
-        abort_unless(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 422, 'Archived or merged records cannot be checked in.');
+        abort_unless(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 422, 'Merged records cannot be checked in.');
         // A member limited to some branches checks in only patients of those
         // branches, or the patient of a booking made at this one; a masked
         // duplicate match from another branch is not a way in.

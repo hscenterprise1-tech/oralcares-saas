@@ -6,6 +6,7 @@ use App\ClinicRole;
 use App\Models\Clinic;
 use App\Models\ClinicSettingAudit;
 use App\Models\User;
+use App\Services\OwnerMode\OwnerMode;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -398,7 +399,7 @@ class PatientFieldConfigService
         if (! $user) {
             return false;
         }
-        if ($user->isMasterAdmin() || app(ClinicContext::class)->membership()?->is_primary_owner) {
+        if ($user->isMasterAdmin() || app(OwnerMode::class)->authorized()) {
             return true;
         }
 

@@ -15,7 +15,6 @@ use App\Services\Patient\PatientBranchAccess;
 use App\Services\Patient\PatientClinicalEntries;
 use App\Services\Patient\PatientSearch;
 use App\Services\PatientFieldConfigService;
-use App\Services\Physio\SessionPackages;
 use App\Services\QueueStateMachine;
 use App\Support\ClinicClock;
 use Carbon\Carbon;
@@ -127,11 +126,9 @@ class ReceptionPatientLookup
         // Safety flags only for patients this member may open.
         $allowedIds = $this->openableIds($clinic, $ids, $lastSeen);
         $flags = $this->clinicalEntries->safetyFlags($clinic->id, $allowedIds);
-        // Specialties a session package already pays for: check-in charges nothing for those visits (`CheckInCharges`).
-        $covered = app(SessionPackages::class)->coveredSpecialties($clinic->id, $allowedIds);
         $addresses = $this->addresses($clinic, $allowedIds);
 
-        return $patients->map(function (Patient $patient) use ($appointments, $queued, $working, $specialties, $lastSeen, $flags, $covered, $addresses) {
+        return $patients->map(function (Patient $patient) use ($appointments, $queued, $working, $specialties, $lastSeen, $flags, $addresses) {
             $appointment = $appointments->get($patient->id)?->first();
             $inQueue = $queued->get($patient->id);
             $seen = $lastSeen->get($patient->id)?->first();
@@ -148,7 +145,6 @@ class ReceptionPatientLookup
                 'specialties' => $specialties->get($patient->id, []),
                 'last_seen' => $seen ? ['at' => Carbon::parse($seen->last_seen_at)->toDateString(), 'branch' => $seen->display_name ?: $seen->name] : null,
                 'safety_flags' => $flags[$patient->id] ?? [],
-                'package_covers' => $covered[$patient->id] ?? [],
                 'address' => $addresses[$patient->id] ?? null,
                 'appointment' => $appointment ? [
                     'id' => $appointment->id,

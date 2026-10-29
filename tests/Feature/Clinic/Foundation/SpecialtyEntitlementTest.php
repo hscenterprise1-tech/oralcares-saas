@@ -130,7 +130,7 @@ test('the Command Center raises physiotherapy packages only for a clinic that bo
         'name' => 'Knee 10', 'sessions_total' => 10, 'status' => 'active', 'valid_until' => '2026-10-08', 'created_at' => now(), 'updated_at' => now()]);
 
     ($this->asOwner)()->get('/clinic/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
-        ->where('widgetData.needs_attention.items', fn ($items) => collect($items)->pluck('id')->contains('packages_expiring') === $physioFigures));
+        ->where('sections.decisions.items', fn ($items) => collect($items)->pluck('id')->contains('packages_expiring') === $physioFigures));
 })->with([
     'dental plan' => [['dental'], false],
     'physiotherapy plan' => [['physiotherapy'], true],

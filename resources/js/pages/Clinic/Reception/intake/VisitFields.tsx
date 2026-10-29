@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { AlertTriangle, IndianRupee, Siren, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Siren } from 'lucide-react';
 import { ContextBadge, contextForSpecialty, Input, Select } from '@/clinic';
 import { cn } from '@/lib/utils';
 import { ChoiceChips, chipClass, contextLabel } from '@/clinic';
-import { contextOf, feeTiming, forSpecialty, reasonsFor, visitSpecialty, type IntakeConfig, type PractitionerOption, type VisitForm } from './types';
+import { contextOf, forSpecialty, practitionerNoun, reasonsFor, visitSpecialty, type IntakeConfig, type PractitionerOption, type VisitForm } from './types';
 
 export type VisitErrors = Partial<Record<keyof VisitForm, string>>;
 
@@ -94,6 +94,8 @@ export function VisitFields({
   const areaChoices = doctor ? doctor.contexts.filter((option) => !multiModule || moduleKey === '' || option.specialty === moduleKey) : [];
   const doctorLabel = (option: PractitionerOption) =>
     [option.name, option.credentials, multiModule && moduleKey === '' ? option.module?.label : option.area?.label, option.shift === 'not_set' ? null : option.shift_label].filter(Boolean).join(' · ');
+  // "Doctor", "Therapist", or both before the module is known.
+  const noun = practitionerNoun(config, moduleKey);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -119,19 +121,19 @@ export function VisitFields({
 
       <div className="sm:col-span-2">
         <label htmlFor={`${idPrefix}-doctor`} className="mb-1.5 block text-[12px] font-semibold text-clinic-ink">
-          Doctor
+          {noun}
         </label>
         {config.doctors.length === 0 ? (
-          <p className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-secondary">No doctor is on shift here today; the queue will assign one.</p>
+          <p className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-secondary">No {noun.toLowerCase()} is on shift here today; the queue will assign one.</p>
         ) : eligible.length === 0 ? (
-          <p className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-secondary">No doctor for this is on shift here today; the queue will assign one.</p>
+          <p className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-secondary">No {noun.toLowerCase()} for this is on shift here today; the queue will assign one.</p>
         ) : (
           <Select
             id={`${idPrefix}-doctor`}
             value={value.doctor_id}
             onChange={(event) => chooseDoctor(event.target.value)}
             options={eligible.map((option) => ({ value: String(option.id), label: doctorLabel(option) }))}
-            placeholder="Next available doctor"
+            placeholder={`Next available ${noun.toLowerCase()}`}
             invalid={!!errors.doctor_id}
             aria-describedby={errors.doctor_id ? `${idPrefix}-doctor-error` : undefined}
           />
@@ -145,20 +147,13 @@ export function VisitFields({
 
       {doctor && context && (
         <div className="sm:col-span-2" aria-live="polite">
-          <p className="flex flex-wrap items-center gap-2 rounded-xl bg-clinic-inset/60 px-3 py-2 text-[12.5px] text-clinic-ink">
-            <Sparkles className="h-3.5 w-3.5 text-clinic-secondary" aria-hidden="true" />
-            <span className="font-semibold">Visit for</span>
-            {contextLabel(context) && <ContextBadge context={contextForSpecialty(context.module)} label={contextLabel(context)} />}
-            <span className="text-clinic-secondary">with {doctor.name}</span>
-            {doctor.room && <span className="text-clinic-secondary">· {doctor.room}</span>}
-            {config.check_in.show_fee && doctor.fee !== null && (
-              <span className="ml-auto inline-flex items-center gap-0.5 font-semibold text-clinic-ink">
-                <IndianRupee className="h-3 w-3" aria-hidden="true" />
-                {doctor.fee.toLocaleString('en-IN')}
-                <span className="font-normal text-clinic-secondary">&nbsp;consultation, {feeTiming(config, doctor, context?.module ?? null)}</span>
-              </span>
-            )}
-          </p>
+          {/* What choosing them means for the visit (the care, the room); the fee is said once, under the visit. */}
+          {(contextLabel(context) || doctor.room) && (
+            <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-clinic-secondary">
+              {contextLabel(context) && <ContextBadge context={contextForSpecialty(context.module)} label={contextLabel(context)} />}
+              {doctor.room && <span>{doctor.room}</span>}
+            </p>
+          )}
           {areaChoices.length > 1 && (
             <div className="mt-2">
               <ChoiceChips
@@ -179,7 +174,6 @@ export function VisitFields({
           <label htmlFor={`${idPrefix}-reason`} className="mb-1.5 block text-[12px] font-semibold text-clinic-ink">
             Reason for visit
             {reasonState === 'required' && <span className="text-clinic-danger"> *</span>}
-            <span className="font-medium text-clinic-secondary"> · as the patient says it</span>
           </label>
           {reasons.length <= REASON_CHIPS_MAX ? (
             <ChoiceChips
@@ -230,41 +224,67 @@ export function VisitFields({
   );
 }
 
+/** The priorities that change the queue order (`VisitPriority::rank`), always on show, in this order. */
+const URGENCY = ['normal', 'urgent', 'emergency'];
+
 /**
  * Normal, urgent and (if the clinic uses it) emergency, as words and icons —
- * never colour alone. Operational triage at the desk, not a diagnosis.
+ * never colour alone. Operational triage at the desk, not a diagnosis. The
+ * clinic's other priorities (senior citizen, child, VIP — the same setting,
+ * the same queue meaning as before) sit behind "More", and stay open when
+ * one of them is chosen.
  */
 export function PriorityField({ config, value, onChange, idPrefix }: { config: IntakeConfig; value: string; onChange: (value: string) => void; idPrefix: string }) {
+  const [showMore, setShowMore] = useState(false);
   if (!config.check_in.priority || config.priorities.length < 2) {
     return null;
   }
+  const main = URGENCY.map((key) => config.priorities.find((priority) => priority.value === key)).filter((priority) => priority !== undefined);
+  const others = config.priorities.filter((priority) => !URGENCY.includes(priority.value));
+  const othersOpen = showMore || others.some((priority) => priority.value === value);
+
+  const chip = (priority: IntakeConfig['priorities'][number]) => {
+    const selected = value === priority.value;
+    const Icon = priority.value === 'emergency' ? Siren : priority.value === 'urgent' ? AlertTriangle : null;
+
+    return (
+      <button
+        key={priority.value}
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        onClick={() => onChange(priority.value)}
+        className={cn(
+          chipClass(selected),
+          'motion-safe:transition-[background-color,border-color,color,transform] motion-safe:duration-150 motion-safe:active:scale-[0.97]',
+          selected && priority.value === 'emergency' && 'border-rose-700 bg-rose-700',
+          selected && priority.value === 'urgent' && 'border-amber-600 bg-amber-600',
+        )}
+      >
+        {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
+        {priority.label}
+      </button>
+    );
+  };
 
   return (
     <div className="sm:col-span-2">
       <p className="mb-1.5 text-[12px] font-semibold text-clinic-ink">Priority</p>
-      <div role="radiogroup" aria-label="Priority" id={`${idPrefix}-priority`} className="flex flex-wrap gap-2">
-        {config.priorities.map((priority) => {
-          const selected = value === priority.value;
-          const Icon = priority.value === 'emergency' ? Siren : priority.value === 'urgent' ? AlertTriangle : null;
-
-          return (
-            <button
-              key={priority.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(priority.value)}
-              className={cn(
-                chipClass(selected),
-                selected && priority.value === 'emergency' && 'border-rose-700 bg-rose-700',
-                selected && priority.value === 'urgent' && 'border-amber-600 bg-amber-600',
-              )}
-            >
-              {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
-              {priority.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="radiogroup" aria-label="Priority" id={`${idPrefix}-priority`} className="flex flex-wrap gap-2">
+          {main.map(chip)}
+          {othersOpen && others.map(chip)}
+        </div>
+        {others.length > 0 && !othersOpen && (
+          <button
+            type="button"
+            aria-expanded={false}
+            onClick={() => setShowMore(true)}
+            className="inline-flex min-h-9 items-center rounded-full px-2 text-[12.5px] font-semibold text-[#1769AA] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan [@media(pointer:coarse)]:min-h-11"
+          >
+            More…
+          </button>
+        )}
       </div>
     </div>
   );

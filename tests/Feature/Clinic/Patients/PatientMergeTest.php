@@ -2,6 +2,7 @@
 
 use App\ClinicRole;
 use App\Models\Appointment;
+use App\Models\AttachedDocument;
 use App\Models\ConsentRecord;
 use App\Models\DeletionRequest;
 use App\Models\PatientMedicalHistory;
@@ -39,6 +40,8 @@ beforeEach(function () {
 });
 
 test('reception asks, the owner approves in Owner Mode, and the history moves to the patient kept', function () {
+    // The owner works here as a doctor too: Doctor Mode until they enter Owner Mode.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
     $visit = $this->f->appointment($this->duplicate, $this->f->doctorA, now()->addDay());
     $consent = ConsentRecord::create(['clinic_id' => $this->f->clinic->id, 'patient_id' => $this->duplicate->id, 'consent_type' => 'treatment', 'status' => ConsentRecord::GRANTED, 'capture_method' => 'written', 'captured_at' => now()]);
     PatientMedicalHistory::create(['clinic_id' => $this->f->clinic->id, 'patient_id' => $this->duplicate->id, 'allergies' => ['Penicillin']]);
@@ -79,6 +82,8 @@ test('the merge ledger can never be changed or removed', function () {
 
 test('only members with patient.merge may ask, and only the owner in Owner Mode may act directly', function () {
     ($this->asDoctor)()->post('/clinic/approvals', ($this->merge)($this->keep->id))->assertForbidden();
+    // The owner works here as a doctor too: Doctor Mode until they enter Owner Mode.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
     ($this->asReception)()->post('/clinic/approvals/direct', ($this->merge)($this->keep->id))->assertForbidden();
     ($this->asOwner)()->post('/clinic/approvals/direct', ($this->merge)($this->keep->id))->assertForbidden();
 
@@ -89,15 +94,19 @@ test('only members with patient.merge may ask, and only the owner in Owner Mode 
 test('a merge needs a different, working patient of the same clinic to keep', function () {
     $other = ReceptionFixture::make('other-clinic');
     $elsewhere = $other->patient('Asha', 'Rao');
-    $archived = $this->f->patient('Old', 'Record', ['status' => PatientStatus::Archived]);
+    $merged = $this->f->patient('Old', 'Record', ['status' => PatientStatus::Merged]);
 
     ($this->asReception)()->post('/clinic/approvals', ($this->merge)($this->duplicate->id))->assertSessionHasErrors('governance');
     ($this->asReception)()->post('/clinic/approvals', ($this->merge)($elsewhere->id))->assertSessionHasErrors('governance');
-    ($this->asReception)()->post('/clinic/approvals', ($this->merge)($archived->id))->assertSessionHasErrors('governance');
+    ($this->asReception)()->post('/clinic/approvals', ($this->merge)($merged->id))->assertSessionHasErrors('governance');
     ($this->asReception)()->post('/clinic/approvals', [...($this->merge)($this->keep->id), 'payload' => []])->assertSessionHasErrors('governance');
 
     // A payload is refused for an action that takes none.
-    ($this->asOwnerInOwnerMode)()->post('/clinic/approvals/direct', ['action' => 'patient.archive', 'target_id' => $this->duplicate->id, 'reason' => 'Registered twice at the front desk', 'payload' => ['x' => 1]])
+    $document = AttachedDocument::create([
+        'clinic_id' => $this->f->clinic->id, 'patient_id' => $this->duplicate->id, 'uploaded_by' => $this->f->owner->id,
+        'file_name' => 'consent.pdf', 'file_path' => 'x/consent.pdf', 'file_size_bytes' => 10, 'document_type' => 'other', 'scan_status' => AttachedDocument::SCAN_CLEAN,
+    ]);
+    ($this->asOwnerInOwnerMode)()->post('/clinic/approvals/direct', ['action' => 'document.remove', 'target_id' => $document->id, 'reason' => 'Registered twice at the front desk', 'payload' => ['x' => 1]])
         ->assertSessionHasErrors('governance');
 
     expect(DeletionRequest::count())->toBe(0)->and($elsewhere->fresh()->clinic_id)->toBe($other->clinic->id)

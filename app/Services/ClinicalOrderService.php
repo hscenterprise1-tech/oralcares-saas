@@ -14,6 +14,7 @@ use App\Models\PatientTimelineEvent;
 use App\Models\User;
 use App\Services\Communication\PatientMessaging;
 use App\Services\Numbering\ClinicDocumentNumbers;
+use App\Services\Patient\PatientCareGuard;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -55,6 +56,7 @@ class ClinicalOrderService
         if ($items === []) {
             throw new InvalidArgumentException('Add at least one investigation to the order.');
         }
+        app(PatientCareGuard::class)->assertEncounterCanTakeNewCare($encounter);
 
         return DB::transaction(function () use ($encounter, $orderData, $items, $orderer) {
             /** @var ClinicalEncounter $encounter */
@@ -145,6 +147,14 @@ class ClinicalOrderService
                 'organization_id' => $item->order()->withoutGlobalScopes()->value('organization_id'),
                 'patient_id' => $item->order()->withoutGlobalScopes()->value('patient_id'),
             ]);
+            // A result entered again before review replaces the draft; what it said is kept in the timeline.
+            $previous = $result->exists ? [
+                'summary' => $result->summary,
+                'values' => $result->content['values'] ?? [],
+                'is_abnormal' => (bool) $result->is_abnormal,
+                'reported_at' => $result->reported_at?->toIso8601String(),
+                'reported_by' => $result->reported_by,
+            ] : null;
             $result->fill([
                 'status' => DiagnosticResult::DRAFT,
                 'result_type' => $this->resultType($item->category),
@@ -160,6 +170,7 @@ class ClinicalOrderService
 
             $this->timeline($item->order()->withoutGlobalScopes()->firstOrFail(), 'investigation_resulted', [
                 'item_id' => $item->id, 'item_name' => $item->item_name, 'is_abnormal' => $abnormal,
+                ...($previous ? ['corrected' => true, 'previous' => $previous] : []),
             ]);
 
             return $result;

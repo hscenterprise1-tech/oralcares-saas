@@ -55,14 +55,48 @@ class ClinicWorkspaces
 
     /**
      * Where a signed-in user lands (after login, onboarding, an invitation, or
-     * the logo): the one Dashboard, composed for them from what they may do
-     * (`DashboardWidgets`). Nobody is sent to a separate per-role home, so a
-     * receptionist who may also bill keeps one dashboard with both.
+     * the logo). There is no separate staff dashboard any more:
+     *
+     * - whoever runs the clinic: the Command Center (`clinic.dashboard`);
+     * - the front office: the Front Desk, reception's one dashboard;
+     * - billing staff: the Billing page;
+     * - a practitioner, and anyone else: the Appointment Calendar, else Patients, else Notifications.
      *
      * @param  array<string, string>  $routeParameters
      */
     public static function landing(ClinicAccess $access, array $routeParameters = []): string
     {
-        return route('clinic.dashboard', $routeParameters);
+        return route(self::home($access), $routeParameters);
+    }
+
+    /** The route name of this user's home (see `landing`); never `clinic.dashboard` unless the Command Center applies. */
+    public static function home(ClinicAccess $access): string
+    {
+        $built = fn (string $route): bool => Route::has($route) && ClinicFrontend::available($route);
+
+        return match (true) {
+            self::commandCenter($access) => 'clinic.dashboard',
+            self::receptionHome($access) => 'clinic.reception',
+            $access->primaryWorkspace() === 'billing' && $built('clinic.billing.index') => 'clinic.billing.index',
+            $built('clinic.appointments.index') && $access->allows(ClinicNavigation::CALENDAR) => 'clinic.appointments.index',
+            $built('clinic.patients.index') && $access->allows(['permissions' => ['patient.view'], 'module' => 'patients']) => 'clinic.patients.index',
+            default => 'clinic.notifications.index',
+        };
+    }
+
+    /** Whether this user has the Command Center, the one page `clinic.dashboard` still shows (`OwnerCommandCenter::appliesTo`). */
+    public static function commandCenter(ClinicAccess $access): bool
+    {
+        return in_array('command_center', $access->workspaces(), true);
+    }
+
+    /**
+     * Whether this user's dashboard is the Front Desk: their primary
+     * workspace is the front office (whoever runs the clinic has the Command
+     * Center first). The sidebar's Dashboard is then the Front Desk.
+     */
+    public static function receptionHome(ClinicAccess $access): bool
+    {
+        return ! self::commandCenter($access) && $access->primaryWorkspace() === 'front_desk' && Route::has('clinic.reception') && ClinicFrontend::available('clinic.reception');
     }
 }

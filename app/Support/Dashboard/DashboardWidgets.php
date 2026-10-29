@@ -100,7 +100,7 @@ class DashboardWidgets
             'todays_patients', 'upcoming_appointments',
             'pending_payments',
             'needs_attention', 'follow_ups_due',
-            'owner_finance', 'branch_activity', 'owner_security',
+            'owner_finance', 'branch_activity', 'owner_people', 'owner_security', 'owner_activity',
         ],
         'general' => [
             'patients_today', 'appointments_today',
@@ -241,11 +241,24 @@ class DashboardWidgets
             'action' => ['label' => 'Manage branches', 'route' => 'admin.branches.index'],
         ],
         [
+            'key' => 'owner_people', 'title' => 'People & plan', 'description' => 'Logins in use against your plan, branches, staff on leave',
+            'icon' => 'staff', 'tone' => 'violet', 'kind' => 'facts', 'zone' => 'management', 'order' => 25,
+            'requires' => ['owner_mode' => true, 'branch' => 'clinic_wide'],
+            'source' => 'ownerPeople',
+        ],
+        [
             'key' => 'owner_security', 'title' => 'Security', 'description' => 'Sign-in and Owner Mode checks, last 7 days',
             'icon' => 'shield', 'tone' => 'red', 'kind' => 'list', 'zone' => 'management', 'order' => 30,
             'requires' => ['owner_mode' => true],
             'source' => 'ownerSecurity',
             'empty' => 'No security events in the last 7 days.',
+        ],
+        [
+            'key' => 'owner_activity', 'title' => 'Recent sensitive actions', 'description' => 'Money, access and governance changes, last 7 days',
+            'icon' => 'attention', 'tone' => 'slate', 'kind' => 'list', 'zone' => 'management', 'order' => 40,
+            'requires' => ['owner_mode' => true],
+            'source' => 'ownerActivity',
+            'empty' => 'No refunds, adjustments, payroll or access changes in the last 7 days.',
         ],
     ];
 
@@ -377,6 +390,22 @@ class DashboardWidgets
         }
 
         return $result;
+    }
+
+    /**
+     * One widget's definition, for a page that reuses its requirements and source.
+     *
+     * @return array<string, mixed>
+     */
+    public static function definition(string $key): array
+    {
+        foreach (self::WIDGETS as $widget) {
+            if ($widget['key'] === $key) {
+                return $widget;
+            }
+        }
+
+        throw new \InvalidArgumentException("Unknown dashboard widget [{$key}].");
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\OwnerModeRequired;
 use App\Services\OwnerMode\OwnerMode;
 use Closure;
 use Illuminate\Http\Request;
@@ -24,7 +25,14 @@ class EnsureOwnerMode
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless($this->ownerMode->authorized(), 403, self::REFUSAL);
+        if (! $this->ownerMode->authorized()) {
+            // The owner can step up; anyone else is simply refused.
+            if ($this->ownerMode->isOwner()) {
+                throw OwnerModeRequired::inactive(self::REFUSAL);
+            }
+
+            abort(403, self::REFUSAL);
+        }
 
         return $next($request);
     }

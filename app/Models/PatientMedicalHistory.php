@@ -39,6 +39,8 @@ class PatientMedicalHistory extends Model
     protected function casts(): array
     {
         return [
+            // Set only by `PatientSafetyController::updateNotes`.
+            'notes_updated_at' => 'datetime',
             'pregnancy_status' => 'boolean',
             'blood_disorder' => 'boolean',
             'diabetes' => 'boolean',

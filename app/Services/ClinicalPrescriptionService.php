@@ -7,11 +7,15 @@ use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicMedicine;
+use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
+use App\Models\User;
+use App\Services\Clinical\PrescriptionAllergyCheck;
 use App\Services\Communication\PatientMessaging;
 use App\Services\Numbering\ClinicDocumentNumbers;
+use App\Services\Patient\PatientCareGuard;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -40,6 +44,8 @@ class ClinicalPrescriptionService
      */
     public function draftFor(ClinicalEncounter $encounter, ?ClinicEmployee $prescriber): Prescription
     {
+        app(PatientCareGuard::class)->assertEncounterCanTakeNewCare($encounter);
+
         return DB::transaction(function () use ($encounter, $prescriber) {
             $encounter = $this->lockOpenEncounter($encounter);
 
@@ -110,7 +116,61 @@ class ClinicalPrescriptionService
     }
 
     /**
+     * A clinician acknowledges the patient's documented allergies for this
+     * draft. The fingerprint is the one the clinician was shown
+     * (`PrescriptionAllergyCheck`); if the allergy record changed since, the
+     * review is refused and must be made again against the current list.
+     * Recorded on the prescription (who, when, what) and in the timeline.
+     */
+    public function reviewAllergies(Prescription $prescription, User $by, string $fingerprint): Prescription
+    {
+        return DB::transaction(function () use ($prescription, $by, $fingerprint) {
+            $prescription = $this->lockDraft($prescription);
+            $state = $this->allergyState($prescription);
+
+            if ($state['status'] !== PrescriptionAllergyCheck::DOCUMENTED) {
+                throw new DomainException('This patient has no documented allergies to review.');
+            }
+            if (! hash_equals($state['fingerprint'], $fingerprint)) {
+                throw new DomainException('The patient\'s allergy record changed while you were reviewing it. Review the current list.');
+            }
+
+            $prescription->forceFill(['allergy_review' => $state, 'allergy_reviewed_at' => now(), 'allergy_reviewed_by' => $by->id])->save();
+
+            PatientTimelineEvent::create([
+                'organization_id' => $prescription->organization_id,
+                'clinic_id' => $prescription->clinic_id,
+                'patient_id' => $prescription->patient_id,
+                'actor_id' => $by->id,
+                'event_type' => 'prescription_allergies_reviewed',
+                'context' => ['prescription_id' => $prescription->id, 'encounter_id' => $prescription->encounter_id, 'allergies' => array_column($state['allergies'], 'label')],
+            ]);
+
+            return $prescription;
+        });
+    }
+
+    /**
+     * The patient's allergy state for this prescription's patient (its clinic only).
+     *
+     * @return array{status: string, allergies: list<array{label: string, severity: ?string, reaction: ?string}>, fingerprint: string}
+     */
+    public function allergyState(Prescription $prescription): array
+    {
+        $patient = Patient::query()->withoutGlobalScopes()->where('clinic_id', $prescription->clinic_id)->findOrFail($prescription->patient_id);
+
+        return app(PrescriptionAllergyCheck::class)->stateFor($patient);
+    }
+
+    /**
      * Sign and number the prescription. From here it is printed, never edited.
+     *
+     * Every signing path ends here (the studio, signing the consultation,
+     * `issuePrescription`). Where the patient has documented allergies, a
+     * clinician must have reviewed the current list for this draft
+     * (`reviewAllergies`); otherwise it is refused. What was known —
+     * including "not recorded", which is not "none" — is kept on the
+     * prescription.
      */
     public function finalize(Prescription $prescription, ?ClinicEmployee $by): Prescription
     {
@@ -120,6 +180,15 @@ class ClinicalPrescriptionService
 
             if ($lines->isEmpty()) {
                 throw new DomainException('Add at least one medicine before finalising the prescription.');
+            }
+
+            $allergies = $this->allergyState($prescription);
+            if ($allergies['status'] === PrescriptionAllergyCheck::DOCUMENTED
+                && ($prescription->allergy_reviewed_at === null || ! hash_equals($allergies['fingerprint'], (string) ($prescription->allergy_review['fingerprint'] ?? '')))) {
+                throw new DomainException('Review the patient\'s documented allergies before finalising: '.implode(', ', array_column($allergies['allergies'], 'label')).'.');
+            }
+            if ($allergies['status'] !== PrescriptionAllergyCheck::DOCUMENTED) {
+                $prescription->allergy_review = $allergies;
             }
 
             $clinic = Clinic::query()->findOrFail($prescription->clinic_id);
@@ -152,6 +221,7 @@ class ClinicalPrescriptionService
                     'encounter_id' => $prescription->encounter_id,
                     'prescription_number' => $prescription->prescription_number,
                     'item_count' => $lines->count(),
+                    'allergy_status' => $allergies['status'],
                 ],
             ]);
 
@@ -221,6 +291,8 @@ class ClinicalPrescriptionService
      */
     public function issuePrescription(ClinicalEncounter $encounter, array $prescriptionData, array $items, ?ClinicEmployee $prescriber = null): Prescription
     {
+        app(PatientCareGuard::class)->assertEncounterCanTakeNewCare($encounter);
+
         return DB::transaction(function () use ($encounter, $prescriptionData, $items, $prescriber) {
             $encounter = $this->lockOpenEncounter($encounter);
             $prescriber ??= ClinicEmployee::query()->withoutGlobalScopes()

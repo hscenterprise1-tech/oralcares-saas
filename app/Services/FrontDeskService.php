@@ -11,6 +11,7 @@ use App\Models\Patient;
 use App\Models\QueueEntry;
 use App\Models\User;
 use App\Services\Numbering\ClinicDocumentNumbers;
+use App\Services\Patient\PatientCareGuard;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -26,6 +27,9 @@ class FrontDeskService
      */
     public function checkInAppointment(Appointment $appointment): QueueEntry
     {
+        if ($appointment->patient_id && ($patient = Patient::query()->withoutGlobalScopes()->where('clinic_id', $appointment->clinic_id)->find($appointment->patient_id))) {
+            app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+        }
         if ($appointment->status !== AppointmentStatus::Scheduled) {
             throw new Exception('Only scheduled appointments can be checked in.');
         }
@@ -52,6 +56,9 @@ class FrontDeskService
      */
     public function addWalkIn(Patient $patient, ?User $provider = null, ?int $branchId = null): QueueEntry
     {
+        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return QueueEntry::create([
             'organization_id' => $patient->organization_id,
             'branch_id' => $branchId,
@@ -67,6 +74,9 @@ class FrontDeskService
      */
     public function startConsultation(QueueEntry $queue): ClinicalEncounter
     {
+        if ($queue->patient_id && ($patient = Patient::query()->withoutGlobalScopes()->find($queue->patient_id))) {
+            app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+        }
         if ($queue->status !== 'waiting') {
             throw new Exception('Only waiting queue entries can start consultation.');
         }

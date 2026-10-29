@@ -113,6 +113,9 @@ class ConsultationCare
                     'reverse_session' => $session ? route('clinic.treatments.sessions.reverse', [$treatment, $session]) : null,
                     'start_plan' => route('clinic.treatments.plans.store', $treatment),
                     'revise_plan' => $plan ? route('clinic.treatments.plans.revise', [$treatment, $plan]) : null,
+                    // Discharge: the plan of care closed as completed, then the (stage-less) treatment completed.
+                    'close_plan' => $plan ? route('clinic.consultations.physio.plans.close', [$encounter, $plan]) : null,
+                    'complete' => $physio && (int) $treatment->stages_total === 0 ? route('clinic.treatments.complete', $treatment) : null,
                     'sell_package' => route('clinic.treatments.packages.store', $treatment),
                     'context' => route('clinic.treatments.context', $treatment),
                     'detail' => route('clinic.treatments.show', $treatment),

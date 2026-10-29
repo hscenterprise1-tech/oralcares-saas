@@ -35,7 +35,7 @@ export interface PatientFormProps {
   roles: string[];
   templates: { key: string; label: string; description: string }[];
   limits: { label: number; help: number };
-  quick_care: { allergy_status: FieldState; alerts: boolean; alert_roles: string[] | null };
+  quick_care: { allergy_status: FieldState; alerts: boolean; alert_roles: string[] | null; conditions_from_catalogue: boolean };
   visit_reason: FieldState;
   lists: Record<ListKind, ListItem[]>;
   links: { fields: string; template: string; quick_care: string; check_in: string; catalogue: string };

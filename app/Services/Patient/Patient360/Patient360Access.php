@@ -8,6 +8,7 @@ use App\Models\ClinicalEncounter;
 use App\Models\Patient;
 use App\Models\User;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\Patient\PatientBranchAccess;
 use App\Support\Specialty\SpecialtyRegistry;
 
@@ -46,9 +47,8 @@ class Patient360Access
     /** Clinic owner or an administrator (settings), never front-line roles. */
     public function canViewAudit(User $user): bool
     {
-        $membership = $this->clinicContext->membership();
-
-        return ($membership?->is_primary_owner ?? false) || $user->hasClinicPermission(ClinicPermission::SettingsManage);
+        // The owner with the owner's privileges (a doctor-owner in Doctor Mode is a doctor here).
+        return app(OwnerMode::class)->authorized() || $user->hasClinicPermission(ClinicPermission::SettingsManage);
     }
 
     /** Follow-ups are managed by clinicians and by the front desk. */

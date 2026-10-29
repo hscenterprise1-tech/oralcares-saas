@@ -135,7 +135,8 @@ test('domain validation service validates lifecycle transitions', function () {
 
     // Patient
     expect($valService->validatePatientStatusTransition('active', 'inactive'))->toBeTrue();
-    expect($valService->validatePatientStatusTransition('archived', 'inactive'))->toBeFalse();
+    // There is no patient archive to move into.
+    expect($valService->validatePatientStatusTransition('active', 'archived'))->toBeFalse();
 
     // Visit/Encounter
     expect($valService->validateEncounterStatusTransition('checked_in', 'waiting'))->toBeTrue();

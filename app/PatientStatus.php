@@ -8,9 +8,6 @@ enum PatientStatus: string
     case Inactive = 'inactive';
     case Deceased = 'deceased';
 
-    /** Removed from the working directory by an owner-approved request; the record is kept. */
-    case Archived = 'archived';
-
     /** A duplicate merged into another patient (see `patient_merges`); kept, never shown as a working record. */
     case Merged = 'merged';
 
@@ -20,7 +17,6 @@ enum PatientStatus: string
             self::Active => 'Active',
             self::Inactive => 'Inactive',
             self::Deceased => 'Deceased',
-            self::Archived => 'Archived',
             self::Merged => 'Merged',
         };
     }

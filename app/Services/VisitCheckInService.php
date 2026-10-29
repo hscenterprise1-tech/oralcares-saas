@@ -8,6 +8,7 @@ use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
+use App\Services\Patient\PatientCareGuard;
 use App\VisitStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -26,6 +27,9 @@ class VisitCheckInService
         Patient $patient,
         ?ClinicEmployee $doctor = null
     ): ClinicalEncounter {
+        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($clinic, $branch, $patient, $doctor) {
             $visitNumber = $this->identifierService->generateVisitNumber($clinic);
 

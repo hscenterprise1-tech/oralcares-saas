@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * One destructive action under owner governance: what it is called, who may
  * ask for it, how its record is found (always inside one clinic), and what
  * carrying it out does. No action destroys clinical history: records are
- * voided, removed (soft) or archived, and stay readable to authorised roles.
+ * voided, removed (soft) or merged, and stay readable to authorised roles.
  */
 interface GovernedAction
 {

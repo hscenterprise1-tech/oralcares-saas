@@ -61,8 +61,8 @@ test('pages are the navigation\'s own: only what this member may open, and only 
     expect($titles(($this->search)($reception, 'appoint')))->toBe(['Appointments'])
         ->and($titles(($this->search)($billing, 'appoint')))->toBe([])
         ->and($titles(($this->search)($reception, 'support')))->toBe(['Support'])
-        // Billing exists for reception but has no new screen yet: never offered as a result.
-        ->and($titles(($this->search)($reception, 'billing')))->toBe([])
+        // Billing is built and reception may open it.
+        ->and($titles(($this->search)($reception, 'billing')))->toBe(['Billing'])
         ->and($titles(($this->search)($this->owner, 'reports')))->toBe([]);
 });
 

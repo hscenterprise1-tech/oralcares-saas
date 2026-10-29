@@ -32,22 +32,23 @@ export function AccountMenu({ user, clinic, links }: { user: AuthUser; clinic: C
       <Menu.Root>
         <Menu.Trigger
           aria-label={inOwnerMode ? `Account: ${user.name}, Owner Mode on` : `Account: ${user.name}`}
-          className="group flex items-center gap-3 rounded-md py-1 pl-1 pr-1.5 text-left hover:bg-cx-nav-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal"
+          className="group flex items-center gap-3 rounded-full py-1 pl-1 pr-1.5 text-left transition-colors hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-blue data-[state=open]:bg-white/70 md:pr-3"
         >
+          {/* The dashboard's greeting wash (blue to mint) with ink initials, rather than a heavy dark disc. */}
           <span
             aria-hidden="true"
             className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cx-nav-ink text-[14px] font-semibold text-white',
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#EAF2FF] via-[#F3F1FE] to-[#E6F6F2] text-[14px] font-semibold text-cx-nav-ink ring-1 ring-inset ring-[#DCE6F3]',
               inOwnerMode && 'ring-2 ring-cx-nav-teal ring-offset-2 ring-offset-white',
             )}
           >
             {personInitials(user.name)}
           </span>
           <span className="hidden min-w-0 xl:block">
-            <span className="block max-w-[150px] truncate text-[14px] font-semibold text-cx-nav-ink">{user.name}</span>
-            <span className="block max-w-[150px] truncate text-[12.5px] text-cx-nav-muted">{roleLabel(clinic)}</span>
+            <span className="block max-w-[150px] truncate text-[13.5px] font-semibold text-cx-nav-ink">{user.name}</span>
+            <span className="block max-w-[150px] truncate text-[12px] text-cx-text-3">{roleLabel(clinic)}</span>
           </span>
-          <ChevronDown className="hidden h-4 w-4 text-cx-nav-muted xl:block" strokeWidth={1.75} aria-hidden="true" />
+          <ChevronDown className="hidden h-4 w-4 text-cx-text-3 transition-transform group-data-[state=open]:rotate-180 xl:block" strokeWidth={1.75} aria-hidden="true" />
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Content

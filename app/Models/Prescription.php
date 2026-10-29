@@ -51,6 +51,9 @@ class Prescription extends Model
             'details' => 'array',
             'finalized_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            // Set only by `ClinicalPrescriptionService` (review and signing); never mass-assigned.
+            'allergy_review' => 'array',
+            'allergy_reviewed_at' => 'datetime',
         ];
     }
 

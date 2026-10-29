@@ -44,7 +44,7 @@ test('the owner opens Patient form settings with every setting it saves, and no 
     ($this->asOwner)()->get('/clinic/admin/settings/patient-form')->assertOk()
         ->assertInertia(fn ($page) => $page->component('ClinicPortal/Settings/PatientForm', true)
             ->has('fields.address_locality.state')->has('fields.surgical_history.state')->has('fields.email.label')
-            ->where('quick_care', ['allergy_status' => 'optional', 'alerts' => true, 'alert_roles' => null])
+            ->where('quick_care', ['allergy_status' => 'optional', 'alerts' => true, 'alert_roles' => null, 'conditions_from_catalogue' => false])
             ->has('lists.visit_reason')->has('lists.surgery')->has('lists.family_history')->has('lists.medication')
             ->where('system_fields.0.key', 'first_name')->where('system_fields.1.key', 'phone')
             ->has('templates', 3)

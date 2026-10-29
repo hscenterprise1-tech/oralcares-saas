@@ -128,7 +128,7 @@ class PatientFlowConfigService
      * (`vitals`, `temperature_unit`, `thresholds`) are left as stored and
      * ignored — never read, offered or enforced.
      *
-     * @return array{allergy_status: string, alerts: bool, alert_roles: ?list<string>}
+     * @return array{allergy_status: string, alerts: bool, alert_roles: ?list<string>, conditions_from_catalogue: bool}
      */
     public function quickCare(?Clinic $clinic): array
     {
@@ -138,6 +138,8 @@ class PatientFlowConfigService
             'allergy_status' => in_array($stored['allergy_status'] ?? null, PatientFieldConfigService::STATES, true) ? $stored['allergy_status'] : PatientFieldConfigService::OPTIONAL,
             'alerts' => (bool) ($stored['alerts'] ?? true),
             'alert_roles' => self::list($stored['alert_roles'] ?? null),
+            // Off unless the clinic turns it on: then a condition must be one of the clinic's own (`ClinicalCatalogue`).
+            'conditions_from_catalogue' => (bool) ($stored['conditions_from_catalogue'] ?? false),
         ];
     }
 
@@ -150,7 +152,7 @@ class PatientFlowConfigService
     }
 
     /**
-     * @param  array{allergy_status?: string, alerts?: bool, alert_roles?: ?list<string>}  $input
+     * @param  array{allergy_status?: string, alerts?: bool, alert_roles?: ?list<string>, conditions_from_catalogue?: bool}  $input
      */
     public function updateQuickCare(Clinic $clinic, array $input, ?User $actor): void
     {
@@ -161,6 +163,7 @@ class PatientFlowConfigService
             'allergy_status' => $input['allergy_status'] ?? $before['allergy_status'],
             'alerts' => array_key_exists('alerts', $input) ? (bool) $input['alerts'] : $before['alerts'],
             'alert_roles' => array_key_exists('alert_roles', $input) ? $input['alert_roles'] : $before['alert_roles'],
+            'conditions_from_catalogue' => array_key_exists('conditions_from_catalogue', $input) ? (bool) $input['conditions_from_catalogue'] : $before['conditions_from_catalogue'],
         ];
         $clinic->update(['patient_flow_config' => [...($clinic->patient_flow_config ?? []), 'quick_care' => $merged]]);
         $after = $this->quickCare($clinic->refresh());

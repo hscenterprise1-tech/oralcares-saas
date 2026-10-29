@@ -42,6 +42,7 @@ class Patient360SectionController extends Controller
 
         $data = match ($section) {
             'timeline' => $this->sections->timeline($patient, $user, $request->query('category') ?: null, $page),
+            'visits' => $this->sections->visits($patient, $user, $page),
             'encounters' => $this->sections->encounters($patient, $user, $page),
             'appointments' => $this->sections->appointments(
                 $patient, $user, $request->validate(['scope' => ['nullable', Rule::in(['upcoming', 'history'])]])['scope'] ?? 'upcoming', $page,
@@ -66,7 +67,7 @@ class Patient360SectionController extends Controller
 
     /** Endpoint names this controller answers. */
     private const SECTIONS = [
-        'timeline' => true, 'encounters' => true, 'appointments' => true, 'treatment' => true, 'prescriptions' => true,
+        'timeline' => true, 'visits' => true, 'encounters' => true, 'appointments' => true, 'treatment' => true, 'prescriptions' => true,
         'investigations' => true, 'billing' => true, 'documents' => true, 'follow-ups' => true, 'communications' => true,
         'requests' => true, 'audit' => true, 'dental' => true, 'physio' => true,
     ];

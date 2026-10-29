@@ -197,9 +197,9 @@ export function GlobalSearch({ className, compact = false }: { className?: strin
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            className="h-11 w-full rounded-md border border-cx-nav-line bg-white pl-11 pr-14 text-[14px] text-cx-nav-ink placeholder:text-cx-nav-muted focus:border-cx-nav-teal focus:outline-none focus:ring-2 focus:ring-cx-nav-teal/20 [&::-webkit-search-cancel-button]:cursor-pointer"
+            className="h-11 w-full rounded-full border border-[#DCE6F3] bg-white pl-11 pr-14 text-[14px] text-cx-nav-ink shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition-[border-color,box-shadow] placeholder:text-cx-text-3 hover:border-cx-nav-blue/40 focus:border-cx-nav-blue focus:outline-none focus:ring-4 focus:ring-cx-nav-blue/15 [&::-webkit-search-cancel-button]:cursor-pointer"
           />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-cx-nav-line px-1.5 py-0.5 font-sans text-[11px] text-cx-nav-muted lg:block" aria-hidden="true">
+          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-cx-nav-line bg-white px-1.5 py-0.5 font-sans text-[11px] text-cx-text-3 lg:block" aria-hidden="true">
             {shortcut}
           </kbd>
         </div>

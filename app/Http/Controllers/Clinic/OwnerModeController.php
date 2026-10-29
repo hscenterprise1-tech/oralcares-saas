@@ -43,13 +43,20 @@ class OwnerModeController extends Controller
 
         $this->ownerMode->activate($verifier->method());
 
-        return back()->with('success', 'Owner Mode is on.');
+        // An owner who does not treat patients already holds the owner's privileges;
+        // for them this only confirms the password a T2 action asks for.
+        return back()->with('success', $this->ownerMode->isDoctorOwner() ? 'Owner Mode is on.' : 'Password confirmed.');
     }
 
-    public function destroy(): RedirectResponse
+    /**
+     * Leave Owner Mode: the doctor-owner is back in Doctor Mode, on their own home,
+     * since the page they were on may be the owner's alone.
+     */
+    public function destroy(Request $request): RedirectResponse
     {
         $this->ownerMode->exit();
 
-        return back()->with('success', 'Owner Mode is off.');
+        return redirect()->route('clinic.dashboard', array_filter(['clinic' => $request->route('clinic')], fn ($value) => is_string($value)))
+            ->with('success', 'Owner Mode is off. You are back in Doctor Mode.');
     }
 }

@@ -12,7 +12,8 @@
  *   at most one primary action at the top right.
  *
  * Actions
- * - Primary: the kit's solid navy `Button tone="primary"` — once per view.
+ * - Primary: the kit's solid blue `Button tone="primary"` (the approved
+ *   intake's blue) — once per view. Never black or navy.
  * - Secondary: outlined `Button`. Quiet: `ghost`. Destructive: `danger`, and
  *   only behind a confirmation.
  * - Teal marks interaction, not decoration: focus rings, active filters,

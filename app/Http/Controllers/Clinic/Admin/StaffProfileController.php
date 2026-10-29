@@ -11,6 +11,7 @@ use App\Models\Practitioner;
 use App\Models\PractitionerQualification;
 use App\Models\StaffDocument;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\Security\Malware\ScannedUploadIntake;
 use App\Services\Security\Malware\UploadRejectedException;
 use App\Services\Security\SecurityAudit;
@@ -97,6 +98,13 @@ class StaffProfileController extends Controller
         $primary = isset($validated['primary_branch_id']) ? (int) $validated['primary_branch_id'] : null;
         if ($primary && ! $all->has($primary)) {
             throw ValidationException::withMessages(['primary_branch_id' => 'The primary branch must be one of the staff member\'s branches.']);
+        }
+
+        // Changing where someone may work is a sensitive action: the owner does
+        // it in Owner Mode. Checked before the transaction, so a refusal is audited.
+        $current = $employee->branches()->get()->mapWithKeys(fn (Branch $branch) => [(int) $branch->id => ['is_active' => (bool) $branch->pivot->is_active]])->sortKeys()->all();
+        if ($all->sortKeys()->all() !== $current) {
+            app(OwnerMode::class)->requireForSensitiveAction($request->user(), 'staff.branches', OwnerMode::STANDARD, ['employee_id' => $employee->id]);
         }
 
         DB::transaction(function () use ($employee, $all, $primary, $request) {

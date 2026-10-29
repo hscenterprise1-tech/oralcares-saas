@@ -28,6 +28,7 @@ use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\Patient\PatientClinicalEntries;
 use App\Services\Patient\PatientDirectory;
+use App\Services\Patient\PatientDirectoryAudience;
 use App\Services\Patient\PatientRegistrar;
 use App\Services\Patient\PatientSearch;
 use App\Services\PatientDuplicateDetectionService;
@@ -38,6 +39,7 @@ use App\Services\Reception\PatientFlowConfigService;
 use App\Services\Reception\ReceptionCheckIn;
 use App\Services\Reception\VisitContext;
 use App\Support\Clinical\DefaultClinicalCatalogue;
+use App\Support\ClinicClock;
 use App\Support\ClinicFrontend;
 use App\Support\Specialty\SpecialtyRegistry;
 use App\VisitPriority;
@@ -78,7 +80,7 @@ class PatientController extends Controller
      * search, branch restriction, keyset pages, batched columns). No COUNT,
      * no offset paging, nothing filtered in the browser.
      */
-    public function index(Request $request): Response
+    public function index(Request $request, PatientDirectoryAudience $audience): Response
     {
         $this->authorize('viewAny', Patient::class);
 
@@ -89,43 +91,52 @@ class PatientController extends Controller
 
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:80'],
-            'status' => ['nullable', Rule::in(array_map(fn (PatientStatus $s) => $s->value, PatientStatus::cases()))],
             'specialty' => ['nullable', 'string', 'max:50'],
             'branch_id' => ['nullable', 'integer'],
+            'practitioner_id' => ['nullable', 'regex:/^(none|\d{1,18})$/'],
             'active_care' => ['nullable', 'boolean'],
+            'view' => ['nullable', Rule::in([PatientDirectoryAudience::VIEW_MINE, PatientDirectoryAudience::VIEW_TODAY, PatientDirectoryAudience::VIEW_ALL])],
+            // The earlier "My patients / All patients" switch, kept for old links.
             'tab' => ['nullable', Rule::in(['mine', 'all'])],
             'cursor' => ['nullable', 'string', 'max:500'],
         ]);
 
-        // "My patients" belongs to practitioners (patients assigned to them); everyone else sees the whole record.
-        $employee = $this->clinicContext->currentEmployee();
-        $isPractitioner = $employee?->practitionerProfile !== null;
-        $tab = $isPractitioner && ($validated['tab'] ?? null) !== 'all' ? 'mine' : 'all';
+        $who = $audience->audience();
+        $view = $audience->resolveView($validated['view'] ?? $validated['tab'] ?? null);
+        $scope = $audience->filtersFor($view);
+        // In a doctor's own list the doctor is the filter; nobody else's patients can be asked for.
+        $practitioner = isset($scope['practitioner_id']) ? null : ($validated['practitioner_id'] ?? null);
 
         $filters = array_filter([
             'q' => trim((string) ($validated['q'] ?? '')),
-            'status' => $validated['status'] ?? null,
             'specialty' => $validated['specialty'] ?? null,
             'branch_id' => isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
             'active_care' => ($validated['active_care'] ?? false) ? true : null,
-            'practitioner_id' => $tab === 'mine' ? $employee->id : null,
+            'practitioner_id' => $practitioner,
         ], fn ($value) => $value !== null && $value !== '');
 
         return Inertia::render('ClinicPortal/Patients/Index', [
-            'patients' => $this->directory->page($clinic->id, $filters, $validated['cursor'] ?? null),
+            'patients' => $this->directory->page($clinic->id, [...$filters, ...$scope], $validated['cursor'] ?? null, PatientDirectory::PER_PAGE, $audience->canSeeContact($request->user())),
             'filters' => [
                 'q' => $filters['q'] ?? '',
-                'status' => $filters['status'] ?? '',
+                // There is no patient-status filter; the key stays empty so the page's contract keeps its shape.
+                'status' => '',
                 'specialty' => $filters['specialty'] ?? '',
                 'branch_id' => isset($filters['branch_id']) ? (string) $filters['branch_id'] : '',
+                'practitioner_id' => isset($filters['practitioner_id']) ? (string) $filters['practitioner_id'] : '',
                 'active_care' => isset($filters['active_care']) ? '1' : '',
-                'tab' => $tab,
+                'view' => $view,
             ],
             'options' => [
                 'specialties' => $this->specialtyOptions($clinic),
-                'statuses' => array_map(fn (PatientStatus $s) => ['value' => $s->value, 'label' => $s->label()], PatientStatus::cases()),
+                // The directory lists the current patients; there is no other lifecycle view to choose.
+                'statuses' => [],
+                'views' => $audience->views(),
+                'doctors' => collect(ClinicEmployee::activePractitioners($clinic->id))->map(fn (array $doctor) => ['id' => $doctor['id'], 'name' => $doctor['name']])->all(),
             ],
-            'isPractitioner' => $isPractitioner,
+            'audience' => $who,
+            'today' => ClinicClock::now()->toDateString(),
+            'isPractitioner' => $who === PatientDirectoryAudience::DOCTOR,
             'can' => ['create' => $request->user()->can('create', Patient::class)],
             // Only pages that are built (`ClinicFrontend`); a page still to come is not linked.
             'links' => [
@@ -190,7 +201,7 @@ class PatientController extends Controller
      * The edit page: the same form as registration, pre-filled. Specialty
      * membership and status are shown, not edited here (membership comes from
      * explicit acts; status from governed actions). A merged record opens its
-     * survivor; an archived one is read-only.
+     * survivor.
      */
     public function edit(Patient $patient): Response|RedirectResponse
     {
@@ -202,9 +213,6 @@ class PatientController extends Controller
             $survivorId = PatientMerge::query()->where('clinic_id', $clinic->id)->where('source_patient_id', $patient->id)->value('survivor_patient_id');
 
             return redirect()->route('clinic.patients.show', $survivorId ?? $patient->id)->with('warning', 'That record was merged into this patient; edit this one instead.');
-        }
-        if ($patient->status === PatientStatus::Archived) {
-            return redirect()->route('clinic.patients.show', $patient->id)->with('warning', 'Archived records are kept read-only.');
         }
         $this->authorize('update', $patient);
 
@@ -665,6 +673,14 @@ class PatientController extends Controller
                 'required',
                 'integer',
                 Rule::exists('clinic_employees', 'id')->where('clinic_id', $clinic->id),
+                // A patient's doctor is someone who practises here, not any member of staff.
+                function (string $attribute, mixed $value, \Closure $fail) use ($clinic) {
+                    $practises = ClinicEmployee::withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereKey((int) $value)
+                        ->whereHas('practitionerProfile', fn ($profile) => $profile->withoutGlobalScopes())->exists();
+                    if (! $practises) {
+                        $fail('Choose one of the clinic’s doctors.');
+                    }
+                },
             ],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
@@ -715,7 +731,7 @@ class PatientController extends Controller
             return response()->json([]);
         }
 
-        // Any status: the command palette and the calendar may open an archived record too.
+        // Any status: the command palette and the calendar may open a merged record too (it leads to its survivor).
         $patients = app(PatientSearch::class)
             ->find($clinic, (string) $request->input('q', ''), 10, workingOnly: false, columns: ['id', 'uhid', 'name', 'first_name', 'middle_name', 'last_name', 'phone', 'gender', 'age', 'date_of_birth'])
             ->map(fn ($p) => [

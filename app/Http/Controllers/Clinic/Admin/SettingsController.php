@@ -253,6 +253,7 @@ class SettingsController extends Controller
             'alert_roles.*' => [Rule::in(ClinicRole::values())],
             'allergy_status' => ['sometimes', 'in:'.implode(',', PatientFieldConfigService::STATES)],
             'alerts' => ['sometimes', 'boolean'],
+            'conditions_from_catalogue' => ['sometimes', 'boolean'],
         ]);
 
         $this->patientFlowConfigService->updateQuickCare($context->clinic(), $validated, $request->user());

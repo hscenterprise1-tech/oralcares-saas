@@ -12,6 +12,7 @@ use App\Models\Clinic;
 use App\Models\ClinicMembership;
 use App\Models\CompanySubscription;
 use App\Models\User;
+use App\Scopes\OrganizationScope;
 use App\Services\Provisioning\ClinicSubscriptionSelector;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -145,9 +146,14 @@ class ResourceLimitService
     /**
      * Get current branch count.
      */
+    /**
+     * Every branch the clinic has, whoever is asking. A branch belongs to its
+     * clinic; the organisation scope must not hide one from the count the
+     * plan's branch limit is enforced against.
+     */
     public function getCurrentBranchCount(Clinic $clinic): int
     {
-        return Branch::where('clinic_id', $clinic->id)->count();
+        return Branch::withoutGlobalScope(OrganizationScope::class)->where('clinic_id', $clinic->id)->count();
     }
 
     /**

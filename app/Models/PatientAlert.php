@@ -17,7 +17,21 @@ class PatientAlert extends Model
         'type',
         'description',
         'severity',
+        'created_by',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'resolved_at' => 'datetime',
+        ];
+    }
+
+    /** Who recorded the alert (null for alerts recorded before authorship was kept, and for system copies). */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 
     public function patient(): BelongsTo
     {

@@ -116,7 +116,7 @@ export default function Notifications({ links }: { links: { read: string } }) {
             onClick={() => setFilter(key)}
             className={cn(
               'h-9 rounded-md px-3.5 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal',
-              filter === key ? 'bg-cx-nav-ink text-white' : 'border border-cx-nav-line bg-white text-cx-nav-ink hover:bg-cx-nav-bg',
+              filter === key ? 'bg-cx-nav-active font-semibold text-cx-nav-teal-strong ring-1 ring-inset ring-cx-nav-teal/40' : 'border border-cx-nav-line bg-white text-cx-nav-ink hover:bg-cx-nav-bg',
             )}
           >
             {key === 'all' ? 'All' : 'Unread'}

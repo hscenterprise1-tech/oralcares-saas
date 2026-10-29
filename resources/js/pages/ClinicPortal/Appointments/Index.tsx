@@ -155,7 +155,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-clinic-secondary">Appointments</p>
-          <h1 className="text-[22px] font-bold leading-tight tracking-tight text-clinic-ink sm:text-[26px]">
+          <h1 className="text-[22px] font-bold leading-tight tracking-tight text-cx-nav-ink sm:text-[24px]">
             {rangeLabel(view, range.start, range.end, date)}
           </h1>
         </div>
@@ -221,7 +221,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
               onClick={() => go({ view: option.value })}
               className={cn(
                 'h-11 rounded-full px-3.5 text-[12.5px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong sm:h-9 sm:px-4',
-                view === option.value ? 'bg-clinic-ink text-white' : 'text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
+                view === option.value ? 'bg-cx-nav-active text-cx-nav-teal-strong ring-1 ring-inset ring-cx-nav-teal/40' : 'text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
               )}
             >
               {option.label}
@@ -281,7 +281,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
           onClick={() => setFiltersOpen(true)}
           className={cn(
             'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[12.5px] font-semibold backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
-            filterCount > 0 ? 'border-clinic-ink bg-clinic-ink text-white' : 'border-white/70 bg-white/[0.93] text-clinic-ink hover:border-clinic-border-strong',
+            filterCount > 0 ? 'border-cx-nav-teal/50 bg-cx-nav-active text-cx-nav-teal-strong' : 'border-white/70 bg-white/[0.93] text-clinic-ink hover:border-clinic-border-strong',
           )}
         >
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -342,7 +342,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
                         onClick={() => setPhoneDay(key)}
                         className={cn(
                           'flex min-h-[56px] flex-col items-center justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
-                          key === phoneDay ? 'bg-clinic-ink text-white' : key === today ? 'bg-clinic-brand-soft text-clinic-brand-strong' : 'text-clinic-ink',
+                          key === phoneDay ? 'bg-[#0F7C6E] text-white' : key === today ? 'bg-clinic-brand-soft text-clinic-brand-strong' : 'text-clinic-ink',
                         )}
                       >
                         <span className="text-[10px] font-semibold uppercase opacity-80">{weekdayShort(key).slice(0, 2)}</span>

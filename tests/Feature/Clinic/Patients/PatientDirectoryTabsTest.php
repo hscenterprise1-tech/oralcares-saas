@@ -50,7 +50,7 @@ test('a practitioner defaults to My Patients and only sees patients assigned to 
 
     $response->assertInertia(fn ($page) => $page
         ->where('isPractitioner', true)
-        ->where('filters.tab', 'mine')
+        ->where('filters.view', 'mine')
         ->has('patients.data', 1)
         ->where('patients.data.0.id', $this->mine->id)
     );
@@ -74,7 +74,7 @@ test('tab=all overrides the default My Patients tab for a practitioner', functio
     ])->get('/clinic/patients?tab=all');
 
     $response->assertInertia(fn ($page) => $page
-        ->where('filters.tab', 'all')
+        ->where('filters.view', 'all')
         ->has('patients.data', 2)
     );
 });
@@ -92,7 +92,7 @@ test('a non-practitioner never sees the My Patients tab and always sees all clin
 
     $response->assertInertia(fn ($page) => $page
         ->where('isPractitioner', false)
-        ->where('filters.tab', 'all')
+        ->where('filters.view', 'all')
         ->has('patients.data', 2)
     );
 });

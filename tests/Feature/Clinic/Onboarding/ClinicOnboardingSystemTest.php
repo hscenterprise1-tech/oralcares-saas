@@ -611,10 +611,9 @@ it('gives an invited doctor their own practitioner onboarding after accepting', 
     expect($doctor->services()->pluck('clinical_procedures.id')->all())->toBe([$service])
         ->and(Practitioner::withoutGlobalScopes()->where('clinic_employee_id', $doctor->id)->value('registration_number'))->toBe('KA-12345')
         ->and(PractitionerQualification::withoutGlobalScopes()->where('clinic_id', $clinic->id)->value('qualification'))->toBe('MDS');
-    // Onboarded, the doctor's home is the Dashboard, carrying their own day.
+    // Onboarded, the doctor's home is the Appointment Calendar.
     $this->followingRedirects()->get(route('clinic.dashboard'))->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Dashboard', true)
-            ->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->contains('my_waiting')));
+        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Appointments/Index', true));
 
     // A receptionist only sees the fields that apply to them.
     auth()->logout();
@@ -754,7 +753,7 @@ it('finishes once however often the last step is sent, then never loops', functi
     $this->get(route('clinic.onboarding.done'))->assertOk();
     $this->get(route('clinic.onboarding.index'))->assertRedirect(route('dashboard'));
     $this->get(route('clinic.onboarding.account'))->assertRedirect(route('dashboard'));
-    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Dashboard', true));
+    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/CommandCenter/Index', true));
 });
 
 it('lets only the signed-in clinic owner change setup: not a guest, not staff, not another clinic', function () {

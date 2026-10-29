@@ -9,6 +9,7 @@ use App\Models\SecurityAuditLog;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\PatientSpecialties;
 use Carbon\CarbonImmutable;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\ReceptionFixture;
 
 beforeEach(function () {
@@ -46,23 +47,23 @@ test('the directory sends one cursor page with contact, specialty and last-seen 
         );
 });
 
-test('an unknown status filter is refused rather than ignored', function () {
-    ($this->asOwner)()->get('/clinic/patients?status=deleted')->assertSessionHasErrors('status');
+test('there is no patient-status filter: a status in an old link changes nothing', function () {
+    $this->f->patient('Asha', 'Rao');
+
+    ($this->asOwner)()->get('/clinic/patients?view=all&status=deleted')->assertOk()->assertSessionHasNoErrors()
+        ->assertInertia(fn (Assert $page) => $page->where('filters.status', '')->where('patients.data.0.name', 'Asha Rao'));
 });
 
-test('archived and merged records cannot be edited: the page redirects and the save is forbidden', function () {
-    $archived = $this->f->patient('Old', 'Record', ['status' => 'archived']);
+test('merged records cannot be edited: the page redirects to the patient kept and the save is forbidden', function () {
     $survivor = $this->f->patient('Kept', 'Record');
     $merged = $this->f->patient('Gone', 'Record', ['status' => 'merged']);
     PatientMerge::create(['clinic_id' => $this->f->clinic->id, 'source_patient_id' => $merged->id, 'survivor_patient_id' => $survivor->id, 'moved' => [], 'conflicts' => [], 'merged_by' => $this->f->owner->id, 'merged_at' => now()]);
     $update = ['first_name' => 'Changed', 'last_name' => 'Name', 'phone' => '9000011111', 'gender' => 'male'];
 
-    ($this->asOwner)()->get("/clinic/patients/{$archived->id}/edit")->assertRedirect(route('clinic.patients.show', $archived->id));
     ($this->asOwner)()->get("/clinic/patients/{$merged->id}/edit")->assertRedirect(route('clinic.patients.show', $survivor->id));
-    ($this->asOwner)()->put("/clinic/patients/{$archived->id}", $update)->assertForbidden();
     ($this->asOwner)()->put("/clinic/patients/{$merged->id}", $update)->assertForbidden();
 
-    expect($archived->fresh()->first_name)->toBe('Old')->and($merged->fresh()->first_name)->toBe('Gone');
+    expect($merged->fresh()->first_name)->toBe('Gone');
     ($this->asOwner)()->get("/clinic/patients/{$survivor->id}/edit")->assertOk()
         ->assertInertia(fn ($page) => $page->component('ClinicPortal/Patients/Edit', false)->where('patient.status', 'active'));
 });

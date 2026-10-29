@@ -89,8 +89,6 @@ export interface LookupPatient {
   specialties: string[];
   last_seen: { at: string; branch: string } | null;
   safety_flags: SafetyFlag[];
-  /** Specialties a session package already pays for: checking in for one of them charges nothing. */
-  package_covers: string[];
   /** The address on file, one line, read-only; null when there is none or this member does not see addresses. */
   address: string | null;
   appointment: { id: number; time: string; doctor: { id: number; name: string } | null } | null;
@@ -212,6 +210,28 @@ export function feeTiming(config: IntakeConfig, doctor: PractitionerOption | nul
 /** Catalogue items for a specialty and, when one is known, a practice area. */
 export function forContext<T extends { specialty_keys: string[] | null; practice_area_keys?: string[] | null }>(items: T[], specialty: string, area: string | null): T[] {
   return forSpecialty(items, specialty).filter((item) => !area || !item.practice_area_keys?.length || item.practice_area_keys.includes(area));
+}
+
+/**
+ * What the desk calls the practitioner for a visit: "Therapist" for
+ * Physiotherapy, "Doctor" for anything else, "Doctor / Therapist" in a
+ * clinic offering both before the visit's module is known. Wording only.
+ */
+export function practitionerNoun(config: Pick<IntakeConfig, 'specialties'>, specialty: string): string {
+  const keys = config.specialties.map((option) => option.key);
+  const module = specialty !== '' ? specialty : keys.length === 1 ? keys[0] : '';
+  if (module !== '') {
+    return module === 'physiotherapy' ? 'Therapist' : 'Doctor';
+  }
+
+  return keys.includes('physiotherapy') ? 'Doctor / Therapist' : 'Doctor';
+}
+
+/** A mobile number for a search result: only its last four digits, enough to tell two patients apart. */
+export function maskPhone(phone: string | null): string | null {
+  const digits = (phone ?? '').replace(/\D/g, '');
+
+  return digits.length >= 4 ? `••••••${digits.slice(-4)}` : null;
 }
 
 export function formatDay(value: string | null | undefined): string | null {

@@ -55,16 +55,22 @@ test('Today shows a practitioner their own patients: booked with them today and 
         ClinicContext::SESSION_BRANCH_ID => $this->branch->id,
     ])->get('/clinic/consultations');
 
-    // The practitioner's own day is on the one Dashboard (this practitioner also owns the clinic,
-    // so it sits beside the clinic overview), as well as on Today.
+    // The practitioner's own day is on Today. This practitioner also owns the clinic: in Doctor
+    // Mode (the default) their home is the Calendar; in Owner Mode, the Command Center, which
+    // keeps "Your patients" above the clinic's day.
     $response->assertStatus(200);
     $response->assertInertia(fn ($page) => $page
         ->component('ClinicPortal/Today/Index', false)
         ->where('mine.booked_today', 1)
         ->where('mine.assigned', 1));
 
-    $this->get('/clinic/dashboard')->assertOk()
-        ->assertInertia(fn ($page) => $page->where('widgets', fn ($widgets) => collect($widgets)->pluck('key')->intersect(['my_waiting', 'my_queue'])->count() === 2));
+    $this->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
+
+    $this->withSession(withOwnerMode([ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id, ClinicContext::SESSION_BRANCH_ID => $this->branch->id]))
+        ->get('/clinic/dashboard')->assertOk()
+        ->assertInertia(fn ($page) => $page->component('ClinicPortal/CommandCenter/Index', false)
+            ->where('sections.mine.state', 'ready')
+            ->where('sections.mine.figures.0.key', 'my_waiting'));
 });
 
 test('someone with no clinical profile gets no own-patients figures on Today and no My day band anywhere', function () {
@@ -79,9 +85,7 @@ test('someone with no clinical profile gets no own-patients figures on Today and
     ])->get('/clinic/dashboard');
 
     $response->assertStatus(200);
-    $response->assertInertia(fn ($page) => $page
-        ->where('widgets', fn ($widgets) => ! collect($widgets)->pluck('key')->contains('my_waiting'))
-        ->missing('widgetData.my_waiting'));
+    $response->assertInertia(fn ($page) => $page->missing('sections.mine'));
 
     $this->get('/clinic/consultations')->assertOk()->assertInertia(fn ($page) => $page->where('mine', null));
 });

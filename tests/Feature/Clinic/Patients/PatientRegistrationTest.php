@@ -152,8 +152,8 @@ test('patient registration creates profile, atomic UHID and registers timeline e
     $timelineEvent = PatientTimelineEvent::where('patient_id', $patient->id)->where('event_type', 'registered')->first();
     expect($timelineEvent)->not->toBeNull();
 
-    // The profile page is not built yet (`ClinicFrontend`), so the directory is where registration lands.
-    $response->assertRedirect('/clinic/patients');
+    // Registration opens the new patient's record (Patient 360 is built, `ClinicFrontend`).
+    $response->assertRedirect(route('clinic.patients.show', $patient));
 });
 
 test('allergies and manual alerts recorded at registration surface as patient alerts', function () {

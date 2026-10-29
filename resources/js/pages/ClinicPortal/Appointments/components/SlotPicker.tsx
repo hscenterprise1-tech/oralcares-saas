@@ -111,7 +111,7 @@ export function SlotPicker({
                 onClick={() => onChange(slot)}
                 className={cn(
                   'flex min-h-11 flex-col items-start justify-center rounded-xl px-3 py-1.5 text-left ring-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
-                  selected ? 'bg-clinic-ink text-white ring-clinic-ink' : 'bg-emerald-50/70 text-emerald-900 ring-emerald-200 hover:bg-emerald-100',
+                  selected ? 'bg-[#0F7C6E] text-white ring-[#0F7C6E]' : 'bg-emerald-50/70 text-emerald-900 ring-emerald-200 hover:bg-emerald-100',
                 )}
               >
                 <span className="text-[13px] font-bold tabular-nums">{timeOf(slot.start)}</span>

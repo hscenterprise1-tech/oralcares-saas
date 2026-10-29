@@ -183,7 +183,7 @@ test('a branch-limited member sees only patients with activity at their branches
     $east = $this->f->patient('East', 'Seen');
     PatientVisit::create(['clinic_id' => $this->f->clinic->id, 'branch_id' => $this->otherBranch->id, 'patient_id' => $east->id, 'visit_date' => today(), 'registration_type' => 'new', 'queue_status' => 'not_queued', 'visit_status' => 'registered']);
 
-    ($this->asEast)()->get('/clinic/patients')->assertOk()
+    ($this->asEast)()->get('/clinic/patients?view=all')->assertOk()
         ->assertInertia(fn ($page) => $page->has('patients.data', 1)->where('patients.data.0.id', $east->id));
     ($this->asEast)()->get("/clinic/patients/{$here->id}")->assertForbidden();
     ($this->asEast)()->put("/clinic/patients/{$here->id}", ['first_name' => 'Changed', 'last_name' => 'Name', 'phone' => '9000011111', 'gender' => 'male'])->assertForbidden();

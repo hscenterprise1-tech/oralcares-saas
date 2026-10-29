@@ -63,7 +63,7 @@ export function FiltersDialog({
                   onClick={() => toggleStatus(option.value as StatusValue)}
                   className={cn(
                     'inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold ring-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong sm:min-h-9',
-                    on ? 'bg-clinic-ink text-white ring-clinic-ink' : 'bg-white text-clinic-ink ring-clinic-border',
+                    on ? 'bg-cx-nav-active text-cx-nav-teal-strong ring-cx-nav-teal/50' : 'bg-white text-clinic-ink ring-clinic-border',
                   )}
                 >
                   <span className={cn('h-2 w-2 rounded-full', statusStyle(option.value).dot)} aria-hidden="true" />

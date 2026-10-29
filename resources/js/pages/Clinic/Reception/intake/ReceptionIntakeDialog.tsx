@@ -1,41 +1,48 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { CalendarClock, CheckCircle2, ClipboardList, IndianRupee, LogIn, RefreshCw, ShieldAlert, Stethoscope, UserPlus, UserRound } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button, ButtonLink, duplicateOverrideProblem, ErrorState, humanize, LoadingState, Modal, Notice, PersonAvatar } from '@/clinic';
+import { CalendarClock, CheckCircle2, IndianRupee, LogIn, Stethoscope, UserPlus } from 'lucide-react';
+import { ButtonLink, duplicateOverrideProblem, ErrorState, humanize, Modal, Notice } from '@/clinic';
+import { DsButton } from '@/clinic/ds';
 import { ClinicHttpError, errorKind, requestJson } from '@/clinic/http';
-import { BillingResult, BookingFound, ChargeNotice, CollectPaymentDialog } from './CheckInPayment';
+import { BillingResult, BookingFound, CollectPaymentDialog } from './CheckInPayment';
 import {
-  Collapsible,
   DuplicateSuggestions,
   EMPTY_PATIENT,
   forModule,
-  MedicalSafetyFields,
-  MORE_FIELD_KEYS,
-  MoreDetailsFields,
-  moreFields,
   NO_OVERRIDE,
   overridePayload,
-  PatientIdentityFields,
   patientPayload,
   requestKey,
   required,
-  SAFETY_FIELD_KEYS,
-  safetyRequired,
-  showsSafety,
   useDuplicateSuggestions,
   validatePatient,
   type DuplicateOverrideState,
   type PatientErrors,
   type PatientForm,
 } from './PatientFields';
-import { PatientSearchStep } from './PatientSearchStep';
-import { SafetyFlags } from './SafetyFlags';
-import { chargedAtCheckIn, contextOf, formatDay, reasonsFor, visitSpecialty, type BookingMatch, type CheckInResult, type DuplicateMatch, type IntakeConfig, type LookupPatient, type VisitForm } from './types';
+import { RepeatCaseForm } from './RepeatCaseForm';
+import { FeeSummary, NewCaseForm } from './NewCaseForm';
+import { chargedAtCheckIn, contextOf, practitionerNoun, reasonsFor, visitSpecialty, type BookingMatch, type CheckInResult, type DuplicateMatch, type IntakeConfig, type LookupPatient, type VisitForm } from './types';
 import { useIntakeConfig } from './useIntakeConfig';
-import { emptyVisit, validateVisit, VisitFields, visitPayload, type VisitErrors } from './VisitFields';
+import { doctorsFor, emptyVisit, validateVisit, visitPayload, type VisitErrors } from './VisitFields';
 
 export type IntakeMode = 'new' | 'repeat';
+
+/** Registration fields a clinic may require that New Case's quick form does not ask (the full page does). */
+const NOT_IN_NEW_CASE: [string, string][] = [
+  ['email', 'email'],
+  ['alternate_phone', 'an alternate mobile'],
+  ['blood_group', 'blood group'],
+  ['emergency_contact', 'an emergency contact'],
+  ['address_locality', 'locality'],
+  ['address_city', 'city'],
+  ['address_state', 'state'],
+  ['address_pincode', 'PIN code'],
+  ['address_country', 'country'],
+  ['medications', 'current medications'],
+  ['surgical_history', 'past surgery'],
+  ['family_history', 'family history'],
+];
 /** Enough of a patient to find them for check-in. */
 export type PatientIdentity = { id: number; uhid: string | null; name: string };
 
@@ -113,8 +120,6 @@ export function ReceptionIntakeDialog({
   const [key, setKey] = useState(requestKey);
   // After a check-in that charged something owing: the separate Collect Payment step.
   const [paying, setPaying] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [safetyOpen, setSafetyOpen] = useState(false);
   // A booking found by the mobile number being typed (New Case only); used only when reception says so.
   const [bookings, setBookings] = useState<BookingMatch[]>([]);
   const [bookingId, setBookingId] = useState<number | null>(null);
@@ -148,8 +153,6 @@ export function ReceptionIntakeDialog({
       setConfirmDiscard(false);
       setKey(requestKey());
       setPaying(false);
-      setMoreOpen(config ? moreFields(config).some((field) => required(config, field)) : false);
-      setSafetyOpen(config ? safetyRequired(config) : false);
       setBookings([]);
       setBookingId(null);
       setBookingDismissed(false);
@@ -172,8 +175,6 @@ export function ReceptionIntakeDialog({
       return;
     }
     setVisit((current) => (current.doctor_id === '' && current.specialty === '' && current.reason_key === '' ? preselect(config) : current));
-    setMoreOpen((current) => current || moreFields(config).some((field) => required(config, field)));
-    setSafetyOpen((current) => current || safetyRequired(config));
     if (config.booking) {
       const [first, ...rest] = (config.booking.name ?? '').trim().split(/\s+/);
       setData((current) => (current.phone === '' && current.first_name === '' ? { ...current, phone: config.booking?.phone ?? '', first_name: first ?? '', last_name: rest.join(' ') } : current));
@@ -218,8 +219,15 @@ export function ReceptionIntakeDialog({
     setData((current) => ({ ...current, [field]: value }));
     setErrors((current) => (field in current || current.form ? { ...current, [field]: undefined, form: undefined } : current));
   }, []);
+  // Several fields from the form as it is now (quick taps never work from an older copy); their errors clear.
+  const patchData = useCallback((change: (current: PatientForm) => Partial<PatientForm>) => {
+    setData((current) => ({ ...current, ...change(current) }));
+    setErrors((current) => ({ ...current, conditions: undefined, allergies: undefined, allergy_status: undefined, medical_conditions: undefined }));
+  }, []);
   const resolvedSpecialty = config ? visitSpecialty(config, visit) : '';
-  const resolvedArea = config ? (contextOf(config, visit)?.area ?? null) : null;
+  // The field settings as they apply to this visit's module (the server applies the same); read only once loaded.
+  const newCaseFields = config ? forModule(config, resolvedSpecialty) : null;
+  const noun = config ? practitionerNoun(config, resolvedSpecialty) : 'Doctor';
   const patchVisit = (patch: Partial<VisitForm>) => {
     setVisit((current) => ({ ...current, ...patch }));
     setVisitErrors((current) => {
@@ -266,13 +274,24 @@ export function ReceptionIntakeDialog({
     }
   };
   const chosenDoctor = config?.doctors.find((doctor) => String(doctor.id) === visit.doctor_id) ?? null;
-  // A returning patient whose session package pays for this kind of visit is charged nothing at check-in (`CheckInCharges::dueAtCheckIn`).
-  const packageCovered = flow === 'repeat' && !!patient && !!config && resolvedSpecialty !== '' && patient.package_covers.includes(resolvedSpecialty);
-  const billedDoctor = packageCovered ? null : chosenDoctor;
+  // A session package never waives a check-in charge; it pays only for its own treatment's completed session (`SessionPackages::paidFor`).
+  const billedDoctor = chosenDoctor;
   // What the desk shows will be charged at check-in; the server refuses the check-in if its own amount differs.
   // The visit's module (the chosen doctor's context): a module that never charges at check-in is never charged.
   const visitModule = config ? (contextOf(config, visit)?.module ?? null) : null;
   const expectedCharge = config && chargedAtCheckIn(config, billedDoctor, visitModule) ? (billedDoctor?.fee ?? null) : null;
+  // Charged at check-in by a practitioner who could take this visit: the fee depends on who is assigned,
+  // and the server assigns "next available" itself — so check-in asks reception to choose, and shows that fee.
+  const feeNeedsDoctor = !!config && visit.doctor_id === '' && doctorsFor(config, resolvedSpecialty).some((doctor) => chargedAtCheckIn(config, doctor));
+  // New Case asks only its quick fields; a field this clinic makes required beyond them is named, never silently skipped.
+  const missingRequired = newCaseFields ? NOT_IN_NEW_CASE.filter(([field]) => required(newCaseFields, field)).map(([, label]) => label) : [];
+  const createUrl = (() => {
+    try {
+      return route('clinic.patients.create');
+    } catch {
+      return null;
+    }
+  })();
 
   const dirty = !done && (JSON.stringify(data) !== JSON.stringify(EMPTY_PATIENT) || patient !== null || query.trim() !== '');
 
@@ -301,6 +320,10 @@ export function ReceptionIntakeDialog({
     setFormError(null);
     if (next === 'repeat' && query.trim() === '' && data.phone.trim() !== '') {
       setQuery(data.phone.trim());
+    }
+    // A number searched for in Repeat Case that found nobody starts New Case's mobile.
+    if (next === 'new' && data.phone.trim() === '' && /^\+?[\d\s-]{7,}$/.test(query.trim())) {
+      setField('phone', query.trim());
     }
     setFlow(next);
   };
@@ -361,12 +384,6 @@ export function ReceptionIntakeDialog({
 
   /** Folded sections open when they hold an error, then the first invalid field takes focus. */
   const revealErrors = (fields: string[]) => {
-    if (fields.some((field) => MORE_FIELD_KEYS.includes(field))) {
-      setMoreOpen(true);
-    }
-    if (fields.some((field) => SAFETY_FIELD_KEYS.includes(field))) {
-      setSafetyOpen(true);
-    }
     window.requestAnimationFrame(() => {
       const target = bodyRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [role=alert]');
       target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -399,8 +416,8 @@ export function ReceptionIntakeDialog({
       }
     }
     const foundVisit: VisitErrors = checkIn ? validateVisit(config, visit) : {};
-    if (checkIn && required(config, 'doctor_id') && visit.doctor_id === '') {
-      foundVisit.doctor_id = 'Choose the doctor.';
+    if (checkIn && (required(config, 'doctor_id') || feeNeedsDoctor) && visit.doctor_id === '') {
+      foundVisit.doctor_id = feeNeedsDoctor ? `Choose the ${noun.toLowerCase()}: the consultation fee is charged at check-in.` : `Choose the ${noun.toLowerCase()}.`;
     }
     setErrors(found);
     setVisitErrors(foundVisit);
@@ -474,6 +491,9 @@ export function ReceptionIntakeDialog({
       return;
     }
     const found = validateVisit(config, visit);
+    if (feeNeedsDoctor) {
+      found.doctor_id = `Choose the ${noun.toLowerCase()}: the consultation fee is charged at check-in.`;
+    }
     setVisitErrors(found);
     if (Object.keys(found).length > 0) {
       revealErrors(Object.keys(found));
@@ -544,47 +564,65 @@ export function ReceptionIntakeDialog({
   const specialtyLabel = (specialty: string) => config?.specialties.find((option) => option.key === specialty)?.label ?? humanize(specialty);
   const alreadyQueued = flow === 'repeat' && patient?.in_queue != null;
 
+  // What Check in is waiting for, said beside it while it cannot be pressed.
+  const checkInBlocked = !patient ? 'Choose the patient first.' : alreadyQueued ? 'Already in today’s queue.' : feeNeedsDoctor ? `Choose the ${noun.toLowerCase()} first.` : null;
+
   const footer = confirmDiscard ? (
-    <div role="alertdialog" aria-label="Discard this case?" className="flex w-full flex-wrap items-center justify-between gap-2">
+    <div role="alertdialog" aria-label="Discard this case?" className="flex w-full flex-wrap items-center justify-between gap-2 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
       <p className="text-[13px] font-semibold text-clinic-ink">Discard what you have entered?</p>
       <div className="flex gap-2">
-        <Button onClick={() => setConfirmDiscard(false)} data-autofocus>
+        <DsButton onClick={() => setConfirmDiscard(false)} data-autofocus>
           Keep working
-        </Button>
-        <Button tone="danger" onClick={() => onOpenChange(false)}>
+        </DsButton>
+        <DsButton variant="danger" onClick={() => onOpenChange(false)}>
           Discard
-        </Button>
+        </DsButton>
       </div>
     </div>
   ) : done ? (
     <>
-      <Button onClick={() => onOpenChange(false)}>Close</Button>
-      <Button tone="primary" onClick={() => reset(mode === 'new' && config?.can.register ? 'new' : 'repeat')} data-autofocus>
+      <DsButton onClick={() => onOpenChange(false)}>Close</DsButton>
+      <DsButton variant="primary" onClick={() => reset(mode === 'new' && config?.can.register ? 'new' : 'repeat')} data-autofocus>
         {registered ? 'Register another' : 'Next patient'}
-      </Button>
+      </DsButton>
     </>
   ) : !config || failed || (flow === 'new' && !config.can.register) ? (
-    <Button onClick={() => requestClose(false)}>Cancel</Button>
+    <DsButton onClick={() => requestClose(false)}>Cancel</DsButton>
   ) : flow === 'new' ? (
     <>
-      <Button tone="ghost" onClick={() => requestClose(false)} disabled={busy !== null} className="mr-auto">
-        Cancel
-      </Button>
-      <Button onClick={() => void register(false)} loading={busy === 'register_only'} loadingLabel="Saving…" disabled={busy !== null}>
-        Register only
-      </Button>
-      <Button type="submit" form="reception-intake-form" tone="primary" icon={UserPlus} loading={busy === 'register'} loadingLabel="Registering…" disabled={busy !== null} className="max-sm:w-full">
-        Register &amp; check in
-      </Button>
+      {/* The fee, said once, beside the actions it applies to; the × closes (with the discard prompt). */}
+      <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
+        <FeeSummary config={config!} doctor={chosenDoctor} module={visitModule} noun={noun} needsDoctor={feeNeedsDoctor} />
+      </div>
+      <DsButton onClick={() => void register(false)} loading={busy === 'register_only'} disabled={busy !== null} className="max-sm:flex-1">
+        {busy === 'register_only' ? 'Saving…' : 'Register only'}
+      </DsButton>
+      <DsButton type="submit" form="reception-intake-form" variant="primary" icon={UserPlus} loading={busy === 'register'} disabled={busy !== null} className="max-sm:flex-1">
+        {busy === 'register' ? 'Registering…' : 'Register & check in'}
+      </DsButton>
     </>
   ) : (
     <>
-      <Button tone="ghost" onClick={() => requestClose(false)} disabled={busy !== null} className="mr-auto">
-        Cancel
-      </Button>
-      <Button type="submit" form="reception-intake-form" tone="primary" icon={LogIn} loading={busy === 'check_in'} loadingLabel="Checking in…" disabled={busy !== null || !patient || alreadyQueued}>
-        Check in
-      </Button>
+      {/* The fee, said once, as in New Case; the × closes (with the discard prompt). */}
+      <div className="mr-auto min-w-0 flex-1 max-sm:basis-full">
+        <FeeSummary config={config!} doctor={chosenDoctor} module={visitModule} noun={noun} needsDoctor={feeNeedsDoctor} />
+      </div>
+      {checkInBlocked && (
+        <p id="intake-check-in-hint" className="text-[12.5px] font-medium text-[#64748B] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
+          {checkInBlocked}
+        </p>
+      )}
+      <DsButton
+        type="submit"
+        form="reception-intake-form"
+        variant="primary"
+        icon={LogIn}
+        loading={busy === 'check_in'}
+        disabled={busy !== null || checkInBlocked !== null}
+        aria-describedby={checkInBlocked ? 'intake-check-in-hint' : undefined}
+      >
+        {busy === 'check_in' ? 'Checking in…' : 'Check in'}
+      </DsButton>
     </>
   );
 
@@ -593,7 +631,10 @@ export function ReceptionIntakeDialog({
     <Modal
       open={open}
       onOpenChange={requestClose}
-      size="wide"
+      // New Case and Repeat Case: the dialog itself is the one white surface the form sits on.
+      size={!done ? 'case' : 'form'}
+      variant="desk"
+      bodyClassName={!done ? 'bg-none bg-white px-4 py-4 sm:px-7' : undefined}
       title={done ? (registered ? 'Patient registered' : 'Checked in') : flow === 'new' ? 'New case' : 'Repeat case'}
       description={config ? (done ? config.branch.name : `${flow === 'new' ? 'Register a new patient and check them in' : 'Check in a returning patient'} · ${config.branch.name}`) : undefined}
       footer={footer}
@@ -602,10 +643,10 @@ export function ReceptionIntakeDialog({
         {failed ? (
           <ErrorState description="The registration settings could not be loaded." onRetry={retry} />
         ) : !config ? (
-          <LoadingState label="Getting the desk ready…" />
+          <FormSkeleton />
         ) : done && result ? (
           <>
-            <DonePanel result={result} registered={registered} onCollect={result.billing?.pay_url && result.billing.outstanding > 0 ? () => setPaying(true) : undefined} />
+            <DonePanel result={result} registered={registered} noun={noun} onCollect={result.billing?.pay_url && result.billing.outstanding > 0 ? () => setPaying(true) : undefined} />
             {result.billing && config && (
               <CollectPaymentDialog
                 open={paying}
@@ -622,8 +663,6 @@ export function ReceptionIntakeDialog({
           </>
         ) : (
           <>
-            {config.can.register && <FlowSwitch value={flow} onChange={switchFlow} disabled={busy !== null} />}
-
             {formError && (
               <Notice tone="danger" className="mb-4">
                 {formError}
@@ -638,92 +677,83 @@ export function ReceptionIntakeDialog({
               </Notice>
             )}
 
-            <form id="reception-intake-form" noValidate onSubmit={onSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:gap-0 lg:divide-x lg:divide-clinic-border">
-              <Column title={flow === 'new' || patient ? 'Patient' : 'Find the patient'} icon={UserRound} className="lg:pr-6">
-                {flow === 'new' ? (
-                  <div className="space-y-3.5">
-                    <PatientIdentityFields config={forModule(config, resolvedSpecialty)} data={data} setField={setField} errors={errors} idPrefix="nc" autoFocus />
-                    {errors.form && (
-                      <p role="alert" className="text-[12.5px] font-semibold text-amber-900">
-                        {errors.form}
-                      </p>
-                    )}
-                    <DuplicateSuggestions
-                      matches={matches}
-                      specialtyLabel={specialtyLabel}
-                      onUse={(match) => void useExisting(match)}
-                      busyId={openingId}
-                      override={override}
-                      onOverrideChange={(patch) => {
-                        setOverride((current) => ({ ...current, ...patch }));
-                        setErrors((current) => ({ ...current, duplicate_reason: undefined, form: undefined }));
-                      }}
-                      reasonError={errors.duplicate_reason}
-                      idPrefix="nc"
-                    />
-                    {!config.booking && !bookingDismissed && (
-                      <BookingFound
-                        matches={bookings}
-                        chosen={bookingId}
-                        onUse={useBooking}
-                        onWalkIn={() => {
-                          setBookingId(null);
-                          setBookingDismissed(true);
-                        }}
-                      />
-                    )}
-                    {showsSafety(forModule(config, resolvedSpecialty)) && (
-                      <Collapsible
-                        id="nc-safety"
-                        title="Medical safety"
-                        icon={ShieldAlert}
-                        open={safetyOpen}
-                        onOpenChange={setSafetyOpen}
-                        summary={safetySummary(data) ?? (safetyRequired(forModule(config, resolvedSpecialty)) ? 'Required' : 'Optional')}
-                      >
-                        <MedicalSafetyFields config={forModule(config, resolvedSpecialty)} data={data} setField={setField} errors={errors} specialty={resolvedSpecialty} area={resolvedArea} generalOnly={config.specialties.length > 1 && resolvedSpecialty === ''} />
-                      </Collapsible>
-                    )}
-                    {moreFields(forModule(config, resolvedSpecialty)).length > 0 && (
-                      <Collapsible id="nc-more" title="Contact details" icon={ClipboardList} open={moreOpen} onOpenChange={setMoreOpen} summary={moreFields(forModule(config, resolvedSpecialty)).some((field) => required(forModule(config, resolvedSpecialty), field)) ? 'Some are required' : 'Optional'}>
-                        <MoreDetailsFields config={forModule(config, resolvedSpecialty)} data={data} setField={setField} errors={errors} idPrefix="nc" />
-                      </Collapsible>
-                    )}
-                  </div>
-                ) : patient ? (
-                  <ChosenPatient
-                    patient={patient}
-                    specialtyLabel={specialtyLabel}
-                    onChange={() => {
-                      setPatient(null);
-                      setFormError(null);
-                    }}
-                    disabled={busy !== null}
-                  />
-                ) : (
-                  <PatientSearchStep config={config} query={query} onQueryChange={setQuery} onSelect={selectPatient} />
-                )}
-              </Column>
-
-              <Column title="Today’s visit" icon={Stethoscope} className="lg:pl-6">
-                <div className="space-y-4">
-                  {/* Keyed by the request: each new case starts with doctor auto-selection fresh. */}
-                  <VisitFields key={key} config={config} value={visit} onChange={patchVisit} errors={visitErrors} idPrefix={flow === 'new' ? 'nc-visit' : 'rc-visit'} showPriority />
-                  <ChargeNotice config={config} doctor={billedDoctor} module={visitModule} />
-                  {packageCovered && chargedAtCheckIn(config, chosenDoctor, visitModule) && (
-                    <p role="status" className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-ink">
-                      <span className="font-semibold">Paid by their session package</span> — nothing is charged at check-in.
-                    </p>
-                  )}
-                  {flow === 'new' && (
-                    <p className="text-[12px] leading-relaxed text-clinic-secondary">
-                      <span className="font-semibold text-clinic-ink">Register &amp; check in</span> adds them to today&apos;s {config.check_in.queue ? 'queue' : 'list'}
-                      {expectedCharge !== null ? ` and charges the consultation shown above` : ''}. <span className="font-semibold text-clinic-ink">Register only</span> saves the patient without a visit and charges nothing.
-                    </p>
-                  )}
-                </div>
-              </Column>
-            </form>
+            {flow === 'new' ? (
+              // New Case: its own presentation (`NewCaseForm`); the state, rules and request stay here.
+              <form id="reception-intake-form" noValidate onSubmit={onSubmit}>
+                <NewCaseForm
+                  config={config}
+                  fields={newCaseFields!}
+                  data={data}
+                  setField={setField}
+                  patchData={patchData}
+                  errors={errors}
+                  matches={
+                    matches.length > 0 || errors.form || (!config.booking && !bookingDismissed && bookings.length > 0) ? (
+                      <div className="space-y-3 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+                        {errors.form && (
+                          <p role="alert" className="text-[12.5px] font-semibold text-amber-900">
+                            {errors.form}
+                          </p>
+                        )}
+                        <DuplicateSuggestions
+                          matches={matches}
+                          specialtyLabel={specialtyLabel}
+                          onUse={(match) => void useExisting(match)}
+                          busyId={openingId}
+                          override={override}
+                          onOverrideChange={(patch) => {
+                            setOverride((current) => ({ ...current, ...patch }));
+                            setErrors((current) => ({ ...current, duplicate_reason: undefined, form: undefined }));
+                          }}
+                          reasonError={errors.duplicate_reason}
+                          idPrefix="nc"
+                        />
+                        {!config.booking && !bookingDismissed && (
+                          <BookingFound
+                            matches={bookings}
+                            chosen={bookingId}
+                            onUse={useBooking}
+                            onWalkIn={() => {
+                              setBookingId(null);
+                              setBookingDismissed(true);
+                            }}
+                          />
+                        )}
+                      </div>
+                    ) : null
+                  }
+                  visit={visit}
+                  onVisit={patchVisit}
+                  visitErrors={visitErrors}
+                  noun={noun}
+                  missingRequired={missingRequired}
+                  createUrl={createUrl}
+                />
+              </form>
+            ) : (
+              // Repeat Case: its own search-first presentation (`RepeatCaseForm`) on the same single surface.
+              <form id="reception-intake-form" noValidate onSubmit={onSubmit}>
+                <RepeatCaseForm
+                  key={key}
+                  config={config}
+                  patient={patient}
+                  query={query}
+                  onQueryChange={setQuery}
+                  onSelect={selectPatient}
+                  onChangePatient={() => {
+                    setPatient(null);
+                    setFormError(null);
+                  }}
+                  busy={busy !== null}
+                  visit={visit}
+                  onVisit={patchVisit}
+                  visitErrors={visitErrors}
+                  noun={noun}
+                  specialtyLabel={specialtyLabel}
+                  onRegisterNew={config.can.register ? () => switchFlow('new') : null}
+                />
+              </form>
+            )}
           </>
         )}
       </div>
@@ -731,111 +761,29 @@ export function ReceptionIntakeDialog({
   );
 }
 
-function safetySummary(data: PatientForm): string | null {
-  const parts = [data.conditions.length > 0 ? `${data.conditions.length} condition${data.conditions.length === 1 ? '' : 's'}` : null, data.allergies.length > 0 ? `${data.allergies.length} allerg${data.allergies.length === 1 ? 'y' : 'ies'}` : data.allergy_none ? 'No known allergies' : null].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(' · ') : null;
-}
-
-/** New patient or returning patient: a two-way switch at the top of the dialog. */
-function FlowSwitch({ value, onChange, disabled }: { value: IntakeMode; onChange: (mode: IntakeMode) => void; disabled: boolean }) {
-  const options: { mode: IntakeMode; label: string; icon: typeof UserPlus }[] = [
-    { mode: 'new', label: 'New patient', icon: UserPlus },
-    { mode: 'repeat', label: 'Returning patient', icon: RefreshCw },
-  ];
-
+/** The sheet's outline while the settings load for the first time at this branch (later openings show the kept copy at once). */
+function FormSkeleton() {
   return (
-    <div role="group" aria-label="Case type" className="mb-5 inline-flex w-full rounded-full border border-clinic-border bg-clinic-inset/60 p-1 sm:w-auto">
-      {options.map((option) => (
-        <button
-          key={option.mode}
-          type="button"
-          aria-pressed={value === option.mode}
-          disabled={disabled}
-          onClick={() => onChange(option.mode)}
-          className={cn(
-            'inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] font-semibold motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong sm:flex-none',
-            value === option.mode ? 'bg-clinic-surface text-clinic-ink shadow-sm' : 'text-clinic-secondary hover:text-clinic-ink',
-          )}
-        >
-          <option.icon className="h-4 w-4" aria-hidden="true" />
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Column({ title, icon: Icon, className, children }: { title: string; icon: typeof UserRound; className?: string; children: ReactNode }) {
-  const id = `intake-col-${title.replace(/\W+/g, '-').toLowerCase()}`;
-
-  return (
-    <section aria-labelledby={id} className={cn('min-w-0', className)}>
-      <h3 id={id} className="mb-3.5 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-clinic-secondary">
-        <Icon className="h-4 w-4" aria-hidden="true" />
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-/** Repeat Case: who they are at a glance and their safety flags; today's visit is beside it. */
-function ChosenPatient({ patient, specialtyLabel, onChange, disabled }: { patient: LookupPatient; specialtyLabel: (key: string) => string; onChange: () => void; disabled: boolean }) {
-  return (
-    <div className="space-y-3.5">
-      <div className="flex items-start gap-3 rounded-2xl border border-clinic-border bg-clinic-inset/40 p-4">
-        <PersonAvatar name={patient.name} size="lg" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[17px] font-bold tracking-tight text-clinic-ink">{patient.name}</p>
-          <p className="text-[12.5px] text-clinic-secondary">
-            {[patient.uhid, [patient.age !== null ? `${patient.age}` : null, patient.gender ? humanize(patient.gender) : null].filter(Boolean).join(' · '), patient.phone].filter(Boolean).join(' · ')}
-          </p>
-          <p className="mt-1 text-[12.5px] text-clinic-ink">
-            {[patient.specialties.map(specialtyLabel).join(', ') || null, patient.last_seen ? `Last visit ${formatDay(patient.last_seen.at)} at ${patient.last_seen.branch}` : 'No visits yet'].filter(Boolean).join(' · ')}
-          </p>
-          {patient.address && (
-            <p className="mt-1 break-words text-[12.5px] text-clinic-secondary">
-              <span className="font-semibold text-clinic-ink">Address:</span> {patient.address}
-            </p>
-          )}
-          {patient.safety_flags.length > 0 && (
-            <div className="mt-2.5">
-              <p className="mb-1 text-[11.5px] font-bold uppercase tracking-wide text-clinic-secondary">Safety</p>
-              <SafetyFlags flags={patient.safety_flags} />
-            </div>
-          )}
+    <div role="status" aria-label="Loading the form" className="space-y-3">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="grid gap-3 sm:grid-cols-2">
+          <div className="h-10 rounded-xl bg-[#EEF2F8] motion-safe:animate-pulse" />
+          <div className="h-10 rounded-xl bg-[#EEF2F8] motion-safe:animate-pulse" />
         </div>
-        <Button tone="ghost" size="sm" onClick={onChange} disabled={disabled} className="shrink-0">
-          Change
-        </Button>
-      </div>
-
-      {patient.in_queue && (
-        <Notice tone="warning" title="Already in today’s queue">
-          {patient.in_queue.case_short ? `Case ${patient.in_queue.case_short}, ` : ''}status {humanize(patient.in_queue.status).toLowerCase()}. They do not need checking in again.
-        </Notice>
-      )}
-      {patient.appointment && !patient.in_queue && (
-        <Notice tone="info" title={`Booked for ${patient.appointment.time.slice(11, 16)} today`}>
-          <span className="inline-flex items-center gap-1">
-            <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-            Checking in links the appointment{patient.appointment.doctor ? ` with ${patient.appointment.doctor.name}` : ''}.
-          </span>
-        </Notice>
-      )}
+      ))}
+      <div className="h-11 rounded-xl bg-[#EEF2F8] motion-safe:animate-pulse" />
     </div>
   );
 }
 
 /** After saving: who, for whom, what for, where in the queue, and the next actions this member may take (only to pages that are built). */
-function DonePanel({ result, registered, onCollect }: { result: CheckInResult; registered: boolean; onCollect?: () => void }) {
+function DonePanel({ result, registered, noun, onCollect }: { result: CheckInResult; registered: boolean; noun: string; onCollect?: () => void }) {
   const checkIn = result.check_in;
   const context = checkIn?.context;
   const care = context ? [context.module?.label, context.area && context.area.label !== context.module?.label ? context.area.label : null].filter(Boolean).join(' · ') : '';
   const rows: [string, string][] = checkIn
     ? [
-        ['Doctor', checkIn.doctor ?? 'Next available doctor'],
+        [noun, checkIn.doctor ?? `Next available ${noun.toLowerCase()}`],
         ...(care ? [['Care', care] as [string, string]] : []),
         ...(checkIn.reason ? [['Reason', checkIn.reason] as [string, string]] : []),
         ['Priority', checkIn.priority.label],
@@ -845,8 +793,11 @@ function DonePanel({ result, registered, onCollect }: { result: CheckInResult; r
     : [];
 
   return (
-    <div role="status" className="flex flex-col items-center gap-4 py-4 text-center">
-      <CheckCircle2 className="h-12 w-12 text-clinic-success" aria-hidden="true" />
+    // Shown only once the server has confirmed; the tick settles in once, quietly (none with reduced motion).
+    <div role="status" className="mx-auto flex max-w-xl flex-col items-center gap-4 rounded-2xl border border-[#E6EBF1] bg-white px-4 py-6 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_-16px_rgba(23,59,96,0.35)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200">
+      <span className="grid h-16 w-16 place-items-center rounded-full bg-[#E3F6EC] motion-safe:animate-in motion-safe:zoom-in-75 motion-safe:duration-300" aria-hidden="true">
+        <CheckCircle2 className="h-9 w-9 text-clinic-success" />
+      </span>
       <div>
         <p className="text-[18px] font-bold tracking-tight text-clinic-ink">
           {registered ? 'Patient registered' : 'Checked in'} — {result.patient.name}
@@ -867,9 +818,9 @@ function DonePanel({ result, registered, onCollect }: { result: CheckInResult; r
       )}
       <BillingResult result={result} />
       {onCollect && (
-        <Button tone="primary" icon={IndianRupee} onClick={onCollect}>
+        <DsButton variant="primary" icon={IndianRupee} onClick={onCollect}>
           Collect payment
-        </Button>
+        </DsButton>
       )}
       {(result.links.patient || result.links.consultation) && (
         <div className="flex flex-wrap justify-center gap-2">

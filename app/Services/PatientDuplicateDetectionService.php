@@ -14,9 +14,9 @@ use Illuminate\Support\Str;
 /**
  * Possible existing records for a patient about to be registered: the same
  * phone (either number, either slot), the same email, or the same name with
- * the same date of birth. Searches the whole clinic — archived patients
- * included, since re-registering one is exactly the mistake to catch — and
- * every probe leads with `clinic_id` on an index.
+ * the same date of birth. Searches the whole clinic — patients at every
+ * branch included, since re-registering one is exactly the mistake to catch —
+ * and every probe leads with `clinic_id` on an index.
  *
  * Used by the live check on the form and, authoritatively, by
  * `PatientController::store()`, which refuses to register over a match the

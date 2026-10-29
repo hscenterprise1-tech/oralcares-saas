@@ -134,16 +134,20 @@ function dynamicDashboard(array $member, ?Branch $branch = null): array
     return $surface;
 }
 
-/** @return array<string, mixed> */
-function dynamicWidgetData(array $member, ?Branch $branch = null): array
+/**
+ * The Command Center's sections, for whoever runs the clinic (the owner or an administrator).
+ *
+ * @return array<string, mixed>
+ */
+function dynamicSections(array $member, ?Branch $branch = null): array
 {
-    $data = [];
+    $sections = [];
     actAsDynamic($member, $branch)->get('/clinic/dashboard')->assertOk()
-        ->assertInertia(function (AssertableInertia $page) use (&$data) {
-            $data = $page->toArray()['props']['widgetData'];
+        ->assertInertia(function (AssertableInertia $page) use (&$sections) {
+            $sections = $page->component('ClinicPortal/CommandCenter/Index', false)->toArray()['props']['sections'];
         });
 
-    return $data;
+    return $sections;
 }
 
 /*
@@ -155,7 +159,7 @@ it('builds navigation from permissions: an admin gets the clinic section, a rece
     $receptionist = dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]));
 
     expect($admin['navigation'])->toContain('staff', 'settings')
-        ->and($receptionist['navigation'])->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'follow_ups', 'notifications', 'support']);
+        ->and($receptionist['navigation'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
 });
 
 it('leaves out a module the user has no permission for', function () {
@@ -229,24 +233,27 @@ it('resolves permissions at the active branch only', function () {
     app(PermissionRegistrar::class)->forgetCachedPermissions();
     $member['user']->unsetRelation('roles')->unsetRelation('permissions');
 
-    // The receptionist role was granted at the main branch only.
-    expect(dynamicDashboard($member, $other)['navigation'])->toBe(['dashboard', 'notifications', 'support']);
+    // The receptionist role was granted at the main branch only: no front office (and so no dashboard) here.
+    expect(dynamicDashboard($member, $other)['navigation'])->toBe(['notifications', 'support']);
 });
 
-it('shows owner-only navigation only while Owner Mode is on', function () {
-    $owner = dynamicMember(owner: true);
+it('shows owner-only navigation to a doctor-owner only while Owner Mode is on, and to any other owner always', function () {
+    $owner = dynamicMember(owner: true, practitioner: true);
     $ownerDomains = [
-        ['key' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'dashboard', 'order' => 1, 'route' => 'clinic.dashboard'],
+        ['key' => 'home', 'label' => 'Home', 'icon' => 'dashboard', 'order' => 1, 'route' => 'clinic.notifications.index'],
         ['key' => 'owner_console', 'label' => 'Owner console', 'icon' => 'owner', 'order' => 2, 'route' => 'clinic.dashboard', 'requires' => ['owner_mode' => true]],
     ];
     Route::middleware(['web', 'clinic_portal', 'clinic_context'])->get('/clinic/__nav-probe', fn () => response()->json(
         array_column(ClinicNavigation::for(app(ClinicAccess::class), [], $ownerDomains), 'key'),
     ));
 
-    actAsDynamic($owner)->get('/clinic/__nav-probe')->assertExactJson(['dashboard']);
+    actAsDynamic($owner)->get('/clinic/__nav-probe')->assertExactJson(['home']);
 
     $this->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
-    $this->get('/clinic/__nav-probe')->assertExactJson(['dashboard', 'owner_console']);
+    $this->get('/clinic/__nav-probe')->assertExactJson(['home', 'owner_console']);
+
+    // An owner who does not treat patients: always, with no mode.
+    actAsDynamic(dynamicMember(owner: true))->get('/clinic/__nav-probe')->assertExactJson(['home', 'owner_console']);
 });
 
 it('never generates a More or Workspace entry, in the registry or for any user', function () {
@@ -289,43 +296,35 @@ it('offers the command palette exactly the actions the resolver allows', functio
  * Dashboard
  */
 
-it('keeps a receptionist on the Dashboard, composed of the front office', function () {
+it('gives a receptionist the Front Desk as their one dashboard', function () {
     $receptionist = dynamicMember(roles: [ClinicRole::Receptionist]);
 
-    actAsDynamic($receptionist)->get('/clinic/dashboard')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Dashboard', true));
-    $surface = dynamicDashboard($receptionist);
-    expect($surface['widgets'])->toContain('todays_patients', 'upcoming_appointments', 'waiting_now')->not->toContain('doctor_load', 'my_queue', 'month_calendar')
-        // New Case, Repeat Case and booking; nothing that leads to an unbuilt page (Quick Billing, leave).
-        ->and($surface['dashboard_actions'])->toBe(['new_case', 'repeat_case', 'new_appointment']);
+    actAsDynamic($receptionist)->get('/clinic/dashboard')->assertRedirect(route('clinic.reception'));
+    actAsDynamic($receptionist)->get('/clinic/reception')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/FrontDesk/Index', true));
+    $navigation = collect(dynamicDashboard($receptionist)['navigation']);
+    expect($navigation->all())->toContain('dashboard')->not->toContain('front_desk');
 });
 
-it('resolves only the widgets a clinic administrator is eligible for, zone by zone and in order', function () {
-    // Four figures at most, so Appointments gives way to Collections; no Owner Mode, so no money or security;
-    // one branch, so no branch activity.
-    expect(dynamicDashboard(dynamicMember(roles: [ClinicRole::ClinicAdmin]))['widgets'])->toBe([
-        'patients_today', 'waiting_now', 'with_doctor_now', 'collections_today',
-        'todays_patients', 'upcoming_appointments',
-        'pending_payments',
-        'needs_attention', 'follow_ups_due',
-    ]);
+it('resolves only the blocks a clinic administrator is eligible for, in order', function () {
+    // Not the owner, so no money, people, security or activity; one branch, so no branch table;
+    // not a practitioner, so no "Your patients".
+    $sections = dynamicSections(dynamicMember(roles: [ClinicRole::ClinicAdmin]));
+
+    expect(array_keys($sections))->toBe(['today', 'spending', 'decisions'])
+        ->and(array_column($sections['today']['figures'], 'key'))->toBe(['patients_today', 'appointments_today', 'waiting_now', 'with_doctor_now']);
 });
 
 it('neither queries nor sends billing figures to someone without billing access', function () {
-    $member = dynamicMember(roles: [ClinicRole::ClinicAdmin]);
-    // The administrator template includes billing; take it away at this branch.
-    Role::findByName(ClinicRole::ClinicAdmin->value, 'web')->revokePermissionTo(['billing.view', 'billing.create', 'payment.collect']);
-    app(PermissionRegistrar::class)->forgetCachedPermissions();
-
+    // An administrator (not the owner) gets no money on the Command Center, and no billing query runs for it.
+    // (A receptionist without billing access: see the Front Desk's own test below.)
     DB::flushQueryLog();
     DB::enableQueryLog();
-    $data = dynamicWidgetData($member);
-    $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+    $sections = dynamicSections(dynamicMember(roles: [ClinicRole::ClinicAdmin]));
+    $adminQueries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
     DB::disableQueryLog();
 
-    expect($data)->toHaveKey('appointments_today')->not->toHaveKey('pending_payments')
-        ->and(array_keys($data))->not->toContain('collections_today', 'cash_status')
-        ->and(collect($data['needs_attention']['items'] ?? [])->pluck('id'))->not->toContain('pending_payments')
-        ->and($queries)->not->toContain('patient_billing');
+    expect($sections)->not->toHaveKey('money')
+        ->and($adminQueries)->not->toContain('patient_billing');
 });
 
 it('leaves billing widgets out when the plan has no billing', function () {
@@ -333,18 +332,6 @@ it('leaves billing widgets out when the plan has no billing', function () {
 
     expect(dynamicDashboard(dynamicMember(owner: true))['widgets'])
         ->not->toContain('collections_today', 'cash_status');
-});
-
-it('names visits as cases only where the specialty registers cases', function () {
-    $patient = Patient::create(['clinic_id' => $this->clinic->id, 'first_name' => 'Case', 'last_name' => 'Type', 'gender' => 'male', 'phone' => '9000000002', 'uhid' => 'UHID-DYN-2']);
-    // A first check-in registers a new visit.
-    app(ReceptionCheckIn::class)->checkIn($this->clinic, $this->branch, $patient);
-    $owner = dynamicMember(owner: true);
-
-    expect(dynamicWidgetData($owner)['todays_patients']['rows'][0]['kind_label'])->toBe('New case');
-
-    $this->organization->update(['clinic_type' => ClinicType::Physiotherapy]);
-    expect(dynamicWidgetData($owner)['todays_patients']['rows'][0]['kind_label'])->toBe('First visit');
 });
 
 it('counts only the active branch, and keeps clinic-wide widgets from branch-limited staff', function () {
@@ -358,20 +345,20 @@ it('counts only the active branch, and keeps clinic-wide widgets from branch-lim
     $member = dynamicMember(roles: [ClinicRole::ClinicAdmin], allBranches: false);
     $member['membership']->assignedBranches()->attach($this->branch->id);
 
-    $widgets = dynamicDashboard($member)['widgets'];
-    $data = dynamicWidgetData($member);
+    $sections = dynamicSections($member);
+    $figures = collect($sections['today']['figures'])->keyBy('key');
 
-    expect($data['upcoming_appointments']['total'])->toBe(1)
-        ->and($data['patients_today']['value'])->toBe(0)
-        // Staff and branch overviews are clinic-wide.
-        ->and($widgets)->not->toContain('staff_overview', 'branch_activity');
+    expect($figures['appointments_today']['value'])->toBe(1)
+        ->and($figures['patients_today']['value'])->toBe(0)
+        // The branch table is clinic-wide.
+        ->and($sections)->not->toHaveKey('branches');
 });
 
 it('gives a multi-role user the union of their widgets, each once', function () {
     $member = dynamicMember(roles: [ClinicRole::Receptionist, ClinicRole::Doctor], practitioner: true);
 
-    // Every job, every workspace, on one Dashboard; each destination once.
-    actAsDynamic($member)->get('/clinic/dashboard')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page->component('ClinicPortal/Dashboard', true));
+    // Every job, every workspace; the Front Desk is the dashboard; each destination once.
+    actAsDynamic($member)->get('/clinic/dashboard')->assertRedirect(route('clinic.reception'));
     $workspaces = [];
     actAsDynamic($member)->get('/clinic/reception')->assertInertia(function (AssertableInertia $page) use (&$workspaces) {
         $workspaces = array_column($page->toArray()['props']['clinic']['workspaces'], 'key');
@@ -379,23 +366,25 @@ it('gives a multi-role user the union of their widgets, each once', function () 
     $navigation = dynamicDashboard($member)['navigation'];
 
     expect($workspaces)->toBe(['front_desk', 'today', 'billing'])
-        ->and($navigation)->toContain('front_desk', 'billing', 'follow_ups')->not->toContain('new_case', 'repeat_case', 'consultations')
+        ->and($navigation)->toContain('dashboard', 'billing', 'follow_ups')->not->toContain('front_desk', 'new_case', 'repeat_case', 'consultations')
         ->and($navigation)->toBe(array_values(array_unique($navigation)));
 });
 
-it('adds owner widgets only while Owner Mode is on', function () {
-    $owner = dynamicMember(owner: true);
+it('gives an owner who does not treat patients the owner blocks from sign-in, and a doctor-owner only in Owner Mode', function () {
+    $plain = dynamicSections(dynamicMember(owner: true));
+    expect($plain['money']['state'])->toBe('ready')->and($plain['security']['state'])->toBe('ready');
 
-    expect(dynamicDashboard($owner)['widgets'])->not->toContain('owner_finance', 'owner_security');
+    // A doctor-owner: Doctor Mode first, so the doctor's home (the Calendar) and no owner blocks.
+    $owner = dynamicMember(owner: true, practitioner: true);
+    actAsDynamic($owner)->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
 
     actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
-    $widgets = [];
-    $this->get('/clinic/dashboard')->assertInertia(function (AssertableInertia $page) use (&$widgets) {
-        $widgets = dynamicSurface($page)['widgets'];
+    $sections = [];
+    $this->get('/clinic/dashboard')->assertInertia(function (AssertableInertia $page) use (&$sections) {
+        $sections = $page->toArray()['props']['sections'];
     });
 
-    // The plan is the sidebar's owner-only summary, never a second dashboard card.
-    expect($widgets)->toContain('owner_finance', 'owner_security')->not->toContain('owner_plan');
+    expect($sections['money']['state'])->toBe('ready')->and($sections['security']['state'])->toBe('ready');
 });
 
 it('keeps the plan in force inside Owner Mode', function () {
@@ -403,12 +392,13 @@ it('keeps the plan in force inside Owner Mode', function () {
     $owner = dynamicMember(owner: true);
 
     actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
-    $widgets = [];
-    $this->get('/clinic/dashboard')->assertInertia(function (AssertableInertia $page) use (&$widgets) {
-        $widgets = dynamicSurface($page)['widgets'];
+    $sections = [];
+    $this->get('/clinic/dashboard')->assertInertia(function (AssertableInertia $page) use (&$sections) {
+        $sections = $page->toArray()['props']['sections'];
     });
 
-    expect($widgets)->toContain('owner_security')->not->toContain('owner_finance', 'collections_today');
+    // No billing on the plan: no money block at all, while security still shows.
+    expect($sections['security']['state'])->toBe('ready')->and($sections)->not->toHaveKey('money');
     expect(app(OwnerMode::class))->toBeInstanceOf(OwnerMode::class);
 });
 
@@ -445,9 +435,8 @@ it('sends the dashboard figures with the first response, only as the page\'s own
         ->assertInertia(function (AssertableInertia $page) {
             $props = $page->toArray()['props'];
 
-            expect($props)->toHaveKey('widgetData')
-                ->and(array_keys($props['clinic']))->not->toContain('metrics', 'widgets', 'widgetData', 'collections')
-                ->and(json_encode($props['widgets']))->not->toMatch('/"(value|items|stats|total)":/');
+            expect($props)->toHaveKey('sections')
+                ->and(array_keys($props['clinic']))->not->toContain('metrics', 'widgets', 'widgetData', 'collections', 'sections');
         });
 });
 
@@ -483,55 +472,22 @@ it('raises lab and imaging reports that are due as one attention item, only with
     DB::table('lab_orders')->insert([
         ['clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => Patient::create(['clinic_id' => $this->clinic->id, 'first_name' => 'Lab', 'last_name' => 'One', 'gender' => 'female', 'phone' => '9000000003', 'uhid' => 'UHID-DYN-3'])->id, 'lab_order_number' => 'L-1', 'status' => 'in_production', 'delivery_due_date' => ClinicClock::today()->subDay()->toDateString(), 'created_at' => now(), 'updated_at' => now()],
     ]);
-    $attention = fn (array $member) => collect(dynamicWidgetData($member)['needs_attention']['items'] ?? [])->keyBy('id');
+    $inbox = fn (array $member) => collect(dynamicSections($member)['decisions']['items'] ?? [])->keyBy('id');
     dynamicPlan(['patients', 'appointments', 'billing']);
-    $noCapability = $attention(dynamicMember(roles: [ClinicRole::ClinicAdmin]));
+    $noCapability = $inbox(dynamicMember(roles: [ClinicRole::ClinicAdmin]));
 
     CompanySubscription::query()->delete();
     dynamicPlan(['patients', 'appointments', 'billing', 'lab', 'xray']);
     $admin = dynamicMember(roles: [ClinicRole::ClinicAdmin]);
-    $billingStaff = dynamicMember(roles: [ClinicRole::BillingStaff]);
 
     expect($noCapability->keys()->all())->not->toContain('reports_due')
-        ->and($attention($admin)['reports_due']['count'])->toBe(1)
-        // A summary, not a reporting widget of its own.
-        ->and(dynamicDashboard($admin)['widgets'])->not->toContain('investigations')
-        ->and($attention($billingStaff)->keys()->all())->not->toContain('reports_due');
+        ->and($inbox($admin)['reports_due']['count'])->toBe(1)
+        // A summary, not a reporting block of its own.
+        ->and(array_keys(dynamicSections($admin)))->not->toContain('investigations');
 });
 
-it('lets the owner hide a widget from staff, but never show one they may not see', function () {
-    // Since role homes the widget dashboard is the Command Center: an administrator's here.
-    $owner = dynamicMember(owner: true);
-    $receptionist = dynamicMember(roles: [ClinicRole::ClinicAdmin]);
-    $restricted = Role::findByName(ClinicRole::ClinicAdmin->value, 'web');
-
-    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
-    $this->put('/clinic/dashboard/visibility', ['role' => ClinicRole::ClinicAdmin->value, 'hidden' => ['follow_ups_due']])->assertRedirect();
-
-    expect(dynamicDashboard($receptionist)['widgets'])->toContain('collections_today')->not->toContain('follow_ups_due');
-
-    // Showing everything cannot give back what permissions take away. (The
-    // owner's session moved to the receptionist above, which ended Owner Mode.)
-    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
-    $this->put('/clinic/dashboard/visibility', ['role' => ClinicRole::ClinicAdmin->value, 'hidden' => []])->assertRedirect();
-    $restricted->revokePermissionTo(['billing.view', 'billing.create', 'payment.collect']);
-    app(PermissionRegistrar::class)->forgetCachedPermissions();
-    $receptionist['user']->unsetRelation('roles')->unsetRelation('permissions');
-
-    expect(dynamicDashboard($receptionist)['widgets'])->toContain('follow_ups_due')->not->toContain('collections_today');
-});
-
-it('accepts dashboard choices only from the owner in Owner Mode, and only for staff widgets', function () {
-    $owner = dynamicMember(owner: true);
-    $receptionist = dynamicMember(roles: [ClinicRole::Receptionist]);
-
-    actAsDynamic($receptionist)->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['follow_ups_due']])->assertForbidden();
-    actAsDynamic($owner)->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['follow_ups_due']])->assertForbidden();
-
-    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass']);
-    $this->put('/clinic/dashboard/visibility', ['role' => 'Receptionist', 'hidden' => ['owner_plan']])->assertSessionHasErrors('hidden.0');
-
-    expect($this->clinic->fresh()->dashboard_config)->toBeNull();
+it('has no staff-dashboard settings: there is no staff dashboard to configure', function () {
+    expect(Route::has('clinic.dashboard.visibility'))->toBeFalse();
 });
 
 it('reports a single branch, and the branch selector lives in the shell top bar, not on the Calendar', function () {
@@ -547,13 +503,18 @@ it('loads every widget the owner and an administrator see, without one failing',
     $patient = Patient::create(['clinic_id' => $this->clinic->id, 'first_name' => 'Glance', 'last_name' => 'Patient', 'gender' => 'male', 'phone' => '9000000002', 'uhid' => 'UHID-DYN-2']);
     Appointment::create(['clinic_id' => $this->clinic->id, 'branch_id' => $this->branch->id, 'patient_id' => $patient->id, 'scheduled_at' => ClinicClock::now(), 'status' => 'cancelled']);
 
-    // A practitioner lands on Today, not on the widget dashboard.
-    foreach ([dynamicMember(owner: true), dynamicMember(roles: [ClinicRole::ClinicAdmin])] as $member) {
-        $data = dynamicWidgetData($member);
-        expect(collect($data)->filter(fn ($widget) => ($widget['error'] ?? false) === true)->keys()->all())->toBe([]);
+    // Every Command Center block loads for the owner (in Owner Mode and out) and an administrator.
+    $owner = dynamicMember(owner: true);
+    foreach ([$owner, dynamicMember(roles: [ClinicRole::ClinicAdmin])] as $member) {
+        expect(collect(dynamicSections($member))->filter(fn ($section) => $section['state'] === 'error')->keys()->all())->toBe([]);
     }
+    actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
+    $sections = [];
+    $this->get('/clinic/dashboard')->assertInertia(function (AssertableInertia $page) use (&$sections) {
+        $sections = $page->toArray()['props']['sections'];
+    });
+    expect(collect($sections)->filter(fn ($section) => $section['state'] !== 'ready')->keys()->all())->toBe([]);
 
-    // A cancelled booking is neither today's appointment nor one still to arrive.
-    $data = dynamicWidgetData(dynamicMember(owner: true));
-    expect($data['upcoming_appointments']['total'])->toBe(0);
+    // A cancelled booking is not today's appointment.
+    expect(collect($sections['today']['figures'])->firstWhere('key', 'appointments_today')['value'])->toBe(0);
 });

@@ -58,24 +58,33 @@ beforeEach(function () {
 
 // ─── Role homes and workspace authorization ─────────────────
 
-test('every role stays on the one Dashboard from the one home route, its primary workspace noted', function () {
+test('every role lands from the one home route, its primary workspace noted; whoever runs the clinic lands on the Command Center', function () {
     [$billingUser, $billingSession] = $this->f->memberWithRole(ClinicRole::BillingStaff);
     [$adminUser, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
-    $home = fn ($as, string $workspace) => $as->get('/clinic/dashboard')->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Dashboard', true)->where('clinic.workspaces.0.key', $workspace));
+    // No separate staff dashboard: reception lands on the Front Desk, a doctor on the Calendar, billing staff on Billing.
+    $home = fn ($as, string $workspace, string $component) => $as->followingRedirects()->get('/clinic/dashboard')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component($component, true)->where('clinic.workspaces.0.key', $workspace));
 
-    $home(($this->asReception)(), 'front_desk');
-    $home(($this->asDoctor)(), 'today');
-    $home($this->actingAs($billingUser)->withSession($billingSession), 'billing');
-    $home($this->actingAs($adminUser)->withSession($adminSession), 'command_center');
-    $home($this->actingAs($this->f->owner)->withSession($this->f->session), 'command_center');
+    $home(($this->asReception)(), 'front_desk', 'ClinicPortal/FrontDesk/Index');
+    $home(($this->asDoctor)(), 'today', 'ClinicPortal/Appointments/Index');
+    $home($this->actingAs($billingUser)->withSession($billingSession), 'billing', 'ClinicPortal/Billing/Index');
+    $home($this->actingAs($adminUser)->withSession($adminSession), 'command_center', 'ClinicPortal/CommandCenter/Index');
+    $home($this->actingAs($this->f->owner)->withSession($this->f->session), 'command_center', 'ClinicPortal/CommandCenter/Index');
 });
 
-test('an owner who practises keeps one Dashboard and reaches the Queue and Billing from the sidebar', function () {
+test('an owner who practises works in Doctor Mode, and reaches the Queue and Billing from the sidebar in Owner Mode', function () {
     $ownerDoctor = $this->f->doctor('Dr. Owner', $this->f->owner);
     $ownerDoctor->practitionerProfile()->withoutGlobalScopes()->update(['specialty' => 'Physiotherapist']);
 
-    $this->actingAs($this->f->owner)->withSession($this->f->session)->get('/clinic/dashboard')->assertOk()
+    // Doctor Mode, the default: the doctor's day, without the Front Desk or Billing.
+    $this->actingAs($this->f->owner)->withSession($this->f->session)->followingRedirects()->get('/clinic/dashboard')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('clinic.workspaces', fn ($workspaces) => collect($workspaces)->pluck('key')->all() === ['today'])
+            ->where('clinic.navigation', fn ($nav) => ! collect($nav)->pluck('key')->contains('billing')));
+    $this->actingAs($this->f->owner)->withSession($this->f->session)->get('/clinic/reception')->assertForbidden();
+
+    // Owner Mode: every workspace, the Command Center first.
+    $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session))->get('/clinic/dashboard')->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('clinic.workspaces', fn ($workspaces) => collect($workspaces)->pluck('key')->all() === ['command_center', 'front_desk', 'today', 'billing']
                 && collect($workspaces)->firstWhere('primary', true)['key'] === 'command_center')

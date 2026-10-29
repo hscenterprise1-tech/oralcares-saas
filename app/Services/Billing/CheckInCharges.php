@@ -16,7 +16,6 @@ use App\Models\User;
 use App\PaymentMethod;
 use App\Services\BillingService;
 use App\Services\PaymentService;
-use App\Services\Physio\SessionPackages;
 use App\Services\Reception\PatientFlowConfigService;
 use App\Support\Specialty\PracticeAreas;
 use DomainException;
@@ -44,7 +43,6 @@ class CheckInCharges
         protected BillingService $billing,
         protected PaymentService $payments,
         protected PatientFlowConfigService $flow,
-        protected SessionPackages $packages,
     ) {}
 
     /** The practitioner's consultation fee, or null when none is set. */
@@ -65,8 +63,10 @@ class CheckInCharges
      * What checking this visit in charges: the doctor's consultation fee
      * when the clinic collects at check-in and this member may raise bills;
      * nothing when the clinic bills after the visit, the doctor has no fee,
-     * or the patient holds a session package that already pays for a visit
-     * of this specialty (a package-paid session is never charged again).
+     * or the visit's module bills at its own stage. A session package never
+     * waives a check-in charge: which treatment the visit is for is not known
+     * until the session, and a package pays only for its own treatment's
+     * completed session (`SessionPackages::paidFor`, at checkout).
      * Registering a patient on its own never charges anything.
      */
     public function dueAtCheckIn(Clinic $clinic, Patient $patient, PatientVisit $visit, ?ClinicEmployee $doctor, User $user): ?float
@@ -80,7 +80,7 @@ class CheckInCharges
             return null;
         }
 
-        return $this->packageCovers($patient, $visit) ? null : $fee;
+        return $fee;
     }
 
     /** Whether the visit's module takes a consultation charge at check-in (`clinic_specialties.modules.*.charges_at_check_in`, default yes). */
@@ -97,14 +97,6 @@ class CheckInCharges
         return $visit->clinic_specialty_id
             ? ClinicSpecialty::query()->withoutGlobalScopes()->whereKey($visit->clinic_specialty_id)->value('specialty_key')
             : null;
-    }
-
-    /** Whether one of the patient's session packages already pays for a visit of this one's specialty. */
-    public function packageCovers(Patient $patient, PatientVisit $visit): bool
-    {
-        $specialty = $this->specialtyOf($visit);
-
-        return $specialty !== null && in_array($specialty, $this->packages->coveredSpecialties($patient->clinic_id, [$patient->id])[$patient->id] ?? [], true);
     }
 
     /**
@@ -130,9 +122,7 @@ class CheckInCharges
         }
         if ($fee === null) {
             if ($payment !== null) {
-                throw ValidationException::withMessages(['payment' => $this->packageCovers($patient, $visit)
-                    ? 'This visit is paid for by the patient\'s session package; nothing is collected at check-in.'
-                    : 'Nothing is collected at check-in for this visit.']);
+                throw ValidationException::withMessages(['payment' => 'Nothing is collected at check-in for this visit.']);
             }
 
             return null;

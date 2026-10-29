@@ -2,11 +2,13 @@
 
 namespace App\Services\Governance;
 
+use App\Exceptions\OwnerModeRequired;
 use App\Models\DeletionRequest;
 use App\Models\User;
 use App\Services\ClinicContext;
-use App\Services\Governance\Actions\ArchivePatient;
+use App\Services\Governance\Actions\CorrectDeath;
 use App\Services\Governance\Actions\MergePatient;
+use App\Services\Governance\Actions\RecordDeath;
 use App\Services\Governance\Actions\RemoveDocument;
 use App\Services\Governance\Actions\VoidBill;
 use App\Services\Governance\Actions\VoidEncounter;
@@ -57,9 +59,22 @@ class DeletionGovernance
     public function actions(): array
     {
         return $this->actions ??= collect([
-            ArchivePatient::class, RemoveDocument::class, VoidEncounter::class, VoidToothEntry::class, VoidBill::class,
+            RemoveDocument::class, VoidEncounter::class, VoidToothEntry::class, VoidBill::class,
             VoidEndodonticRecord::class, VoidImplantRecord::class, VoidOrthodonticRecord::class, MergePatient::class,
+            RecordDeath::class, CorrectDeath::class,
         ])->map(fn (string $class) => app($class))->keyBy(fn (GovernedAction $action) => $action->key())->all();
+    }
+
+    /**
+     * Actions that no longer exist but appear in decided requests kept as
+     * history, with the name those requests are shown under.
+     */
+    public const RETIRED = ['patient.archive' => 'Archive patient (no longer available)'];
+
+    /** How a request's action is named in lists: the action's label, a retired action's name, else its key. */
+    public function labelFor(string $key): string
+    {
+        return ($this->actions()[$key] ?? null)?->label() ?? self::RETIRED[$key] ?? $key;
     }
 
     public function action(string $key): GovernedAction
@@ -358,9 +373,9 @@ class DeletionGovernance
     private function assertOwnerDecision(): void
     {
         if (! $this->ownerMode->authorized()) {
-            throw new AuthorizationException($this->ownerMode->isOwner()
-                ? 'Enter Owner Mode to decide destructive actions.'
-                : 'Only the clinic owner decides destructive actions.');
+            throw $this->ownerMode->isOwner()
+                ? OwnerModeRequired::inactive('Enter Owner Mode to decide destructive actions.')
+                : new AuthorizationException('Only the clinic owner decides destructive actions.');
         }
     }
 

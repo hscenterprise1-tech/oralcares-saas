@@ -30,7 +30,8 @@ beforeEach(function () {
         'clinic_id' => $this->f->clinic->id, 'max_users' => 5, 'max_doctors' => 2, 'max_staff' => 3, 'max_branches' => 1,
     ]);
     $this->limits = app(ResourceLimitService::class);
-    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession($this->f->session);
+    // Role changes are the owner's Owner Mode action.
+    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
     // A login with a staff record, holding one clinic role at the main branch.
     $this->member = function (ClinicRole $role, string $name, string $status = 'active'): ClinicEmployee {
         [$user] = $this->f->memberWithRole($role);

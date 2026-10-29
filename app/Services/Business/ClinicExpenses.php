@@ -2,19 +2,26 @@
 
 namespace App\Services\Business;
 
+use App\ClinicMembershipStatus;
 use App\ClinicPermission;
+use App\EmploymentStatus;
+use App\Exceptions\OwnerModeRequired;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicDepartment;
 use App\Models\ClinicExpense;
 use App\Models\ClinicExpenseCategory;
+use App\Models\ClinicMembership;
 use App\Models\ClinicRecurringExpense;
 use App\Models\ClinicVendor;
 use App\Models\User;
+use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\Security\Malware\ScannedUploadIntake;
 use App\Services\Security\SecurityAudit;
 use Carbon\CarbonImmutable;
 use DomainException;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -23,9 +30,11 @@ use Illuminate\Support\Facades\DB;
 /**
  * The one writer of a clinic's expenses.
  *
- * An expense is recorded `pending`; someone with `expense.approve` approves
- * or rejects it (recorded by such a person, it is approved at once). An
- * approved expense is then paid. Receipts pass the malware scan into private
+ * An expense is always recorded `pending`; someone else with `expense.approve`
+ * approves or rejects it, never the person who recorded it. An approved
+ * expense is then paid. Deciding and paying need the permission at the
+ * expense's own branch; an expense with no branch needs someone who works
+ * across the whole clinic. Receipts pass the malware scan into private
  * storage. A recurring expense raises each period's expense once, when due.
  * Every change is audited.
  */
@@ -38,6 +47,8 @@ class ClinicExpenses
     public function __construct(
         protected ScannedUploadIntake $intake,
         protected SecurityAudit $audit,
+        protected ClinicContext $clinicContext,
+        protected OwnerMode $ownerMode,
     ) {}
 
     /** @return Collection<int, ClinicExpenseCategory> */
@@ -86,7 +97,6 @@ class ClinicExpenses
             throw new DomainException('An expense must be more than zero.');
         }
         $admitted = $receipt ? $this->intake->admit($receipt, "clinic_{$clinic->id}/expenses") : null;
-        $approves = $by->hasClinicPermission(ClinicPermission::ExpenseApprove);
 
         $expense = ClinicExpense::query()->withoutGlobalScopes()->create([
             'clinic_id' => $clinic->id,
@@ -101,9 +111,8 @@ class ClinicExpenses
             'payment_method' => $data['payment_method'] ?? null,
             'reference' => $data['reference'] ?? null,
             'notes' => $data['notes'] ?? null,
-            'status' => $approves ? ClinicExpense::APPROVED : ClinicExpense::PENDING,
-            'decided_by' => $approves ? $by->id : null,
-            'decided_at' => $approves ? now() : null,
+            // Pending even when the recorder may approve: deciding is someone else's.
+            'status' => ClinicExpense::PENDING,
             'attachment_path' => $admitted['path'] ?? null,
             'attachment_name' => $receipt?->getClientOriginalName(),
             'attachment_sha256' => $admitted['sha256'] ?? null,
@@ -114,33 +123,65 @@ class ClinicExpenses
         return $expense;
     }
 
-    public function approve(ClinicExpense $expense, User $by): ClinicExpense
+    /**
+     * `$soleOwnerDirect` asks for the sole-owner direct path on the owner's own
+     * expense (see `decide()`); it changes nothing for anyone else's.
+     */
+    public function approve(ClinicExpense $expense, User $by, bool $soleOwnerDirect = false): ClinicExpense
     {
-        return $this->decide($expense, $by, ClinicExpense::APPROVED, null);
+        return $this->decide($expense, $by, ClinicExpense::APPROVED, null, $soleOwnerDirect);
     }
 
-    public function reject(ClinicExpense $expense, string $reason, User $by): ClinicExpense
+    public function reject(ClinicExpense $expense, string $reason, User $by, bool $soleOwnerDirect = false): ClinicExpense
     {
         if (trim($reason) === '') {
             throw new DomainException('Say why the expense is rejected.');
         }
 
-        return $this->decide($expense, $by, ClinicExpense::REJECTED, mb_substr(trim($reason), 0, 500));
+        return $this->decide($expense, $by, ClinicExpense::REJECTED, mb_substr(trim($reason), 0, 500), $soleOwnerDirect);
     }
 
-    public function markPaid(ClinicExpense $expense, string $method, ?string $reference, User $by): ClinicExpense
+    /**
+     * Record that an approved expense was paid, how, and with what reference.
+     * It records what the payer says happened; it moves no money and proves no
+     * transfer. The recorder never pays their own expense, except through the
+     * sole-owner direct path (`$soleOwnerDirect`): the owner paying the expense
+     * they recorded and approved directly, with a fresh confirmation, while no
+     * one else could pay it. That is audited as its own event.
+     */
+    public function markPaid(ClinicExpense $expense, string $method, ?string $reference, User $by, bool $soleOwnerDirect = false): ClinicExpense
     {
         if (! in_array($method, self::METHODS, true)) {
             throw new DomainException('Choose how it was paid.');
         }
 
-        return DB::transaction(function () use ($expense, $method, $reference) {
+        // Checked before the transaction, so a refusal's audit entry survives it.
+        $direct = $soleOwnerDirect && $this->recordedBy($expense, $by);
+        if (! $direct && $this->recordedBy($expense, $by)) {
+            $this->audit->record('expense.pay_refused', $expense, ['reason' => 'recorder'], ['clinic_id' => $expense->clinic_id]);
+
+            throw new AuthorizationException('An expense is paid by someone other than the person who recorded it.');
+        }
+        if ($direct) {
+            $this->assertSoleOwnerDirect($expense, $by, paying: true);
+        } else {
+            $this->ownerMode->requireForSensitiveAction($by, 'expense.pay', OwnerMode::STANDARD, ['expense_id' => $expense->id, 'branch_id' => $expense->branch_id]);
+        }
+
+        return DB::transaction(function () use ($expense, $method, $reference, $by, $direct) {
             $locked = ClinicExpense::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($expense->id);
+            $this->assertMayActOn($locked, $by, ClinicPermission::ExpenseManage);
+            if ($this->recordedBy($locked, $by) && ! $direct) {
+                throw new AuthorizationException('An expense is paid by someone other than the person who recorded it.');
+            }
             if ($locked->status !== ClinicExpense::APPROVED) {
                 throw new DomainException('Only an approved expense can be marked paid.');
             }
+            if ($direct) {
+                $this->assertSoleOwnerDirect($locked, $by, paying: true, audited: false);
+            }
             $locked->update(['status' => ClinicExpense::PAID, 'paid_at' => now(), 'payment_method' => $method, 'reference' => $reference ?? $locked->reference]);
-            $this->audit->record('expense.paid', $locked, ['method' => $method], ['clinic_id' => $locked->clinic_id]);
+            $this->audit->record($direct ? 'expense.paid_sole_owner_direct' : 'expense.paid', $locked, ['method' => $method, 'amount' => (float) $locked->amount, 'path' => $direct ? 'sole_owner_direct' : 'payer'], ['clinic_id' => $locked->clinic_id]);
 
             return $locked;
         });
@@ -212,22 +253,168 @@ class ClinicExpenses
         return $raised;
     }
 
-    private function decide(ClinicExpense $expense, User $by, string $status, ?string $reason): ClinicExpense
+    /**
+     * Someone other than the recorder decides. The one exception is the
+     * sole-owner direct path: the clinic's primary owner deciding their own
+     * expense, asked for explicitly, with their password confirmed within the
+     * fresh-verification window, and only while no one else could decide it.
+     * It is recorded as such in the audit trail.
+     */
+    private function decide(ClinicExpense $expense, User $by, string $status, ?string $reason, bool $soleOwnerDirect = false): ClinicExpense
     {
         if (! $by->hasClinicPermission(ClinicPermission::ExpenseApprove)) {
             throw new DomainException('You cannot approve expenses.');
         }
 
-        return DB::transaction(function () use ($expense, $by, $status, $reason) {
+        // The step-up checks run before the transaction, so a refusal's audit
+        // entry is not rolled back with it; they run again under the lock.
+        $direct = $soleOwnerDirect && $this->recordedBy($expense, $by);
+        if (! $direct && $this->recordedBy($expense, $by)) {
+            $this->audit->record('expense.self_decision_refused', $expense, ['decision' => $status], ['clinic_id' => $expense->clinic_id]);
+
+            throw new AuthorizationException('An expense is decided by someone other than the person who recorded it.');
+        }
+        if ($direct) {
+            $this->assertSoleOwnerDirect($expense, $by);
+        } else {
+            $this->ownerMode->requireForSensitiveAction($by, 'expense.decide', OwnerMode::STANDARD, ['expense_id' => $expense->id, 'branch_id' => $expense->branch_id]);
+        }
+
+        return DB::transaction(function () use ($expense, $by, $status, $reason, $direct) {
             $locked = ClinicExpense::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($expense->id);
+            $this->assertMayActOn($locked, $by, ClinicPermission::ExpenseApprove);
+            if ($this->recordedBy($locked, $by) && ! $direct) {
+                throw new AuthorizationException('An expense is decided by someone other than the person who recorded it.');
+            }
+            if ($direct) {
+                $this->assertSoleOwnerDirect($locked, $by, audited: false);
+            }
             if ($locked->status !== ClinicExpense::PENDING) {
                 throw new DomainException('This expense has already been decided.');
             }
             $locked->update(['status' => $status, 'decided_by' => $by->id, 'decided_at' => now(), 'rejection_reason' => $reason]);
-            $this->audit->record("expense.{$status}", $locked, ['reason' => $reason], ['clinic_id' => $locked->clinic_id]);
+            $this->audit->record("expense.{$status}", $locked, ['reason' => $reason, 'path' => $direct ? 'sole_owner_direct' : 'approver'], ['clinic_id' => $locked->clinic_id]);
 
             return $locked;
         });
+    }
+
+    /**
+     * The sole-owner direct path's conditions, each checked on the server:
+     * the actor is this clinic's primary owner, in Owner Mode with a fresh
+     * verification (never skipped, even outside a request), and no other
+     * member could decide this expense.
+     *
+     * @throws AuthorizationException
+     */
+    private function assertSoleOwnerDirect(ClinicExpense $expense, User $by, bool $paying = false, bool $audited = true): void
+    {
+        $membership = $this->clinicContext->membership();
+        // `$stepUp`: the owner may confirm their password and send again (`OwnerModeRequired`).
+        $refuse = function (string $reason, string $message, ?string $stepUp = null) use ($expense, $audited, $paying): never {
+            if ($audited) {
+                $this->audit->record($paying ? 'expense.sole_owner_direct_pay_refused' : 'expense.sole_owner_direct_refused', $expense, ['reason' => $reason], ['clinic_id' => $expense->clinic_id]);
+            }
+
+            throw $stepUp !== null ? new OwnerModeRequired($message, $stepUp) : new AuthorizationException($message);
+        };
+
+        if (! $this->recordedBy($expense, $by)) {
+            $refuse('not_recorder', 'The direct path is only for the owner\'s own expense.');
+        }
+        if (! $membership || ! $membership->is_primary_owner || $membership->user_id !== $by->id || $membership->clinic_id !== $expense->clinic_id) {
+            $refuse('not_primary_owner', 'Only the clinic owner may act on their own expense, and only when no one else can.');
+        }
+        // Paying directly follows only the owner's own direct decision: it never
+        // approves anything, and never pays what someone else approved.
+        if ($paying && ($expense->decided_by === null || (int) $expense->decided_by !== (int) $by->id)) {
+            $refuse('not_directly_approved', 'Only an expense you approved through the direct path can be paid through it.');
+        }
+        if (auth()->id() !== $by->id) {
+            $refuse('actor_mismatch', 'This action can only be taken by the signed-in user.');
+        }
+        if (! $this->ownerMode->freshlyVerified()) {
+            $refuse('verification_stale', OwnerMode::FRESH_REFUSAL, $this->ownerMode->authorized() ? OwnerModeRequired::STALE : OwnerModeRequired::INACTIVE);
+        }
+        if ($this->independentMemberHolds($paying ? ClinicPermission::ExpenseManage : ClinicPermission::ExpenseApprove, $expense, $by)) {
+            $refuse($paying ? 'payer_available' : 'approver_available', $paying
+                ? 'Someone else in the clinic can pay this expense. Ask them to.'
+                : 'Someone else in the clinic can decide this expense. Ask them to.');
+        }
+    }
+
+    private function recordedBy(ClinicExpense $expense, User $user): bool
+    {
+        return $expense->created_by !== null && (int) $expense->created_by === (int) $user->id;
+    }
+
+    /**
+     * Whether another active member could act on this expense in the owner's
+     * place: someone other than the recorder, signed in to this clinic, not on
+     * their way out, with `$permission` (`expense.approve` to decide,
+     * `expense.manage` to pay) held where the expense is (at its branch, with
+     * access to it; for a clinic-wide expense, at any branch while working
+     * across every branch). Counted generously: any doubt means one exists.
+     */
+    private function independentMemberHolds(ClinicPermission $permission, ClinicExpense $expense, User $recorder): bool
+    {
+        $tables = config('permission.table_names');
+        $permissionId = DB::table($tables['permissions'])->where('name', $permission->value)->value('id');
+        if ($permissionId === null) {
+            return false;
+        }
+
+        $branchIds = $expense->branch_id !== null
+            ? [$expense->branch_id]
+            : Branch::query()->withoutGlobalScopes()->where('clinic_id', $expense->clinic_id)->pluck('id')->all();
+        $viaRoles = DB::table($tables['model_has_roles'])->where('model_type', User::class)->whereIn('branch_id', $branchIds)
+            ->whereIn('role_id', DB::table($tables['role_has_permissions'])->where('permission_id', $permissionId)->select('role_id'))
+            ->select('model_id');
+        $direct = DB::table($tables['model_has_permissions'])->where('model_type', User::class)->whereIn('branch_id', $branchIds)
+            ->where('permission_id', $permissionId)->select('model_id');
+
+        return ClinicMembership::query()->withoutGlobalScopes()
+            ->where('clinic_memberships.clinic_id', $expense->clinic_id)
+            ->where('clinic_memberships.status', ClinicMembershipStatus::Active)
+            ->where('clinic_memberships.user_id', '!=', $recorder->id)
+            ->whereNotExists(fn ($query) => $query->from('clinic_employees')
+                ->whereColumn('clinic_employees.clinic_id', 'clinic_memberships.clinic_id')
+                ->whereColumn('clinic_employees.user_id', 'clinic_memberships.user_id')
+                ->whereIn('clinic_employees.status', EmploymentStatus::accessEnding()))
+            ->where(fn ($query) => $query->whereIn('clinic_memberships.user_id', $viaRoles)->orWhereIn('clinic_memberships.user_id', $direct))
+            ->when(
+                $expense->branch_id !== null,
+                fn ($query) => $query->where(fn ($access) => $access->where('clinic_memberships.has_all_branches_access', true)
+                    ->orWhereExists(fn ($pivot) => $pivot->from('branch_clinic_membership')
+                        ->whereColumn('branch_clinic_membership.clinic_membership_id', 'clinic_memberships.id')
+                        ->where('branch_clinic_membership.branch_id', $expense->branch_id))),
+                fn ($query) => $query->where('clinic_memberships.has_all_branches_access', true),
+            )
+            ->exists();
+    }
+
+    /**
+     * The permission must be held where the expense is: at its branch, from the
+     * persisted record. An expense with no branch belongs to the whole clinic,
+     * so only the owner or a member working across every branch may act on it.
+     *
+     * @throws AuthorizationException
+     */
+    private function assertMayActOn(ClinicExpense $expense, User $by, ClinicPermission $permission): void
+    {
+        $membership = $this->clinicContext->membership();
+        $inClinic = $membership !== null && $membership->user_id === $by->id && $membership->clinic_id === $expense->clinic_id;
+
+        if ($expense->branch_id !== null) {
+            $branch = Branch::query()->withoutGlobalScopes()->where('clinic_id', $expense->clinic_id)->find($expense->branch_id);
+            $allowed = $inClinic && $branch !== null && $by->hasClinicPermissionAt($permission, $branch);
+        } else {
+            $allowed = $inClinic && ($membership->is_primary_owner || $membership->has_all_branches_access) && $by->hasClinicPermission($permission);
+        }
+
+        if (! $allowed) {
+            throw new AuthorizationException('You may not do this for that branch\'s expenses.');
+        }
     }
 
     /** A category, vendor or branch named must be this clinic's. */

@@ -6,7 +6,9 @@ use App\Models\ClinicWhatsAppMessage;
 use App\Models\Notification;
 use App\Models\WhatsAppConnection;
 use App\Models\WhatsAppTemplate;
+use App\Services\Communication\PatientMessageEligibility;
 use App\Services\Marketing\WhatsAppManager;
+use App\Services\NotificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -50,6 +52,17 @@ class SendClinicWhatsAppMessage implements ShouldQueue
             return $message;
         });
         if ($claimed === null) {
+            return;
+        }
+
+        // The last moment before the provider: a patient merged or marked
+        // deceased since this was queued is not contacted. Skipped with
+        // the reason, not failed, so it is never offered for retry.
+        if ($claimed->patient_id !== null
+            && ($reason = app(PatientMessageEligibility::class)->blockReasonFor((int) $claimed->clinic_id, (int) $claimed->patient_id)) !== null) {
+            $claimed->update(['status' => ClinicWhatsAppMessage::SKIPPED, 'failure_reason' => $reason]);
+            $this->notification($claimed, ['status' => NotificationService::SKIPPED, 'failed_reason' => $reason]);
+
             return;
         }
 

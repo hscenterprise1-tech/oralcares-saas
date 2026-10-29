@@ -42,7 +42,9 @@ class MedicalHistoryService
 
     /**
      * Make the patient's manual safety alerts exactly these texts (an empty
-     * list clears them). Unchanged alerts keep their row and date.
+     * list clears them). Unchanged alerts keep their row and date; a removed
+     * one is resolved (who and when), never deleted; a new one records who
+     * added it.
      *
      * @param  list<string>  $texts
      * @return bool whether anything changed
@@ -56,10 +58,10 @@ class MedicalHistoryService
         $missing = $wanted->reject(fn ($text) => $current->contains('description', $text));
 
         if ($stale->isNotEmpty()) {
-            $patient->alerts()->whereKey($stale->pluck('id'))->delete();
+            $patient->alerts()->whereKey($stale->pluck('id'))->update(['resolved_at' => now(), 'resolved_by' => auth()->id()]);
         }
         foreach ($missing as $text) {
-            $patient->alerts()->create(['type' => 'manual', 'description' => $text, 'severity' => $severity]);
+            $patient->alerts()->create(['clinic_id' => $patient->clinic_id, 'type' => 'manual', 'description' => $text, 'severity' => $severity, 'created_by' => auth()->id()]);
         }
 
         return $stale->isNotEmpty() || $missing->isNotEmpty();

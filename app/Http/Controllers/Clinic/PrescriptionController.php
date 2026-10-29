@@ -93,6 +93,24 @@ class PrescriptionController extends Controller
     }
 
     /**
+     * The prescribing clinician reviews the patient's documented allergies
+     * for this draft. The fingerprint must be the current allergy record's
+     * (`PrescriptionAllergyCheck`); the review is stored with who and when,
+     * and signing requires it while allergies are documented.
+     */
+    public function reviewAllergies(Request $request, Prescription $prescription): RedirectResponse
+    {
+        $this->authorize('update', $prescription);
+        $validated = $request->validate(['fingerprint' => ['required', 'string', 'size:64']]);
+
+        return $this->attempt(function () use ($request, $prescription, $validated) {
+            $this->prescriptions->reviewAllergies($prescription, $request->user(), $validated['fingerprint']);
+
+            return back()->with('success', 'Allergies reviewed.');
+        });
+    }
+
+    /**
      * Finalise, saving the advice sent with it first (the screen sends the
      * advice box as it stands, saved or not).
      */

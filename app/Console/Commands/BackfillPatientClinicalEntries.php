@@ -136,7 +136,7 @@ class BackfillPatientClinicalEntries extends Command
         $input = array_map(fn (string $name) => ['label' => mb_substr($name, 0, 160)], $names);
 
         try {
-            return $entries->prepare($clinic->id, $kind, $input, $kind);
+            return $entries->prepare($clinic->id, $kind, $input, $kind, import: true);
         } catch (ValidationException) {
             return [];
         }

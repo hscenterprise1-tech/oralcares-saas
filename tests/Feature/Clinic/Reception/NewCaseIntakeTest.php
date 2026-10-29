@@ -245,7 +245,7 @@ test('owners configure Quick Care; values are checked and audited; reception can
         'alerts' => false,
     ])->assertSessionHasNoErrors();
 
-    expect($this->flow->quickCare($this->f->clinic->fresh()))->toBe(['allergy_status' => 'required', 'alerts' => false, 'alert_roles' => null])
+    expect($this->flow->quickCare($this->f->clinic->fresh()))->toBe(['allergy_status' => 'required', 'alerts' => false, 'alert_roles' => null, 'conditions_from_catalogue' => false])
         ->and($this->f->clinic->fresh()->patient_flow_config['quick_care'])->not->toHaveKey('vitals')
         ->and(ClinicSettingAudit::query()->where('section', 'quick_care')->exists())->toBeTrue();
     ($this->asOwner)()->getJson('/clinic/reception/intake')->assertJsonPath('catalogue.alerts', []);

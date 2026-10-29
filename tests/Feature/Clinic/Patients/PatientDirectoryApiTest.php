@@ -74,13 +74,15 @@ test('specialty and active-care filters, with active care shown on each row', fu
     ($this->asOwner)()->getJson("{$this->url}?specialty=dental")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Rajesh Patel');
 });
 
-test('merged and archived records leave the working directory but stay findable by status', function () {
+test('merged duplicates leave the directory, and no status filter brings them back', function () {
     ($this->register)('Rajesh', 'Patel');
     ($this->register)('Old', 'Record', ['status' => PatientStatus::Merged]);
-    ($this->register)('Gone', 'Away', ['status' => PatientStatus::Archived]);
 
     ($this->asOwner)()->getJson($this->url)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Rajesh Patel');
-    ($this->asOwner)()->getJson("{$this->url}?status=merged")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.status', 'merged');
+    // There is no patient-status filter any more: a status in an old link is ignored, never an error.
+    foreach (['merged', 'archived', 'inactive'] as $status) {
+        ($this->asOwner)()->getJson("{$this->url}?status={$status}")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Rajesh Patel');
+    }
 });
 
 test('a member limited to one branch sees only patients seen there, and cannot widen it with a filter', function () {

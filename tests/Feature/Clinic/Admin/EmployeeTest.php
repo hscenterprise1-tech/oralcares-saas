@@ -10,6 +10,7 @@ use App\Models\ClinicMembership;
 use App\Models\OnboardingProgress;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\ClinicContext;
 use Spatie\Permission\Models\Role;
 
 function setupEmployeeTest()
@@ -93,7 +94,12 @@ it('can update an employee\'s branches and roles', function () {
         'status' => 'active',
     ]);
 
-    $response = $this->actingAs($user)->put(route('admin.employees.update', $employee->id), [
+    // Changing roles is the owner's Owner Mode action.
+    $membership = ClinicMembership::query()->withoutGlobalScopes()->where('user_id', $user->id)->sole();
+    $response = $this->actingAs($user)->withSession(withOwnerMode([
+        ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id,
+        ClinicContext::SESSION_BRANCH_ID => $branch->id,
+    ]))->put(route('admin.employees.update', $employee->id), [
         'name' => 'Updated Name',
         'email' => 'update.me@example.com',
         'phone' => '9998887776',

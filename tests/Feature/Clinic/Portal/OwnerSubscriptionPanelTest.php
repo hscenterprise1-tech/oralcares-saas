@@ -48,10 +48,15 @@ test('the owner in Owner Mode sees the plan, its state, the day it ends and the 
     ]);
 });
 
-test('outside Owner Mode the owner is not sent the plan', function () {
+test('an owner who does not treat patients is sent the plan from sign-in; a doctor-owner only in Owner Mode', function () {
     ($this->subscribe)(['ends_at' => now()->addMonth()]);
 
-    expect(($this->props)(($this->asOwner)())['clinic']['owner_subscription'])->toBeNull();
+    expect(($this->props)(($this->asOwner)())['clinic']['owner_subscription'])->not->toBeNull();
+
+    // In Doctor Mode the owner works as a doctor, and the plan is not sent.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
+    expect(($this->props)(($this->asOwner)())['clinic']['owner_subscription'])->toBeNull()
+        ->and(($this->props)(($this->inOwnerMode)())['clinic']['owner_subscription'])->not->toBeNull();
 });
 
 test('reception and doctors are never sent the plan, and the shared banner data no longer carries its name', function (ClinicRole $role) {

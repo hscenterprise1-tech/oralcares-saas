@@ -16,6 +16,7 @@ use App\Models\Practitioner;
 use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
+use App\Services\OwnerMode\OwnerMode;
 use App\Services\ResourceLimitService;
 use App\Services\RetainedClinicalHistory;
 use App\Services\Security\SecurityAudit;
@@ -159,6 +160,27 @@ class EmployeeController extends Controller
         }
 
         $statusChanged = $employee->status?->value !== $validated['status'];
+
+        // Changing what someone may do is a sensitive action: the owner does it
+        // in Owner Mode. Checked before the transaction, so a refusal is audited.
+        if (isset($validated['roles'])) {
+            $requestedRoles = collect($validated['roles'])->map(fn ($id) => (int) $id)->sort()->values()->all();
+            if ($requestedRoles !== $this->currentRoleIds($employee)->sort()->values()->all()) {
+                app(OwnerMode::class)->requireForSensitiveAction($request->user(), 'staff.roles', OwnerMode::STANDARD, ['employee_id' => $employee->id]);
+            }
+        }
+
+        // So is changing where they may work: the branches after the change
+        // (`placeAtBranches()`: the ones asked for, plus any the actor cannot
+        // reach) against the branches now.
+        if (isset($validated['branches'])) {
+            $current = $employee->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $reachable = $this->directory->branches($context->clinic(), $context->membership())->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $after = collect([...array_map('intval', $validated['branches']), ...array_diff($current, $reachable)])->unique()->sort()->values()->all();
+            if ($after !== $current) {
+                app(OwnerMode::class)->requireForSensitiveAction($request->user(), 'staff.branches', OwnerMode::STANDARD, ['employee_id' => $employee->id]);
+            }
+        }
 
         // One transaction: a seat this change starts holding (a reactivated
         // login, or one moved into a doctor role) is checked under the

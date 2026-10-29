@@ -5,7 +5,7 @@ import { LoadingPanel, StatePanel } from './StatePanel';
 
 /*
  * The named states every list, panel and page uses, so "nothing yet",
- * "no matches", "failed", "not allowed" and "archived" look and read the
+ * "no matches", "failed" and "not allowed" look and read the
  * same everywhere. Each says what happened and, where there is one, the
  * next step. None shows a raw server message.
  */
@@ -87,18 +87,4 @@ export function PermissionState({
   compact?: boolean;
 }) {
   return <StatePanel kind="forbidden" title={title} description={description} compact={compact} />;
-}
-
-export function ArchivedState({
-  title,
-  description = 'It is kept for the record and can be read, but not changed.',
-  action,
-  compact,
-}: {
-  title?: string;
-  description?: ReactNode;
-  action?: ReactNode;
-  compact?: boolean;
-}) {
-  return <StatePanel kind="archived" title={title} description={description} action={action} compact={compact} />;
 }

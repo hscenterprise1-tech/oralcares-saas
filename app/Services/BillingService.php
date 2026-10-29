@@ -16,6 +16,7 @@ use App\Models\PatientBillingItem;
 use App\Models\PatientTimelineEvent;
 use App\Models\PatientTreatment;
 use App\Services\Numbering\ClinicDocumentNumbers;
+use App\Services\Patient\PatientCareGuard;
 use DomainException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,8 @@ class BillingService
         ?string $notes = null,
     ): PatientBilling {
         $this->assertOwnership($clinic, $patient, $branch, $encounter, $doctor);
+        // After a recorded death, only care given on or before that date is billed.
+        app(PatientCareGuard::class)->assertCanBeCharged($patient, $encounter);
 
         if ($items === []) {
             throw new DomainException('A bill needs at least one line.');

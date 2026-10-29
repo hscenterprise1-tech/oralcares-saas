@@ -7,9 +7,11 @@ use App\Models\Patient;
 use App\Models\PatientTimelineEvent;
 use App\Models\PatientVisit;
 use App\Services\ClinicContext;
-use App\VisitRegistrationType;
+use App\Services\Patient\PatientCareGuard;
+use App\Support\ClinicClock;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -88,18 +90,25 @@ class VisitController extends Controller
         $patient = Patient::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
             ->findOrFail($validated['patient_id']);
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
-        $visit = PatientVisit::create([
-            'clinic_id' => $clinic->id,
-            'branch_id' => $branch->id,
-            'patient_id' => $patient->id,
-            'doctor_id' => $validated['doctor_id'] ?? null,
-            'registration_type' => VisitRegistrationType::Repeat->value,
-            'visit_date' => today(),
-            'queue_status' => 'waiting',
-            'visit_status' => 'in_progress',
-            'notes' => $validated['notes'] ?? null,
-        ]);
+        // Classified like a check-in (New until the patient has been seen) and dated
+        // on the clinic's own calendar day, under the patient's lock.
+        $visit = DB::transaction(function () use ($clinic, $branch, $patient, $validated) {
+            Patient::withoutGlobalScopes()->whereKey($patient->id)->lockForUpdate()->first(['id']);
+
+            return PatientVisit::create([
+                'clinic_id' => $clinic->id,
+                'branch_id' => $branch->id,
+                'patient_id' => $patient->id,
+                'doctor_id' => $validated['doctor_id'] ?? null,
+                'registration_type' => PatientVisit::classifyNext($clinic->id, $patient->id)->value,
+                'visit_date' => ClinicClock::now()->toDateString(),
+                'queue_status' => 'waiting',
+                'visit_status' => 'in_progress',
+                'notes' => $validated['notes'] ?? null,
+            ]);
+        });
 
         PatientTimelineEvent::create([
             'organization_id' => $clinic->organization_id,

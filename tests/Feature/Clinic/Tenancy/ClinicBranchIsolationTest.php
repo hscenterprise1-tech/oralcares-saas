@@ -176,7 +176,7 @@ test('a non-owner user holding two roles gets their union on an assigned branch 
     $this->actingAs($user)->withSession([
         ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id,
         ClinicContext::SESSION_BRANCH_ID => $unassignedBranch->id,
-    ])->get('/clinic/dashboard')->assertInertia(fn ($page) => $page
+    ])->followingRedirects()->get('/clinic/dashboard')->assertInertia(fn ($page) => $page
         ->where('clinic.is_owner', false)
         ->where('auth.user.roles', fn ($roles) => collect($roles)->isEmpty())
         ->where('auth.user.permissions', fn ($permissions) => collect($permissions)->isEmpty())

@@ -48,8 +48,9 @@ beforeEach(function () {
 test('a full-page form submitted twice with the same request key registers one patient', function () {
     $fields = ($this->fields)(['idempotency_key' => 'page-key-0001']);
 
-    ($this->asReception)()->post('/clinic/patients', $fields)->assertRedirect('/clinic/patients')->assertSessionHas('success');
-    ($this->asReception)()->post('/clinic/patients', $fields)->assertRedirect('/clinic/patients')
+    $first = ($this->asReception)()->post('/clinic/patients', $fields)->assertSessionHas('success');
+    $first->assertRedirect(route('clinic.patients.show', Patient::sole()));
+    ($this->asReception)()->post('/clinic/patients', $fields)->assertRedirect(route('clinic.patients.show', Patient::sole()))
         ->assertSessionHas('success', 'This patient is already registered; the form was not saved twice.');
 
     expect(Patient::count())->toBe(1)
@@ -65,7 +66,7 @@ test('a full-page submit stopped by a possible duplicate frees its key for the a
 
     ($this->asReception)()->post('/clinic/patients', ($this->fields)([
         'idempotency_key' => 'page-key-0002', 'duplicate_acknowledged_ids' => [$existing->id], 'duplicate_reason' => 'Sister on the family phone',
-    ]))->assertSessionHasNoErrors()->assertRedirect('/clinic/patients');
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('clinic.patients.show', Patient::query()->latest('id')->first()));
 
     expect(Patient::count())->toBe(2)
         ->and(SecurityAuditLog::where('event', 'patient.duplicate_override')->sole()->context['reason'])->toBe('Sister on the family phone');
@@ -96,11 +97,13 @@ test('phone numbers may be Indian or international, but not letters or impossibl
     'plus in the middle' => ['98765+43210', false],
 ]);
 
-test('the New Case outcome links nowhere that is not built yet', function () {
-    ($this->asReception)()->postJson('/clinic/patients', ['surface' => 'new_case', 'specialties' => ['dental'], ...($this->fields)()])
-        ->assertCreated()
-        ->assertJsonPath('patient.url', null)
-        ->assertJsonPath('links.patient', null)
+test('the New Case outcome links only to built pages: the patient\'s record, not the consultation yet', function () {
+    $response = ($this->asReception)()->postJson('/clinic/patients', ['surface' => 'new_case', 'specialties' => ['dental'], ...($this->fields)()])
+        ->assertCreated();
+    $profile = route('clinic.patients.show', Patient::sole());
+
+    $response->assertJsonPath('patient.url', $profile)
+        ->assertJsonPath('links.patient', $profile)
         ->assertJsonPath('links.consultation', null);
 });
 

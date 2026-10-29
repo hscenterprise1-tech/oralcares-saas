@@ -116,6 +116,10 @@ return [
     */
     'owner_mode' => [
         'idle_timeout_minutes' => (int) env('OWNER_MODE_IDLE_MINUTES', 15),
+        // From entry, not extended by activity; then the password is needed again.
+        'lifetime_minutes' => (int) env('OWNER_MODE_LIFETIME_MINUTES', 60),
+        // T2 actions need the password confirmed this recently.
+        'fresh_verification_minutes' => (int) env('OWNER_MODE_FRESH_MINUTES', 5),
     ],
 
 ];

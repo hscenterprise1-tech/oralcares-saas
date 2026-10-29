@@ -52,4 +52,10 @@ class ClinicExpense extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    /** Who approved or rejected it. */
+    public function decider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'decided_by');
+    }
 }

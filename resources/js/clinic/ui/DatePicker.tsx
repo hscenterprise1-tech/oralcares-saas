@@ -87,6 +87,12 @@ export function DatePicker({
             aria-label={ariaLabel}
             aria-invalid={invalid || undefined}
             aria-required={required || undefined}
+            // In a dialog focus stays here while the calendar is open: Escape closes the calendar, not the dialog.
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && open) {
+                setOpen(false);
+              }
+            }}
             className={cn(inputClass, 'flex items-center gap-2 text-left')}
           >
             <CalendarIcon className="h-4 w-4 shrink-0 text-clinic-secondary" aria-hidden="true" />
@@ -100,6 +106,12 @@ export function DatePicker({
             align="start"
             sideOffset={6}
             collisionPadding={12}
+            // Inside a dialog, the dialog takes Escape first and marks it handled, so the calendar closes itself here (the dialog stays).
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setOpen(false);
+              }
+            }}
             className="z-50 rounded-2xl border border-clinic-border bg-clinic-surface p-3 shadow-[0_16px_40px_-16px_rgba(16,24,40,0.3)]"
           >
             <DayPicker
@@ -125,7 +137,7 @@ export function DatePicker({
                 day: 'h-9 w-9 rounded-xl text-[12.5px] text-clinic-ink hover:bg-clinic-inset',
                 day_button:
                   'flex h-full w-full cursor-pointer items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong',
-                selected: 'bg-clinic-ink text-white hover:bg-clinic-ink',
+                selected: 'bg-[#0F7C6E] text-white hover:bg-[#0F7C6E]',
                 today: 'font-bold ring-1 ring-inset ring-clinic-border-strong',
                 outside: 'text-clinic-muted opacity-60',
                 disabled: 'cursor-not-allowed opacity-35 hover:bg-transparent',

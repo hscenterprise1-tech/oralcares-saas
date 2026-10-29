@@ -12,6 +12,7 @@ use App\Models\PatientTimelineEvent;
 use App\Models\PatientVisit;
 use App\Models\User;
 use App\Services\Security\SecurityAudit;
+use App\Support\ClinicClock;
 use App\VisitRegistrationType;
 use Illuminate\Support\Facades\DB;
 
@@ -200,6 +201,8 @@ class PatientRegistrationService
         Clinic $clinic,
         Branch $branch
     ): PatientVisit {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($patient, $visitData, $clinic, $branch) {
             // 1. Create the visit record
             $visit = $this->createVisit($patient, $visitData, $clinic, $branch, VisitRegistrationType::Repeat);
@@ -230,7 +233,7 @@ class PatientRegistrationService
             'department_id' => $visitData['department_id'] ?? null,
             'doctor_id' => $visitData['doctor_id'] ?? null,
             'registration_type' => $registrationType->value,
-            'visit_date' => now()->toDateString(),
+            'visit_date' => ClinicClock::now()->toDateString(),
             'queue_status' => 'not_queued',
             'visit_status' => 'registered',
             'registration_fee_collected' => $visitData['fee_collected'] ?? false,

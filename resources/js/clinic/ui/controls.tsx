@@ -146,7 +146,7 @@ export function Checkbox({
         disabled={disabled}
         className={cn(
           'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-clinic-border-strong bg-clinic-surface',
-          'data-[state=checked]:border-clinic-ink data-[state=checked]:bg-clinic-ink disabled:opacity-50',
+          'data-[state=checked]:border-[#0F7C6E] data-[state=checked]:bg-[#0F7C6E] disabled:opacity-50',
           FOCUS,
         )}
       >
@@ -214,7 +214,7 @@ export function RadioGroup({
                 FOCUS,
               )}
             >
-              <RadioPrimitive.Indicator className="h-2.5 w-2.5 rounded-full bg-clinic-ink" />
+              <RadioPrimitive.Indicator className="h-2.5 w-2.5 rounded-full bg-[#0F7C6E]" />
             </RadioPrimitive.Item>
             <label htmlFor={optionId} className="min-w-0 cursor-pointer select-none text-[13px] text-clinic-ink">
               <span className="font-medium">{option.label}</span>

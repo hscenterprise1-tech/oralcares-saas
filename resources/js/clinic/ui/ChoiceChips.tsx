@@ -8,7 +8,7 @@ const CHIP =
 const CHIP_SIZE = { sm: 'min-h-8 px-3 text-[12px]', md: 'min-h-9 px-3.5 text-[13px]' } as const;
 
 export function chipClass(selected: boolean, size: keyof typeof CHIP_SIZE = 'md'): string {
-  return cn(CHIP, CHIP_SIZE[size], selected ? 'border-clinic-ink bg-clinic-ink text-white' : 'border-clinic-border bg-clinic-surface text-clinic-ink hover:border-clinic-border-strong');
+  return cn(CHIP, CHIP_SIZE[size], selected ? 'border-cx-nav-teal/60 bg-cx-nav-active font-semibold text-cx-nav-teal-strong' : 'border-clinic-border bg-clinic-surface text-clinic-ink hover:border-clinic-border-strong');
 }
 
 /**

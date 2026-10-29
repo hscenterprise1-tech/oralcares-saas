@@ -38,9 +38,6 @@ class Patient extends Model
         'gender',
         'status',
         'current_practitioner_id',
-        'archived_at',
-        'archived_by',
-        'archive_reason',
         // Legacy – kept for backward compatibility
         'patient_number',
         'name',
@@ -52,7 +49,9 @@ class Patient extends Model
             'status' => PatientStatus::class,
             'registration_type' => VisitRegistrationType::class,
             'date_of_birth' => 'date',
-            'archived_at' => 'datetime',
+            // Set only by the governed death actions (`RecordDeath`, `CorrectDeath`); never mass-assigned.
+            'date_of_death' => 'date',
+            'death_recorded_at' => 'datetime',
         ];
     }
 
@@ -218,9 +217,10 @@ class Patient extends Model
         return $this->hasMany(CaseNumber::class);
     }
 
+    /** Current safety alerts; a removed one is kept, resolved (`resolved_at`), and is not current. */
     public function alerts(): HasMany
     {
-        return $this->hasMany(PatientAlert::class);
+        return $this->hasMany(PatientAlert::class)->whereNull('resolved_at');
     }
 
     /** Conditions, allergies and medications: the canonical clinical record. */

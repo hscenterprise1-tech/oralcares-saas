@@ -14,6 +14,7 @@ use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Services\Clinical\EncounterWorkspace;
 use App\Services\DentalChartService;
+use App\Services\Patient\PatientCareGuard;
 use App\Services\ProcedureCatalogService;
 use App\Services\Treatment\LegacyTreatmentMirror;
 use App\TreatmentStatus;
@@ -124,6 +125,7 @@ class DentalRecord
         if ($items === []) {
             throw new InvalidArgumentException('Add at least one treatment to the plan.');
         }
+        app(PatientCareGuard::class)->assertEncounterCanTakeNewCare($encounter);
 
         return DB::transaction(function () use ($encounter, $title, $items, $notes, $doctor) {
             $encounter = $this->lockOpen($encounter);

@@ -14,6 +14,7 @@ use App\Services\BillingService;
 use App\Services\Clinical\EncounterWorkspace;
 use App\Services\ClinicContext;
 use App\Services\Dental\DentalRecord;
+use App\Services\Governance\DeletionGovernance;
 use App\Services\OwnerMode\OwnerMode;
 use App\Services\PaymentService;
 use Carbon\CarbonImmutable;
@@ -65,22 +66,34 @@ test('a staff member can only ask: the record stays until the owner approves, an
     expect(SecurityAuditLog::where('event', 'deletion.executed')->count())->toBe(1);
 });
 
-test('an administrator cannot act directly or approve; the owner needs Owner Mode to decide', function () {
-    ($this->asAdmin)()->post('/clinic/approvals/direct', ['action' => 'patient.archive', 'target_id' => $this->patient->id, 'reason' => 'Duplicate registration of the same person'])->assertForbidden();
-    ($this->ask)($this->asAdmin, 'patient.archive', $this->patient->id, 'Duplicate registration of the same person')->assertSessionHasNoErrors();
+test('an administrator cannot act directly or approve; an owner who also treats patients decides in Owner Mode', function () {
+    // The owner works here as a doctor too: Doctor Mode until they enter Owner Mode.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
+    ($this->asAdmin)()->post('/clinic/approvals/direct', ['action' => 'document.remove', 'target_id' => $this->document->id, 'reason' => 'Uploaded to the wrong patient record'])->assertForbidden();
+    ($this->ask)($this->asAdmin, 'document.remove', $this->document->id)->assertSessionHasNoErrors();
     $request = DeletionRequest::sole();
 
     ($this->asAdmin)()->post("/clinic/approvals/{$request->id}/approve")->assertForbidden();
     ($this->asOwner)()->post("/clinic/approvals/{$request->id}/approve")->assertForbidden();
-    expect($this->patient->fresh()->status)->toBe(PatientStatus::Active);
+    expect(AttachedDocument::find($this->document->id))->not->toBeNull();
 
     ($this->asOwnerInOwnerMode)()->post("/clinic/approvals/{$request->id}/approve")->assertSessionHasNoErrors();
-    expect($this->patient->fresh()->status)->toBe(PatientStatus::Archived)
-        ->and($this->patient->fresh()->archive_reason)->toBe('Duplicate registration of the same person');
+    expect(AttachedDocument::find($this->document->id))->toBeNull()
+        ->and(AttachedDocument::withTrashed()->find($this->document->id)->removal_reason)->toBe('Uploaded to the wrong patient record');
 });
 
-test('a doctor cannot ask to archive a patient, and reception cannot void a consultation', function () {
-    ($this->ask)($this->asDoctor, 'patient.archive', $this->patient->id)->assertForbidden();
+test('there is no patient archive to ask for or carry out, not even by the owner', function () {
+    ($this->ask)($this->asDoctor, 'patient.archive', $this->patient->id, 'Duplicate registration of the same person')->assertSessionHasErrors('action');
+    ($this->ask)($this->asAdmin, 'patient.archive', $this->patient->id, 'Duplicate registration of the same person')->assertSessionHasErrors('action');
+    ($this->asOwnerInOwnerMode)()->post('/clinic/approvals/direct', ['action' => 'patient.archive', 'target_id' => $this->patient->id, 'reason' => 'Duplicate registration of the same person'])
+        ->assertSessionHasErrors('action');
+
+    expect(DeletionRequest::count())->toBe(0)
+        ->and($this->patient->fresh()->status)->toBe(PatientStatus::Active)
+        ->and(array_keys(app(DeletionGovernance::class)->actions()))->not->toContain('patient.archive');
+});
+
+test('reception cannot void a consultation', function () {
     [$receptionUser, $receptionSession] = $this->f->memberWithRole(ClinicRole::Receptionist);
     $encounter = app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $this->me);
     ($this->ask)(fn () => $this->actingAs($receptionUser)->withSession($receptionSession), 'encounter.void', $encounter->id)->assertForbidden();
@@ -177,10 +190,13 @@ test('a signed consultation is voided, never deleted, and leaves the clinical su
 
 test('the approval queue shows the owner every request and anyone else only their own', function () {
     ($this->ask)($this->asDoctor, 'document.remove', $this->document->id)->assertSessionHasNoErrors();
-    ($this->ask)($this->asAdmin, 'patient.archive', $this->patient->id, 'Duplicate registration of the same person')->assertSessionHasNoErrors();
+    $scan = $this->document->replicate()->fill(['file_name' => 'scan.pdf', 'file_path' => 'x/scan.pdf']);
+    $scan->save();
+    ($this->ask)($this->asAdmin, 'document.remove', $scan->id)->assertSessionHasNoErrors();
 
     ($this->asOwner)()->get('/clinic/approvals')->assertOk()->assertInertia(fn ($page) => $page
-        ->component('ClinicPortal/Approvals/Index', false)->where('owner', true)->where('ownerMode', false)->where('counts.open', 2)
+        // An owner who does not treat patients decides with no mode to enter.
+        ->component('ClinicPortal/Approvals/Index', false)->where('owner', true)->where('ownerMode', true)->where('counts.open', 2)
         ->where('requests.data.0.can.decide', true));
     ($this->asDoctor)()->get('/clinic/approvals')->assertOk()->assertInertia(fn ($page) => $page
         ->where('owner', false)->where('counts.open', 1)->where('requests.data.0.action', 'document.remove')
@@ -196,4 +212,13 @@ test('an undecided request expires after its lifetime, freeing the record for a 
     expect(DeletionRequest::withoutGlobalScopes()->sole())->status->toBe(DeletionRequest::EXPIRED)->open_key->toBeNull()
         ->and(AttachedDocument::find($this->document->id))->not->toBeNull();
     ($this->ask)($this->asDoctor, 'document.remove', $this->document->id)->assertSessionHasNoErrors();
+});
+
+test('an owner who does not treat patients decides a request directly, with no Owner Mode and no password', function () {
+    ($this->ask)($this->asAdmin, 'document.remove', $this->document->id)->assertSessionHasNoErrors();
+
+    ($this->asOwner)()->post('/clinic/approvals/'.DeletionRequest::sole()->id.'/approve')->assertSessionHasNoErrors();
+
+    expect(AttachedDocument::find($this->document->id))->toBeNull()
+        ->and(session(OwnerMode::SESSION_KEY))->toBeNull();
 });

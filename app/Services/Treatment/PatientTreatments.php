@@ -20,6 +20,7 @@ use App\Models\TreatmentPlan;
 use App\Models\User;
 use App\Services\Clinical\EncounterWorkspace;
 use App\Services\Patient\PatientBranchActivityRecorder;
+use App\Services\Patient\PatientCareGuard;
 use App\Services\Patient\PatientSpecialties;
 use App\Services\Security\SecurityAudit;
 use App\Services\Treatment\Targets\TreatmentTargets;
@@ -55,6 +56,7 @@ class PatientTreatments
      */
     public function start(Patient $patient, CatalogTreatmentVersion $version, ClinicEmployee $practitioner, Branch $branch, User $by, array $options = []): PatientTreatment
     {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         $this->access->assertCanStart($by, $patient, $version, $practitioner, $branch);
         $treatment = CatalogTreatment::query()->withoutGlobalScopes()->findOrFail($version->catalog_treatment_id);
         if ($version->status !== CatalogTreatmentVersion::PUBLISHED || $treatment->current_version_id !== $version->id) {
@@ -301,6 +303,7 @@ class PatientTreatments
      */
     public function startAdHoc(Patient $patient, string $specialtyKey, string $title, ClinicEmployee $practitioner, Branch $branch, User $by, array $options = []): PatientTreatment
     {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         $this->access->assertCanStartAdHoc($by, $patient, $specialtyKey, $practitioner, $branch);
         $title = trim($title);
         if ($title === '' || mb_strlen($title) > 150) {

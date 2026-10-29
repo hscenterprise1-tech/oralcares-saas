@@ -27,8 +27,10 @@ beforeEach(function () {
     $this->t = TreatmentFixture::make();
     $this->f = $this->t->f;
     $this->therapist = $this->t->physio;
-    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession($this->f->session);
+    // Salaries, advances, finalising and paying are the owner's Owner Mode actions.
+    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
     $this->t->actAsOwner();
+    session(withOwnerMode($this->f->session));
     $this->payroll = app(ClinicPayroll::class);
     $this->payroll->setSalary($this->therapist, ['salary_type' => 'monthly', 'base_amount' => 31000, 'per_session_rate' => 100, 'commission_percent' => 10, 'effective_from' => '2026-01-01'], $this->f->owner);
 

@@ -3,6 +3,7 @@
 use App\ClinicRole;
 use App\Models\ClinicalDiagnosis;
 use App\Models\ClinicalEncounter;
+use App\Models\ClinicEmployee;
 use App\Models\PatientSessionPackage;
 use App\Models\PatientTreatment;
 use App\Models\PhysioCarePlan;
@@ -157,12 +158,12 @@ test('Start treatment from the visit sets up the plan, package and today\'s sess
         ->and($card['diagnosis']['description'])->toBe('Knee osteoarthritis')
         ->and($card['session']['status'])->toBe('draft');
 
-    // With billing rights (the owner, practising physiotherapy, in their own consultation) the package is sold for this treatment in the same step.
+    // With billing rights (the owner, practising physiotherapy, in their own consultation, in Owner Mode: in Doctor Mode they hold only a doctor's) the package is sold for this treatment in the same step.
     $ownerAsPhysio = $this->f->doctor('Dr. Owner', $this->f->owner);
     $ownerAsPhysio->practitionerProfile()->withoutGlobalScopes()->update(['specialty' => 'Physiotherapist']);
     $this->t->actAsOwner();
     $ownersVisit = app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $ownerAsPhysio, null, 'physiotherapy');
-    $id = $this->actingAs($this->f->owner)->withSession($this->f->session)->postJson("/clinic/consultations/{$ownersVisit->id}/treatments", $start([
+    $id = $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session))->postJson("/clinic/consultations/{$ownersVisit->id}/treatments", $start([
         'title' => 'Back Rehabilitation', 'primary_diagnosis_id' => null, 'open_session' => false, 'package' => ['name' => 'Back 10', 'sessions_total' => 10],
     ]))->assertCreated()->json('data.id');
     expect(PatientSessionPackage::withoutGlobalScopes()->sole())->patient_treatment_id->toBe($id)->sessions_total->toBe(10);
@@ -241,4 +242,64 @@ test('the treatments panel reads a fixed number of queries however many treatmen
     [$many, $cardsMany] = $count();
 
     expect($cardsFew)->toBe(2)->and($cardsMany)->toBe(6)->and($many)->toBe($few);
+});
+
+test('Discharge from the visit closes the plan of care as completed and completes the treatment; Patient 360 keeps the note and billing can sell the next package there', function () {
+    $encounter = ($this->visit)();
+    $id = ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", [
+        'mode' => 'adhoc', 'specialty_key' => 'physiotherapy', 'title' => 'Knee Rehabilitation', 'sessions_planned' => 6,
+        'plan' => ['frequency' => '2x/week', 'exercises' => [['name' => 'Quad sets', 'sets' => 3, 'reps' => 10]]],
+    ])->assertCreated()->json('data.id');
+
+    // The owner (billing rights; Billing staff do not see the clinical Physio section) sells the package from Patient 360 while the plan is active: once per request key.
+    [$billing, $billingSession] = [$this->f->owner, withOwnerMode($this->f->session)];
+    // As onboarding leaves a real owner: a staff record, which the sale records as the seller.
+    ClinicEmployee::create(['clinic_id' => $this->f->clinic->id, 'name' => 'Clinic Owner', 'status' => 'active', 'user_id' => $billing->id, 'email' => 'owner-staff@example.com']);
+    $physio = $this->actingAs($billing)->withSession($billingSession)->getJson(route('clinic.patients.360.section', [$this->patient->id, 'physio']))->assertOk()->json('links');
+    expect($physio['sell_treatment_id'])->toBe($id);
+    $sale = ['patient_treatment_id' => $id, 'name' => 'Knee 6', 'sessions_total' => 6, 'idempotency_key' => 'p360-sale-0001'];
+    $this->actingAs($billing)->withSession($billingSession)->post($physio['sell_package'], $sale)->assertRedirect()->assertSessionHasNoErrors()->assertSessionMissing('error');
+    $this->actingAs($billing)->withSession($billingSession)->post($physio['sell_package'], $sale);
+    expect(PatientSessionPackage::withoutGlobalScopes()->where('patient_treatment_id', $id)->count())->toBe(1);
+    // The doctor has no billing rights: no sale link, and the endpoint refuses.
+    expect(($this->asDoctor)()->getJson(route('clinic.patients.360.section', [$this->patient->id, 'physio']))->json('links.sell_package'))->toBeNull();
+    ($this->asDoctor)()->post($physio['sell_package'], [...$sale, 'idempotency_key' => 'p360-sale-0002'])->assertForbidden();
+
+    $card = ($this->care)($encounter)['Knee Rehabilitation'];
+    expect($card['links']['close_plan'])->not->toBeNull()->and($card['links']['complete'])->not->toBeNull();
+    ($this->asDoctor)()->post($card['links']['close_plan'], ['status' => 'completed', 'note' => 'Goals met'])->assertSessionHasNoErrors();
+    ($this->asDoctor)()->postJson($card['links']['complete'], ['note' => 'Goals met'])->assertOk();
+
+    expect(PatientTreatment::withoutGlobalScopes()->findOrFail($id)->status)->toBe(PatientTreatment::COMPLETED)
+        ->and(PhysioCarePlan::withoutGlobalScopes()->where('patient_treatment_id', $id)->sole())->status->toBe(PhysioCarePlan::COMPLETED)->closing_note->toBe('Goals met');
+    $section = ($this->asDoctor)()->getJson(route('clinic.patients.360.section', [$this->patient->id, 'physio']))->assertOk()->json();
+    expect($section['plan'])->toBeNull()
+        ->and($section['discharges'][0])->toMatchArray(['status' => 'completed', 'note' => 'Goals met'])
+        ->and($section['links']['sell_package'])->toBeNull();
+
+    // Reception cannot discharge.
+    [$reception, $receptionSession] = $this->f->memberWithRole(ClinicRole::Receptionist);
+    $this->actingAs($reception)->withSession($receptionSession)->postJson($card['links']['complete'])->assertForbidden();
+});
+
+test('once a death is recorded, a consultation opened before it cannot start a new physio session or plan of care, but today\'s session can still be written up', function () {
+    $encounter = ($this->visit)();
+    $id = ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", [
+        'mode' => 'adhoc', 'specialty_key' => 'physiotherapy', 'title' => 'Knee Rehabilitation', 'open_session' => true,
+    ])->assertCreated()->json('data.id');
+    $back = ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", ['mode' => 'adhoc', 'specialty_key' => 'physiotherapy', 'title' => 'Back Rehabilitation'])->assertCreated()->json('data.id');
+    $cards = ($this->care)($encounter);
+
+    $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session))->post('/clinic/approvals/direct', [
+        'action' => 'patient.record_death', 'target_id' => $this->patient->id, 'reason' => 'Family informed the clinic by phone', 'payload' => ['date_of_death' => '2026-10-06'],
+    ])->assertSessionHasNoErrors();
+
+    ($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['open_session'], ['encounter_id' => $encounter->id])->assertStatus(422);
+    ($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['start_plan'], ['encounter_id' => $encounter->id, 'title' => 'Back plan'])->assertStatus(422);
+    expect(PhysioSession::withoutGlobalScopes()->where('patient_treatment_id', $back)->count())->toBe(0)
+        ->and(PhysioCarePlan::withoutGlobalScopes()->where('patient_treatment_id', $back)->count())->toBe(0);
+
+    // The session already under way documents care given before the death.
+    ($this->asDoctor)()->putJson($cards['Knee Rehabilitation']['links']['session'], ['subjective' => 'Seen this morning'])->assertOk();
+    expect(PhysioSession::withoutGlobalScopes()->where('patient_treatment_id', $id)->sole()->subjective)->toBe('Seen this morning');
 });

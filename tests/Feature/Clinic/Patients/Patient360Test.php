@@ -55,7 +55,7 @@ test('Patient 360 ships only the summary; the overview is deferred and every sec
             ->missing('billing')
             ->where('endpoints.billing', route('clinic.patients.360.section', [$this->patient->id, 'billing']))
             ->where('sections', fn ($sections) => collect($sections)->pluck('key')->all() === [
-                'overview', 'clinical', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit',
+                'overview', 'visits', 'clinical', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit',
             ])
             ->where('lens.persona', 'owner')
             ->where('lens.owner', true)
@@ -119,14 +119,24 @@ test('a bill opens only through its own patient, and refunds need refund permiss
         ->assertOk()
         ->assertJsonPath('items.0.description', 'Consultation')
         ->assertJsonPath('actions.pay_url', null)
+        // An owner who does not treat patients refunds with no mode to enter.
+        ->assertJsonPath('actions.refund_url', route('clinic.billing.refunds.store', $bill));
+
+    // An owner who also treats patients refunds only in Owner Mode, so the refund is offered only then.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
+    ($this->asOwner)()->getJson("/clinic/patients/{$this->patient->id}/360/bills/{$bill->id}")->assertJsonPath('actions.refund_url', null);
+    $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session))
+        ->getJson("/clinic/patients/{$this->patient->id}/360/bills/{$bill->id}")
         ->assertJsonPath('actions.refund_url', route('clinic.billing.refunds.store', $bill));
 
     $billing = ($this->as)(ClinicRole::BillingStaff);
     $billing->getJson("/clinic/patients/{$this->patient->id}/360/bills/{$bill->id}")->assertJsonPath('actions.refund_url', null);
     $billing->post(route('clinic.billing.refunds.store', $bill), ['amount' => 100, 'reason' => 'Test'])->assertForbidden();
 
-    ($this->asOwner)()->post(route('clinic.billing.refunds.store', $bill), ['amount' => 300])->assertSessionHasErrors('reason');
-    ($this->asOwner)()->post(route('clinic.billing.refunds.store', $bill), ['amount' => 300, 'reason' => 'Overcharged'])->assertSessionHasNoErrors();
+    // The owner refunds in Owner Mode.
+    $inOwnerMode = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
+    $inOwnerMode()->post(route('clinic.billing.refunds.store', $bill), ['amount' => 300])->assertSessionHasErrors('reason');
+    $inOwnerMode()->post(route('clinic.billing.refunds.store', $bill), ['amount' => 300, 'reason' => 'Overcharged'])->assertSessionHasNoErrors();
     expect((float) $bill->fresh()->refunded_amount)->toBe(300.0);
 
     ($this->asOwner)()->get(route('clinic.billing.bills.print', $bill))->assertOk()->assertSee($bill->billing_number);

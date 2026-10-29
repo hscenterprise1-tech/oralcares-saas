@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\ClinicalEncounter;
 use App\Models\Patient;
 use App\Models\User;
+use App\PatientStatus;
 use App\Services\ClinicContext;
 use App\Support\Specialty\SpecialtyRegistry;
 use App\UserType;
@@ -48,6 +49,8 @@ class ClinicalEncounterPolicy
     {
         return $this->inActiveClinic($patient->clinic_id)
             && $this->clinicContext->currentEmployee()?->practitionerProfile !== null
+            // No new consultation once a death is recorded (`PatientCareGuard`).
+            && $patient->status !== PatientStatus::Deceased
             && $this->patients->writeClinicalData($user, $patient);
     }
 

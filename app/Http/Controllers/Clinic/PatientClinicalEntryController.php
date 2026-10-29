@@ -36,7 +36,7 @@ class PatientClinicalEntryController extends Controller
         abort_unless($clinic && $patient->clinic_id === $clinic->id, 404);
         abort_unless(in_array($kind, DefaultClinicalCatalogue::ENTRY_KINDS, true), 404);
         $this->authorize('writeClinicalData', $patient);
-        abort_unless(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 403, 'Archived or merged records are read-only.');
+        abort_unless(in_array($patient->status?->value ?? PatientStatus::Active->value, PatientStatus::working(), true), 403, 'Merged records are read-only.');
 
         $validated = $request->validate([
             'entries' => ['present', 'array', 'max:30'],
@@ -61,7 +61,8 @@ class PatientClinicalEntryController extends Controller
         ])->all();
 
         $this->entries->adoptLegacy($patient, $kind);
-        $prepared = $this->entries->prepare($clinic->id, $kind, $entries, 'entries', $specialties);
+        // What the patient already has may stay as recorded even where the clinic now keeps to its catalogue.
+        $prepared = $this->entries->prepare($clinic->id, $kind, $entries, 'entries', $specialties, $this->entries->activeKeys($patient, $kind));
         if ($this->entries->replace($patient, $kind, $prepared, 'clinical', $request->user())) {
             PatientTimelineEvent::create([
                 'organization_id' => $clinic->organization_id,

@@ -33,7 +33,9 @@ use Illuminate\Support\Facades\Route;
  *   specialties      list, any one practised by the clinic
  *   extensions       list, any one specialty extension available here
  *   specialty_flag   a registry flag the specialties carry
- *   owner_mode       true: the actual owner, with Owner Mode active
+ *   owner_mode       true: the actual owner, with the owner's privileges in effect
+ *                    (always for an owner who does not treat patients; a
+ *                    doctor-owner only in Owner Mode)
  *   route            a route name that must be registered
  *   branch           'active': needs a chosen branch
  *                    'clinic_wide': needs access to every branch
@@ -286,25 +288,28 @@ class ClinicAccess
         $entitlement = ['has_subscription' => (bool) $raw['has_subscription'], 'modules' => array_values($raw['modules'])];
 
         $isOwner = (bool) $membership?->is_primary_owner;
+        // The owner's privileges: always for an owner who does not treat patients; for a
+        // doctor-owner only in Owner Mode, Doctor Mode otherwise (`OwnerMode`).
+        $ownerPrivileges = $isOwner && $this->ownerMode->authorized();
 
         $state = [
-            'permissions' => $user instanceof User ? $this->resolvePermissions($user, $isOwner) : [],
+            'permissions' => $user instanceof User ? $this->resolvePermissions($user, $isOwner, $ownerPrivileges) : [],
             'roles' => $user instanceof User
                 ? array_values(array_intersect($user->getRoleNames()->all(), array_column(ClinicRole::cases(), 'value')))
                 : [],
             'is_owner' => $isOwner,
-            'owner_mode' => $isOwner && $this->ownerMode->isActive(),
+            'owner_mode' => $ownerPrivileges,
             'entitlement' => $entitlement,
             'specialties' => $specialties = ($clinic ? $this->capabilities->specialties($clinic, $entitlement, $this->context->branch()) : []),
             'capabilities' => $capabilities = $this->capabilities->capabilities($entitlement),
             'extensions' => $this->capabilities->extensions($specialties, $capabilities),
             'has_active_branch' => $this->context->branch() !== null,
-            'clinic_wide' => $membership !== null && ($membership->is_primary_owner || $membership->has_all_branches_access),
+            'clinic_wide' => $membership !== null && ($ownerPrivileges || $membership->has_all_branches_access),
             'branch_count' => $membership ? $membership->accessibleActiveBranches()->limit(2)->pluck('branches.id')->count() : 0,
             'practitioner' => $practitioner = $this->context->currentEmployee()?->practitionerProfile !== null,
             'clinic_modules' => $clinic ? $this->modules->all($clinic, $raw['modules']) : [],
         ];
-        $state['workspaces'] = self::resolveWorkspaces($state['permissions'], $isOwner, $practitioner);
+        $state['workspaces'] = self::resolveWorkspaces($state['permissions'], $ownerPrivileges, $practitioner);
         request()->attributes->set(self::MEMO, $state);
 
         return $state;
@@ -337,19 +342,23 @@ class ClinicAccess
     }
 
     /**
-     * The clinic permissions the user holds at the active branch: all of them
-     * for the primary owner (as `User::hasClinicPermission` decides), else
-     * what their roles at this branch grant.
+     * The clinic permissions the user holds at the active branch, as
+     * `User::hasClinicPermission` decides: all of them for the owner with the
+     * owner's privileges; a doctor's for a doctor-owner in Doctor Mode (with
+     * anything their roles here add); else what their roles here grant.
      *
      * @return list<string>
      */
-    private function resolvePermissions(User $user, bool $isOwner): array
+    private function resolvePermissions(User $user, bool $isOwner, bool $ownerPrivileges): array
     {
-        if ($isOwner || $user->isMasterAdmin()) {
+        if ($ownerPrivileges || $user->isMasterAdmin()) {
             return ClinicPermission::values();
         }
 
         $granted = $user->getAllPermissions()->pluck('name')->all();
+        if ($isOwner) {
+            $granted = [...$granted, ...OwnerMode::doctorModePermissions()];
+        }
 
         return array_values(array_intersect(ClinicPermission::values(), $granted));
     }

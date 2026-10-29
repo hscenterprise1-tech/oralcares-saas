@@ -21,7 +21,8 @@ beforeEach(function () {
     Storage::fake('private');
     Storage::fake('quarantine');
     $this->f = ReceptionFixture::make('expenses');
-    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession($this->f->session);
+    // Deciding and paying expenses are the owner's Owner Mode actions.
+    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
     $this->category = fn ($fixture = null) => app(ClinicExpenses::class)->categories(($fixture ?? $this->f)->clinic)->firstWhere('name', 'Rent');
     $this->page = function (callable $as, array $query = []): array {
         $props = [];
@@ -41,12 +42,19 @@ beforeEach(function () {
     };
 });
 
-test('the owner records an expense, it counts at once, and is marked paid', function () {
+test('the owner records an expense, someone else approves it, and it is marked paid', function () {
     ($this->asOwner)()->post('/clinic/expenses', ['title' => 'October rent', 'amount' => 40000, 'spent_on' => '2026-10-01', 'category_id' => ($this->category)()->id])->assertSessionHasNoErrors();
     $expense = ClinicExpense::query()->withoutGlobalScopes()->sole();
-    expect($expense->status)->toBe('approved');
+    expect($expense->status)->toBe('pending')->and(($this->page)($this->asOwner)['summary']['spent'])->toEqual(0);
 
-    ($this->asOwner)()->post("/clinic/expenses/{$expense->id}/pay", ['method' => 'bank', 'reference' => 'NEFT-1'])->assertSessionHasNoErrors();
+    // Recording is not deciding: the clinic administrator approves the owner's expense.
+    [$admin, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
+    $this->actingAs($admin)->withSession($adminSession)->post("/clinic/expenses/{$expense->id}/approve")->assertSessionHasNoErrors();
+    expect($expense->fresh()->status)->toBe('approved');
+
+    // Nor is paying: the owner who recorded it does not pay it; the administrator does.
+    ($this->asOwner)()->post("/clinic/expenses/{$expense->id}/pay", ['method' => 'bank', 'reference' => 'NEFT-1'])->assertForbidden();
+    $this->actingAs($admin)->withSession($adminSession)->post("/clinic/expenses/{$expense->id}/pay", ['method' => 'bank', 'reference' => 'NEFT-1'])->assertSessionHasNoErrors();
 
     $summary = ($this->page)($this->asOwner)['summary'];
     expect($expense->fresh()->status)->toBe('paid')

@@ -14,10 +14,10 @@ use App\Models\PatientTimelineEvent;
 use App\Models\PatientVisit;
 use App\QueueItemStatus;
 use App\Services\Patient\CaseNumberGenerator;
+use App\Services\Patient\PatientCareGuard;
 use App\Services\QueueStateMachine;
 use App\Support\ClinicClock;
 use App\VisitPriority;
-use App\VisitRegistrationType;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -49,8 +49,13 @@ class ReceptionCheckIn
         ?ClinicEmployee $performer = null,
         ?VisitContext $context = null,
     ): ClinicQueueItem {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($clinic, $branch, $patient, $appointment, $doctor, $priority, $performer, $context) {
             Branch::withoutGlobalScopes()->whereKey($branch->id)->lockForUpdate()->first();
+            // The patient too (after the branch, always in that order): two desks at different
+            // branches cannot both open a visit, or both classify one, at once.
+            Patient::withoutGlobalScopes()->whereKey($patient->id)->lockForUpdate()->first(['id']);
 
             $now = ClinicClock::now();
             $queue = $this->todaysQueue($clinic, $branch, $now->toDateString());
@@ -222,16 +227,33 @@ class ReceptionCheckIn
         return $working->sortBy(fn (ClinicEmployee $doctor) => [$load[$doctor->id] ?? 0, $doctor->name])->first();
     }
 
+    /**
+     * The visit this check-in is for. Only a visit made at registration
+     * today, here, that never reached a queue is picked up again; anything
+     * else (seen, finished, cancelled, left unseen) is history and stays as
+     * it was, so a patient back later the same day gets a visit of their own
+     * — with its own doctor, its own charge and its own classification.
+     */
     private function todaysVisit(Clinic $clinic, Branch $branch, Patient $patient, ?ClinicEmployee $doctor, string $today, VisitContext $context): PatientVisit
     {
         $visit = PatientVisit::withoutGlobalScopes()
             ->where('clinic_id', $clinic->id)
+            ->where('branch_id', $branch->id)
             ->where('patient_id', $patient->id)
             ->whereOnDate('visit_date', $today)
+            ->whereIn('visit_status', PatientVisit::REUSABLE_STATUSES)
+            ->whereDoesntHave('queueItem')
+            ->whereDoesntHave('encounter', fn ($encounter) => $encounter->withoutGlobalScopes())
+            ->latest('id')
             ->first();
 
         if ($visit) {
-            $visit->update(['doctor_id' => $doctor?->id ?? $visit->doctor_id, 'queue_status' => QueueItemStatus::Waiting->value, 'visit_status' => 'checked_in', ...$context->attributes(), 'practice_area_key' => $context->practiceArea]);
+            $visit->update([
+                'doctor_id' => $doctor?->id ?? $visit->doctor_id, 'queue_status' => QueueItemStatus::Waiting->value, 'visit_status' => 'checked_in',
+                // Classified now, when the patient actually arrives, like any other visit.
+                'registration_type' => PatientVisit::classifyNext($clinic->id, $patient->id)->value,
+                ...$context->attributes(), 'practice_area_key' => $context->practiceArea,
+            ]);
 
             return $visit;
         }
@@ -242,9 +264,7 @@ class ReceptionCheckIn
             'visit_date' => $today,
             'branch_id' => $branch->id,
             'doctor_id' => $doctor?->id,
-            'registration_type' => PatientVisit::withoutGlobalScopes()->where('patient_id', $patient->id)->exists()
-                ? VisitRegistrationType::Repeat->value
-                : VisitRegistrationType::New->value,
+            'registration_type' => PatientVisit::classifyNext($clinic->id, $patient->id)->value,
             'queue_status' => QueueItemStatus::Waiting->value,
             'visit_status' => 'checked_in',
             ...$context->attributes(),

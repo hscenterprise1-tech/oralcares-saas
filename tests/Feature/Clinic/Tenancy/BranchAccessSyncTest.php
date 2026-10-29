@@ -37,10 +37,11 @@ beforeEach(function () {
         'name' => 'Priya Staff', 'email' => 'priya@example.test', 'status' => 'active',
     ]);
 
-    $this->asOwner = fn () => $this->actingAs($this->owner)->withSession([
+    // Changing a staff member's branches is the owner's Owner Mode action.
+    $this->asOwner = fn () => $this->actingAs($this->owner)->withSession(withOwnerMode([
         ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $this->ownerMembership->id,
         ClinicContext::SESSION_BRANCH_ID => $this->main->id,
-    ]);
+    ]));
     $this->updateEmployee = fn (array $branches) => ($this->asOwner)()->put(route('admin.employees.update', $this->employee->id), [
         'name' => 'Priya Staff', 'email' => 'priya@example.test', 'status' => 'active', 'branches' => $branches,
     ]);
@@ -49,7 +50,9 @@ beforeEach(function () {
 it('gives a member with no branch access no branch, no branch figures, and refuses a switch into one', function () {
     $session = [ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $this->staffMembership->id];
 
-    $this->actingAs($this->staffUser)->withSession($session)->get(route('clinic.dashboard'))->assertForbidden();
+    // No branch, so no branch's figures or queue: the Command Center is not theirs, and they are sent to
+    // their own notifications (personal, not a branch's).
+    $this->actingAs($this->staffUser)->withSession($session)->get(route('clinic.dashboard'))->assertRedirect(route('clinic.notifications.index'));
 
     $this->actingAs($this->staffUser)->withSession($session)
         ->post(route('clinic.branches.switch'), ['branch_id' => $this->main->id])
@@ -84,9 +87,10 @@ it('refuses to put a member on another clinic\'s branch', function () {
 it('leaves an all-branches member\'s access alone when their staff branches change', function () {
     $this->staffMembership->update(['has_all_branches_access' => true]);
 
-    ($this->updateEmployee)([$this->east->id]);
+    ($this->updateEmployee)([$this->east->id])->assertSessionHasNoErrors();
 
-    expect($this->staffMembership->assignedBranches()->count())->toBe(0);
+    expect($this->employee->branches()->pluck('branches.id')->all())->toBe([$this->east->id])
+        ->and($this->staffMembership->assignedBranches()->count())->toBe(0);
 
     $this->actingAs($this->staffUser)
         ->withSession([ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $this->staffMembership->id, ClinicContext::SESSION_BRANCH_ID => $this->east->id])

@@ -57,6 +57,10 @@ class DeletionRequestController extends Controller
             ],
             'owner' => $owner,
             'ownerMode' => $this->ownerMode->authorized(),
+            // `__ID__` stands for a request's id.
+            'links' => collect(['approve', 'reject', 'clarify', 'respond', 'cancel'])
+                ->mapWithKeys(fn (string $action) => [$action => route("clinic.approvals.{$action}", ['deletionRequest' => '__ID__'], false)])
+                ->all(),
         ]);
     }
 
@@ -87,33 +91,33 @@ class DeletionRequestController extends Controller
     {
         $note = $request->validate(['note' => ['nullable', 'string', 'max:2000']])['note'] ?? null;
 
-        return $this->attempt(fn () => tap(back()->with('success', 'Approved and carried out.'), fn () => $this->governance->approve($request->user(), $this->find($deletionRequest), $note)));
+        return $this->attempt(fn () => $this->governance->approve($request->user(), $this->find($deletionRequest), $note), 'Approved and carried out.');
     }
 
     public function reject(Request $request, int $deletionRequest): RedirectResponse
     {
         $reason = $request->validate(['reason' => ['required', 'string', 'max:2000']])['reason'];
 
-        return $this->attempt(fn () => tap(back()->with('success', 'Request rejected.'), fn () => $this->governance->reject($request->user(), $this->find($deletionRequest), $reason)));
+        return $this->attempt(fn () => $this->governance->reject($request->user(), $this->find($deletionRequest), $reason), 'Request rejected.');
     }
 
     public function clarify(Request $request, int $deletionRequest): RedirectResponse
     {
         $question = $request->validate(['question' => ['required', 'string', 'max:2000']])['question'];
 
-        return $this->attempt(fn () => tap(back()->with('success', 'Question sent to the requester.'), fn () => $this->governance->askClarification($request->user(), $this->find($deletionRequest), $question)));
+        return $this->attempt(fn () => $this->governance->askClarification($request->user(), $this->find($deletionRequest), $question), 'Question sent to the requester.');
     }
 
     public function respond(Request $request, int $deletionRequest): RedirectResponse
     {
         $answer = $request->validate(['answer' => ['required', 'string', 'max:2000']])['answer'];
 
-        return $this->attempt(fn () => tap(back()->with('success', 'Answer sent to the owner.'), fn () => $this->governance->respond($request->user(), $this->find($deletionRequest), $answer)));
+        return $this->attempt(fn () => $this->governance->respond($request->user(), $this->find($deletionRequest), $answer), 'Answer sent to the owner.');
     }
 
     public function cancel(Request $request, int $deletionRequest): RedirectResponse
     {
-        return $this->attempt(fn () => tap(back()->with('success', 'Request withdrawn.'), fn () => $this->governance->cancel($request->user(), $this->find($deletionRequest))));
+        return $this->attempt(fn () => $this->governance->cancel($request->user(), $this->find($deletionRequest)), 'Request withdrawn.');
     }
 
     /**
@@ -146,7 +150,7 @@ class DeletionRequestController extends Controller
         return [
             'id' => $item->id,
             'action' => $item->action_type,
-            'action_label' => ($this->governance->actions()[$item->action_type] ?? null)?->label() ?? $item->action_type,
+            'action_label' => $this->governance->labelFor($item->action_type),
             'target' => $item->target_label,
             'patient' => $item->patient ? ['id' => $item->patient->id, 'name' => $item->patient->full_name, 'uhid' => $item->patient->uhid, 'url' => route('clinic.patients.show', $item->patient->id)] : null,
             'requester' => $item->requester?->name,
@@ -168,12 +172,19 @@ class DeletionRequestController extends Controller
         ];
     }
 
-    private function attempt(Closure $action): RedirectResponse
+    /**
+     * Run the action, then answer. With `$success`, the action's result is not
+     * a response: the success message is flashed only once it has run, so a
+     * refused action never also reports success.
+     */
+    private function attempt(Closure $action, ?string $success = null): RedirectResponse
     {
         try {
-            return $action();
+            $result = $action();
         } catch (DomainException|InvalidArgumentException $e) {
             return back()->withErrors(['governance' => $e->getMessage()]);
         }
+
+        return $success === null ? $result : back()->with('success', $success);
     }
 }

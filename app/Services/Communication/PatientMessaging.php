@@ -10,6 +10,7 @@ use App\Models\ClinicalOrderItem;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicQueue;
 use App\Models\ClinicQueueItem;
+use App\Models\ClinicWhatsAppMessage;
 use App\Models\Notification;
 use App\Models\NotificationTemplate;
 use App\Models\Patient;
@@ -32,6 +33,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -46,6 +48,8 @@ use Illuminate\Support\Str;
  * wall-clock digits, like appointments (see `ClinicClock`).
  *
  * Messages are only queued here; `DispatchDuePatientMessages` sends them.
+ * Nothing is queued for a patient who may not be contacted at all
+ * (`PatientMessageEligibility`: merged, deceased).
  */
 class PatientMessaging
 {
@@ -53,6 +57,7 @@ class PatientMessaging
         protected NotificationService $notifications,
         protected ChannelResolverService $channels,
         protected ClinicWhatsApp $whatsApp,
+        protected PatientMessageEligibility $eligibility,
     ) {}
 
     /**
@@ -163,11 +168,54 @@ class PatientMessaging
     }
 
     /**
+     * A message a member chose to send now (`ManualShare`), through the same
+     * pipeline as the automatic ones: eligibility (merged, deceased),
+     * consent, the clinic's own sender, an approved template, and the event
+     * key for duplicate protection. WhatsApp only: when WhatsApp cannot carry
+     * it, nothing is queued on another channel.
+     *
+     * @param  array<string, string>  $placeholders
+     */
+    public function sendManual(int $clinicId, ?int $branchId, int $patientId, string $code, string $eventKey, array $placeholders): ?Notification
+    {
+        $clinic = Clinic::query()->findOrFail($clinicId);
+        if (! $this->whatsApp->carries($clinic, $code)) {
+            return null;
+        }
+
+        return $this->send($clinicId, $branchId, $patientId, $code, $eventKey, $placeholders);
+    }
+
+    /**
+     * The placeholders a message uses, as the automatic sends build them.
+     *
+     * @return array{patient: string, clinic: string}
+     */
+    public function basePlaceholders(int $clinicId, int $patientId): array
+    {
+        return ['patient' => $this->patientName($patientId), 'clinic' => $this->clinicName($clinicId)];
+    }
+
+    /**
      * @param  array<string, string>  $placeholders
      */
     private function send(int $clinicId, ?int $branchId, int $patientId, string $code, string $eventKey, array $placeholders, ?CarbonInterface $sendAt = null): ?Notification
     {
         if (Notification::query()->where('clinic_id', $clinicId)->where('event_key', $eventKey)->exists()) {
+            return null;
+        }
+
+        // A patient who may not be contacted gets nothing queued. Nothing is
+        // stored under the event key, so the same event can still message the
+        // patient if the record is restored. The log carries identifiers only.
+        if (($reason = $this->eligibility->blockReasonFor($clinicId, $patientId)) !== null) {
+            Log::info('Patient message not queued: patient may not be contacted.', [
+                'clinic_id' => $clinicId,
+                'patient_id' => $patientId,
+                'event_key' => $eventKey,
+                'reason' => $reason,
+            ]);
+
             return null;
         }
 
@@ -386,6 +434,37 @@ class PatientMessaging
         return $this->whatsApp->carries($clinic, $code)
             ? 'whatsapp'
             : $this->channels->resolvePreferredChannel($clinic, 'patient', $patientId, except: ['whatsapp']);
+    }
+
+    /**
+     * Stop everything still waiting to go to a patient who may no longer be
+     * contacted (merged into another record): pending messages become `skipped` with the
+     * reason, and WhatsApp deliveries not yet handed to the provider likewise.
+     * A message already being sent is left to the dispatch-time check.
+     * Returns how many patient messages were stopped.
+     */
+    public function skipPendingFor(Patient $patient, string $reason): int
+    {
+        $skipped = Notification::query()->where('clinic_id', $patient->clinic_id)
+            ->where('recipient_type', 'patient')
+            ->where('recipient_id', $patient->id)
+            ->where('status', 'pending')
+            ->update(['status' => NotificationService::SKIPPED, 'failed_reason' => $reason]);
+
+        // A WhatsApp delivery waiting for its send job: its patient message is
+        // already `processing`, so both are stopped together.
+        $queued = ClinicWhatsAppMessage::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)
+            ->where('patient_id', $patient->id)
+            ->where('status', ClinicWhatsAppMessage::QUEUED);
+        $notificationIds = (clone $queued)->whereNotNull('notification_id')->pluck('notification_id')->all();
+        $queued->update(['status' => ClinicWhatsAppMessage::SKIPPED, 'failure_reason' => $reason]);
+        if ($notificationIds !== []) {
+            $skipped += Notification::query()->where('clinic_id', $patient->clinic_id)->whereIn('id', $notificationIds)
+                ->where('status', 'processing')
+                ->update(['status' => NotificationService::SKIPPED, 'failed_reason' => $reason]);
+        }
+
+        return $skipped;
     }
 
     /** Withdraw pending messages whose key starts with the prefix. */

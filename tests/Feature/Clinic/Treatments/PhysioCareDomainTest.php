@@ -340,7 +340,7 @@ test('Reception cannot do clinical treatment work; nested ids from another treat
     $asTherapist()->postJson("/clinic/treatments/{$knee->id}/sessions/{$id}/complete", ['package_id' => $kneePack->id])->assertOk()->assertJsonPath('data.status', 'completed');
 });
 
-test('a clinician limited to another branch cannot work on a treatment held here, and archived patients are read-only', function () {
+test('a clinician limited to another branch cannot work on a treatment held here, and merged patients are read-only', function () {
     $knee = ($this->start)('Knee Rehabilitation');
     $east = Branch::factory()->create(['clinic_id' => $this->f->clinic->id, 'name' => 'East', 'status' => BranchStatus::Active]);
     $user = User::factory()->create(['user_type' => UserType::ClinicUser]);
@@ -354,7 +354,7 @@ test('a clinician limited to another branch cannot work on a treatment held here
     expect(fn () => $this->physio->startPlan($knee, ['title' => 'From East'], [], $eastTherapist, $user))->toThrow(AuthorizationException::class);
 
     ($this->asTherapist)();
-    $this->patient->update(['status' => 'archived']);
+    $this->patient->update(['status' => 'merged']);
     expect(fn () => $this->physio->openSession($knee, ($this->visit)(), $this->therapist, $this->therapistUser))->toThrow(AuthorizationException::class, 'read-only')
         ->and(fn () => ($this->start)('Hip'))->toThrow(AuthorizationException::class, 'read-only');
 });
@@ -368,18 +368,32 @@ test('a dental treatment cannot carry physiotherapy records', function () {
 
 // ---------------------------------------------------------------- Billing a package-paid visit
 
-test('a visit a session package pays for is not charged a consultation at checkout; an expired package pays for nothing', function () {
+test('a consultation is not charged only when a completed session of the package\'s own treatment used it; holding a package, another treatment\'s session or a reversal waives nothing', function () {
     $this->therapist->practitionerProfile()->withoutGlobalScopes()->update(['consultation_fee' => 500]);
     $knee = ($this->start)('Knee Rehabilitation');
+    $back = ($this->start)('Back Rehabilitation');
     $package = ($this->sell)($knee, 10);
-    $encounter = ($this->visit)();
-    $lines = fn () => collect(app(EncounterCheckout::class)->lines($encounter->fresh()))->pluck('key')->all();
+    $lines = fn ($encounter) => collect(app(EncounterCheckout::class)->lines($encounter->fresh()))->pluck('key')->all();
 
-    expect($lines())->not->toContain('consultation');
+    // Holding a Knee package while a Back session is done: the consultation is billed.
+    $backVisit = ($this->visit)();
+    expect($lines($backVisit))->toContain('consultation');
+    ($this->session)($back, $backVisit);
+    expect($lines($backVisit))->toContain('consultation');
 
-    // The package lapses: the consultation is billed as usual.
+    // A Knee session that used the Knee package: nothing more for the consultation.
+    $kneeVisit = ($this->visit)();
+    $session = ($this->session)($knee, $kneeVisit, $package);
+    expect($lines($kneeVisit))->not->toContain('consultation');
+
+    // Reversed: the package gets its session back and the consultation is billable again.
+    $this->physio->reverseSession($session, 'Recorded against the wrong visit', $this->therapist, $this->therapistUser);
+    expect($lines($kneeVisit))->toContain('consultation')
+        ->and($this->packages->balance($package->fresh()))->toBe(10);
+
+    // An expired package cannot pay for a session at all.
     $package->update(['valid_until' => now()->subDay()->toDateString()]);
-    expect($lines())->toContain('consultation');
+    expect(fn () => ($this->session)($knee, ($this->visit)(), $package))->toThrow(DomainException::class, 'expired');
 });
 
 test('a physiotherapy visit is billed at its own stage, once: checkout bill, payment with receipt and print, then the payment messages', function () {

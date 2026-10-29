@@ -9,13 +9,17 @@ use App\Models\Clinic;
 use App\Models\ClinicWhatsAppMessage;
 use App\Models\Notification;
 use App\Models\NotificationTemplate;
+use App\Services\Communication\PatientMessageEligibility;
 use App\Services\Communication\PatientMessaging;
 use App\Services\WhatsApp\ClinicWhatsApp;
 use Illuminate\Support\Facades\Log;
 
 class NotificationService
 {
-    /** Not sent, and never will be on its own: no provider carries the channel. */
+    /**
+     * Not sent, and never will be on its own: no provider carries the
+     * channel, or the patient may not be contacted (`failed_reason` says which).
+     */
     public const SKIPPED = 'skipped';
 
     public const NO_PROVIDER_REASON = 'No provider is connected for this channel, so nothing was sent.';
@@ -65,6 +69,24 @@ class NotificationService
     public function sendNotification(Notification $notification): void
     {
         $notification->update(['status' => 'processing']);
+
+        // Whether the patient may be contacted is decided again now: the
+        // record may have been merged or marked deceased since the
+        // message was queued. A lifecycle stop is `skipped` with its reason —
+        // never `failed`, which is kept for delivery errors.
+        if ($notification->recipient_type === 'patient'
+            && ($reason = app(PatientMessageEligibility::class)->blockReasonFor((int) $notification->clinic_id, (int) $notification->recipient_id)) !== null) {
+            $notification->update(['status' => self::SKIPPED, 'failed_reason' => $reason]);
+
+            Log::info('Patient message skipped: patient may not be contacted.', [
+                'notification_id' => $notification->id,
+                'clinic_id' => $notification->clinic_id,
+                'event_key' => $notification->event_key,
+                'reason' => $reason,
+            ]);
+
+            return;
+        }
 
         // A patient message's channel is decided again now, so a WhatsApp
         // setting changed since it was queued applies.

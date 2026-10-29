@@ -16,6 +16,7 @@ use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Models\XrayRecord;
+use App\Services\Patient\PatientCareGuard;
 use App\XrayStatus;
 use Illuminate\Support\Facades\DB;
 
@@ -35,6 +36,9 @@ class TreatmentPlanningService
         string $title,
         array $procedures = []
     ): TreatmentPlan {
+        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($patient, $clinic, $title, $procedures) {
             $plan = TreatmentPlan::create([
                 'clinic_id' => $clinic->id,
@@ -86,6 +90,9 @@ class TreatmentPlanningService
         Patient $patient,
         ?string $notes = null
     ): XrayRecord {
+        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($encounter, $patient, $notes) {
             $xrNumber = $this->identifierService->generateXrayNumber($encounter->clinic);
 
@@ -111,6 +118,9 @@ class TreatmentPlanningService
         Patient $patient,
         ?string $notes = null
     ): LabOrder {
+        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(function () use ($encounter, $patient, $notes) {
             $lbNumber = $this->identifierService->generateLabOrderNumber($encounter->clinic);
 

@@ -40,14 +40,17 @@ use App\Models\User;
 use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\Clinical\DoctorToday;
 use App\Services\Clinical\EncounterWorkspace;
+use App\Services\Clinical\PrescriptionAllergyCheck;
 use App\Services\Clinical\StaleEncounterException;
 use App\Services\ClinicContext;
 use App\Services\Dental\DentalRecord;
+use App\Services\Patient\PatientClinicalEntries;
 use App\Services\Physio\PhysioRecord;
 use App\Services\Treatment\ConsultationCare;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
+use App\Support\ClinicFrontend;
 use App\Support\Specialty\SpecialtyRegistry;
 use App\VisitStatus;
 use Closure;
@@ -169,6 +172,8 @@ class ConsultationController extends Controller
         $patient = $encounter->patient;
         $branchSpecialties = $encounter->branch ? $this->specialties->forBranch($encounter->branch) : [];
         $canEdit = $user->can('update', $encounter);
+        // The patient's allergy record, once, for the prescriptions' signing check (clinical roles reach this page).
+        $allergyState = app(PrescriptionAllergyCheck::class)->stateFor($patient);
 
         return Inertia::render('ClinicPortal/Consultations/Workspace', [
             'encounter' => [
@@ -197,6 +202,9 @@ class ConsultationController extends Controller
                 'age' => $patient->age,
                 'blood_group' => $patient->blood_group,
                 'alerts' => $patient->alerts->map(fn ($alert) => ['type' => $alert->type, 'description' => $alert->description, 'severity' => $alert->severity])->values(),
+                // The clinical safety picture for this visit: allergies as recorded (documented / none known / not recorded) and medical conditions.
+                'allergies' => collect($allergyState)->except('fingerprint')->all(),
+                'conditions' => app(PatientClinicalEntries::class)->labelsFor($patient, DefaultClinicalCatalogue::KIND_CONDITION),
             ],
             'diagnoses' => $encounter->diagnoses->map(fn (ClinicalDiagnosis $d) => [
                 'id' => $d->id, 'code' => $d->code, 'description' => $d->description, 'status' => $d->status, 'is_primary' => $d->is_primary,
@@ -220,8 +228,21 @@ class ConsultationController extends Controller
                 'finalized_at' => $rx->finalized_at?->toIso8601String(),
                 'cancellation_reason' => $rx->cancellation_reason,
                 'items' => $rx->items->map(fn (PrescriptionItem $line) => $line->only(['id', 'medicine_id', 'drug_name', 'form', 'strength', 'dosage', 'frequency', 'duration', 'route', 'timing', 'instructions']))->values(),
+                // The allergy check for signing: a draft shows the current record (and whether it has been
+                // reviewed against it); a signed prescription shows what was known when it was signed.
+                'allergies' => $rx->isDraft() ? (function () use ($rx, $allergyState) {
+                    $current = $allergyState;
+
+                    return [
+                        ...$current,
+                        'review_required' => $current['status'] === PrescriptionAllergyCheck::DOCUMENTED,
+                        'reviewed' => $rx->allergy_reviewed_at !== null && hash_equals($current['fingerprint'], (string) ($rx->allergy_review['fingerprint'] ?? '')),
+                        'reviewed_at' => $rx->allergy_reviewed_at?->toIso8601String(),
+                    ];
+                })() : ($rx->allergy_review ? collect($rx->allergy_review)->except('fingerprint')->all() + ['reviewed_at' => $rx->allergy_reviewed_at?->toIso8601String()] : null),
                 'links' => [
                     'self' => route('clinic.prescriptions.update', $rx),
+                    'allergy_review' => route('clinic.prescriptions.allergy-review', $rx),
                     'items' => route('clinic.prescriptions.items.store', $rx),
                     'finalize' => route('clinic.prescriptions.finalize', $rx),
                     'cancel' => route('clinic.prescriptions.cancel', $rx),
@@ -236,7 +257,7 @@ class ConsultationController extends Controller
                     'number' => $order->order_number,
                     'status' => $order->status,
                     'priority' => $order->priority,
-                    'url' => route('clinic.orders.show', $order),
+                    'url' => ClinicFrontend::available('clinic.orders.show') ? route('clinic.orders.show', $order) : null,
                     'items' => $order->items->map(fn (ClinicalOrderItem $item) => $item->only(['id', 'item_name', 'category', 'status', 'body_site']))->values(),
                 ])->values(),
             'order_categories' => collect(ClinicalOrderItem::CATEGORIES)->map(fn (array $category) => $category['label']),
@@ -455,6 +476,14 @@ class ConsultationController extends Controller
             ])->values(),
             'links' => [
                 'chart' => route('clinic.consultations.dental.chart', $encounter),
+                // Gum charting and laboratory work, recorded in this consultation (`DentalController`, `DentalSpecialtyController`).
+                'periodontal' => route('clinic.consultations.dental.periodontal', $encounter),
+                'lab' => route('clinic.consultations.dental.lab.store', $encounter),
+                'periodontal_vocabulary' => [
+                    'stages' => config('clinic_dental.periodontal.stages', []),
+                    'grades' => config('clinic_dental.periodontal.grades', []),
+                    'extents' => config('clinic_dental.periodontal.extents', []),
+                ],
                 'plans' => route('clinic.consultations.dental.plans.store', $encounter),
                 'tooth' => route('clinic.consultations.dental.tooth', [$encounter, 0]),
             ],

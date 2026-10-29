@@ -119,18 +119,22 @@ export default {
                     'side-to': '#0A2145',
                     'side-active': '#1C55B8',
                     'side-card': '#12366A',
-                    // The approved navigation: a text-only soft ice-blue sidebar, deep-navy text, a subtle teal active state.
-                    'nav-bg': '#EEF5FB',
+                    // The portal's shell, on the approved Reception dashboard (Front Desk) and intake palette
+                    // (2026-10-29): a calm blue-lavender canvas, white surfaces, the dashboard's navy-blue ink,
+                    // its greys, hairlines and soft blue tint; the intake's teal for selected states.
+                    'nav-bg': '#EAF2FA',
                     // The workspace behind every portal page (the shell only; cards and actions keep their own).
-                    'nav-canvas': '#F5F8FC',
-                    'nav-hover': '#E1ECF6',
-                    'nav-active': '#DDF2F2',
-                    'nav-line': '#D6E3EF',
-                    'nav-teal': '#00A8A8',
-                    // Teal for small marks on the light active surface (icons), dark enough to read.
-                    'nav-teal-strong': '#007A7B',
-                    'nav-ink': '#0B1F33',
-                    'nav-muted': '#4A5D73',
+                    'nav-canvas': '#F4F6FC',
+                    'nav-hover': '#EAF2FA',
+                    'nav-active': '#E3F6F2',
+                    'nav-line': '#E6EBF1',
+                    'nav-teal': '#14917F',
+                    // Teal for small marks and text on the light active surface, dark enough to read (AA).
+                    'nav-teal-strong': '#0F6B5F',
+                    'nav-ink': '#173B60',
+                    'nav-muted': '#64748B',
+                    // The dashboard's blue: the current page in the navigation, and the shell's focus ring.
+                    'nav-blue': '#1769AA',
                     ink: '#102A43',
                     muted: '#64748B',
                     primary: '#1D5FD1',

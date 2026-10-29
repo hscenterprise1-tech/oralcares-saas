@@ -19,7 +19,8 @@ use Tests\Support\ReceptionFixture;
 beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-10-20 10:00', 'Asia/Kolkata'));
     $this->f = ReceptionFixture::make('bill-adjust');
-    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession($this->f->session);
+    // Adjusting a balance is the owner's Owner Mode action.
+    $this->asOwner = fn () => $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session));
     $this->bill = app(BillingService::class)->createBill($this->f->clinic, $this->f->patient('Adj', 'Ust'), $this->f->branch, [['description' => 'Filling', 'quantity' => 1, 'unit_price' => 2000]]);
     app(PaymentService::class)->recordPayment($this->bill->fresh(), PaymentMethod::Cash, 1500);
 });

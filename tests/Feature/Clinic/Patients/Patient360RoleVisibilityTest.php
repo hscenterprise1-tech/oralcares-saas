@@ -136,6 +136,11 @@ test('actions are built per role and nothing destructive is offered without auth
     expect($keys('reception'))->toContain('check_in', 'book', 'collect_payment')->not->toContain('start_consultation', 'continue_consultation', 'archive')
         ->and($keys('billing'))->toContain('collect_payment')->not->toContain('check_in', 'start_consultation', 'archive')
         ->and($keys('doctor'))->toContain('continue_consultation')->not->toContain('archive', 'collect_payment');
+
+    // There is no patient archive: not even the owner, who decides every governed action, is offered one.
+    $ownerActions = collect($this->actingAs($this->f->owner)->withSession($this->f->session)->get("/clinic/patients/{$this->patient->id}")->viewData('page')['props']['actions']);
+    expect($ownerActions->pluck('key')->all())->toContain('approvals')->not->toContain('archive')
+        ->and($ownerActions->pluck('governed')->filter()->all())->not->toContain('patient.archive');
 });
 
 test('audit entries say in what capacity the actor acted', function () {

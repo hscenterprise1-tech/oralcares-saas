@@ -69,7 +69,7 @@ export function MonthGrid({
                 aria-label={`Open ${key}${items.length ? `, ${items.length} appointments` : ''}`}
                 className={cn(
                   'mb-1 flex h-8 w-8 items-center justify-center self-start rounded-full text-[12px] font-bold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong sm:h-7 sm:w-7',
-                  isToday ? 'bg-clinic-ink text-white' : inMonth ? 'text-clinic-ink hover:bg-clinic-inset' : 'text-clinic-muted hover:bg-clinic-inset',
+                  isToday ? 'bg-[#0F7C6E] text-white' : inMonth ? 'text-clinic-ink hover:bg-clinic-inset' : 'text-clinic-muted hover:bg-clinic-inset',
                 )}
               >
                 {dayNumber(key)}

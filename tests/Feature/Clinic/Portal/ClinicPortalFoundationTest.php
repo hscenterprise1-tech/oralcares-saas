@@ -92,7 +92,7 @@ it('gives the owner every destination that exists, and none that does not', func
     portalAs(portalMember(owner: true))->get('/clinic/dashboard')
         ->assertOk()
         ->assertInertia(function (AssertableInertia $page) {
-            $page->component('ClinicPortal/Dashboard', true)
+            $page->component('ClinicPortal/CommandCenter/Index', true)
                 ->where('clinic.permissions', ClinicPermission::values())
                 ->where('clinic.roles', ['Owner']);
 
@@ -116,17 +116,20 @@ it('shows a receptionist only what the receptionist role grants at this branch',
     portalAs(portalMember(role: ClinicRole::Receptionist))->followingRedirects()->get('/clinic/dashboard')
         ->assertOk()
         ->assertInertia(function (AssertableInertia $page) {
-            $page->component('ClinicPortal/Dashboard', true)->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
+            // Reception's one dashboard is the Front Desk.
+            $page->component('ClinicPortal/FrontDesk/Index', true)->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
 
-            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'follow_ups', 'notifications', 'support'])
+            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support'])
                 ->and($page->toArray()['props']['clinic']['permissions'])->not->toContain('staff.manage');
         });
 });
 
 it('shows a member with no role only the minimal home', function () {
-    portalAs(portalMember())->get('/clinic/dashboard')
+    // No dashboard of their own: they land on their notifications.
+    portalAs(portalMember())->get('/clinic/dashboard')->assertRedirect(route('clinic.notifications.index'));
+    portalAs(portalMember())->get('/clinic/notifications')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => expect(portalNavKeys($page))->toBe(['dashboard', 'notifications', 'support'])
+        ->assertInertia(fn (AssertableInertia $page) => expect(portalNavKeys($page))->toBe(['notifications', 'support'])
             ->and($page->toArray()['props']['clinic']['permissions'])->toBe([]));
 });
 

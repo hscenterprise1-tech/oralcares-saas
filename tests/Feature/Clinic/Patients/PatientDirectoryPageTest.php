@@ -73,8 +73,8 @@ test('a member limited to one branch sees only that branch\'s patients on the pa
     app(ClinicRoleAssignmentService::class)->syncRoles($user, [ClinicRole::Receptionist->value], [$north]);
     $asNorth = fn () => $this->actingAs($user)->withSession([ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id, ClinicContext::SESSION_BRANCH_ID => $north->id]);
 
-    expect(collect(($this->props)($asNorth())['patients']['data'])->pluck('name')->all())->toBe(['North Patient'])
-        ->and(($this->props)($asNorth(), "/clinic/patients?branch_id={$this->f->branch->id}")['patients']['data'])->toBe([])
+    expect(collect(($this->props)($asNorth(), '/clinic/patients?view=all')['patients']['data'])->pluck('name')->all())->toBe(['North Patient'])
+        ->and(($this->props)($asNorth(), "/clinic/patients?view=all&branch_id={$this->f->branch->id}")['patients']['data'])->toBe([])
         ->and(collect(($this->props)(($this->asOwner)())['patients']['data'])->pluck('name')->sort()->values()->all())->toBe(['Main Patient', 'North Patient']);
 });
 

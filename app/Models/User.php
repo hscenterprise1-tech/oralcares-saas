@@ -7,6 +7,7 @@ use App\ClinicPermission;
 use App\OrganizationRole;
 use App\OrganizationType;
 use App\Services\ClinicContext;
+use App\Services\OwnerMode\OwnerMode;
 use App\UserType;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -195,14 +196,21 @@ class User extends Authenticatable
 
         /** @var ClinicContext $context */
         $context = app(ClinicContext::class);
+        $permissionValue = $permission instanceof ClinicPermission ? $permission->value : $permission;
         if ($context->hasClinic()) {
             $membership = $context->membership();
             if ($membership?->is_primary_owner) {
-                return true;
+                // The owner holds every permission, except a doctor-owner in Doctor Mode,
+                // who holds a doctor's until they enter Owner Mode (`OwnerMode`).
+                $ownerMode = app(OwnerMode::class);
+                if ($ownerMode->authorized() || ! $ownerMode->isDoctorOwner()) {
+                    return true;
+                }
+                if (in_array($permissionValue, OwnerMode::doctorModePermissions(), true)) {
+                    return true;
+                }
             }
         }
-
-        $permissionValue = $permission instanceof ClinicPermission ? $permission->value : $permission;
 
         // Fail-closed: only an explicit Spatie grant (via an assigned
         // ClinicRole, scoped to the active branch's team) grants access.
@@ -211,6 +219,54 @@ class User extends Authenticatable
         } catch (\Throwable) {
             // permission string might not exist in Spatie permissions table
             return false;
+        }
+    }
+
+    /**
+     * Whether this user holds a clinic permission at a given branch of the
+     * clinic the session is bound to, rather than at the session's own branch.
+     *
+     * Staff roles are granted per branch (the Spatie team is the branch), so
+     * opening a branch is not the same as being allowed to act there. The
+     * owner may act at every branch of their clinic. Anyone else needs access
+     * to the branch and the permission held at it. The request's permission
+     * team is restored afterwards.
+     */
+    public function hasClinicPermissionAt(string|ClinicPermission $permission, Branch $branch): bool
+    {
+        /** @var ClinicContext $context */
+        $context = app(ClinicContext::class);
+        $membership = $context->membership();
+
+        if (! $membership || $membership->user_id !== $this->id || $branch->clinic_id !== $membership->clinic_id) {
+            return false;
+        }
+
+        $permissionValue = $permission instanceof ClinicPermission ? $permission->value : $permission;
+
+        if ($membership->is_primary_owner) {
+            // As `hasClinicPermission`: a doctor-owner in Doctor Mode holds a doctor's permissions.
+            $ownerMode = app(OwnerMode::class);
+            if ($ownerMode->authorized() || ! $ownerMode->isDoctorOwner() || in_array($permissionValue, OwnerMode::doctorModePermissions(), true)) {
+                return true;
+            }
+        }
+
+        if (! $membership->hasAccessToBranch($branch)) {
+            return false;
+        }
+        $previousTeamId = getPermissionsTeamId();
+
+        try {
+            setPermissionsTeamId($branch->id);
+            $this->unsetRelation('roles')->unsetRelation('permissions');
+
+            return $this->hasPermissionTo($permissionValue);
+        } catch (\Throwable) {
+            return false;
+        } finally {
+            setPermissionsTeamId($previousTeamId);
+            $this->unsetRelation('roles')->unsetRelation('permissions');
         }
     }
 

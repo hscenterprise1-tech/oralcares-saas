@@ -21,6 +21,7 @@ use App\Http\Controllers\Clinic\Admin\StaffProfileController;
 use App\Http\Controllers\Clinic\Admin\TreatmentCatalogController as ClinicAdminTreatmentCatalogController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
 use App\Http\Controllers\Clinic\AppointmentSettingsController;
+use App\Http\Controllers\Clinic\BillingRegisterController;
 use App\Http\Controllers\Clinic\BranchSwitchController;
 use App\Http\Controllers\Clinic\CheckoutController;
 use App\Http\Controllers\Clinic\ClinicDashboardController;
@@ -29,7 +30,6 @@ use App\Http\Controllers\Clinic\ClinicSearchController;
 use App\Http\Controllers\Clinic\ClinicSupportController;
 use App\Http\Controllers\Clinic\ConsultationController;
 use App\Http\Controllers\Clinic\ConsultationTreatmentController;
-use App\Http\Controllers\Clinic\DashboardVisibilityController;
 use App\Http\Controllers\Clinic\DeletionRequestController;
 use App\Http\Controllers\Clinic\DentalController;
 use App\Http\Controllers\Clinic\DentalSpecialtyController;
@@ -47,6 +47,8 @@ use App\Http\Controllers\Clinic\PatientConsentController;
 use App\Http\Controllers\Clinic\PatientController as ClinicPatientController;
 use App\Http\Controllers\Clinic\PatientDirectoryController;
 use App\Http\Controllers\Clinic\PatientFollowUpController;
+use App\Http\Controllers\Clinic\PatientMessageShareController;
+use App\Http\Controllers\Clinic\PatientSafetyController;
 use App\Http\Controllers\Clinic\PatientTreatmentController;
 use App\Http\Controllers\Clinic\PayrollController as ClinicPayrollController;
 use App\Http\Controllers\Clinic\PhysioController;
@@ -1278,11 +1280,6 @@ $clinicRoutes = function () {
             Route::post('/own-number', [WhatsAppController::class, 'requestOwn'])->middleware('throttle:6,1')->name('request-own');
         });
 
-        // The owner choosing what each staff role's dashboard shows.
-        Route::put('/dashboard/visibility', [DashboardVisibilityController::class, 'update'])
-            ->middleware('clinic_owner_mode')
-            ->name('clinic.dashboard.visibility');
-
         // ==========================================
         // FRONT DESK (Reception's workspace)
         // ==========================================
@@ -1305,6 +1302,10 @@ $clinicRoutes = function () {
                 // Corrections before the consultation starts: another doctor, or why the patient came.
                 Route::patch('/queue/{item}/doctor', [ReceptionController::class, 'reassign'])->name('queue.doctor');
                 Route::patch('/queue/{item}/visit', [ReceptionController::class, 'correctVisit'])->name('queue.visit');
+                // Physiotherapy at the desk: the patient's care at a glance, and confirming a session took place.
+                Route::get('/patients/{patient}/physio-summary', [ReceptionController::class, 'physioSummary'])->whereNumber('patient')->name('physio-summary');
+                Route::post('/queue/{item}/physio-session', [ReceptionController::class, 'confirmPhysioSession'])
+                    ->whereNumber('item')->middleware('clinic_permission:physio.session.confirm')->name('queue.physio-session');
                 // A Front Desk list in full ("View all"): today, this branch, cursor pages.
                 Route::get('/list/{list}', [ReceptionController::class, 'list'])->whereIn('list', ['waiting', 'with_doctor', 'done', 'not_present'])->name('list');
                 // Bill a signed consultation and take the payment at the desk.
@@ -1387,6 +1388,7 @@ $clinicRoutes = function () {
                 Route::post('/{prescription}/items', [PrescriptionController::class, 'storeItem'])->name('items.store');
                 Route::put('/{prescription}/items/{item}', [PrescriptionController::class, 'updateItem'])->scopeBindings()->name('items.update');
                 Route::delete('/{prescription}/items/{item}', [PrescriptionController::class, 'destroyItem'])->scopeBindings()->name('items.destroy');
+                Route::post('/{prescription}/allergy-review', [PrescriptionController::class, 'reviewAllergies'])->name('allergy-review');
                 Route::post('/{prescription}/finalize', [PrescriptionController::class, 'finalize'])->name('finalize');
                 Route::post('/{prescription}/cancel', [PrescriptionController::class, 'cancel'])->name('cancel');
             });
@@ -1418,6 +1420,11 @@ $clinicRoutes = function () {
         Route::prefix('billing')->name('clinic.billing.')->middleware('clinic_permission:billing.view')->group(function () {
             // The Billing work center: whoever runs the clinic, the front desk, or billing staff (not a practitioner's day).
             Route::get('/', [CheckoutController::class, 'index'])->middleware('clinic_workspace:command_center,front_desk,billing')->name('index');
+            // Billing's read-only sections: the refund and adjustment history, and the financial summary (finance reports' audience).
+            Route::get('/reversals', [BillingRegisterController::class, 'reversals'])->middleware('clinic_workspace:command_center,front_desk,billing')->name('reversals');
+            Route::get('/summary', [BillingRegisterController::class, 'summary'])->middleware(['clinic_permission:reports.view', 'clinic_workspace:command_center'])->name('summary');
+            // One bill in full, for the Billing pages' detail (JSON); each action it offers is authorized again by its own route.
+            Route::get('/bills/{bill}', [CheckoutController::class, 'bill'])->whereNumber('bill')->name('bills.show');
             Route::get('/checkout/{encounter}', [CheckoutController::class, 'show'])->whereNumber('encounter')->name('checkout');
             Route::post('/checkout/{encounter}', [CheckoutController::class, 'store'])
                 ->middleware('clinic_permission:billing.create')->name('checkout.store');
@@ -1456,6 +1463,8 @@ $clinicRoutes = function () {
                 ->name('check-duplicate');
             Route::post('/', [ClinicPatientController::class, 'store'])->name('store');
             Route::get('/{patient}', [Patient360Controller::class, 'show'])->name('show');
+            // The printable patient summary (Patient 360 → Print): the page's data for this member, audited.
+            Route::get('/{patient}/print', [Patient360Controller::class, 'print'])->name('print');
             Route::get('/{patient}/edit', [ClinicPatientController::class, 'edit'])->name('edit');
             Route::put('/{patient}', [ClinicPatientController::class, 'update'])->name('update');
             Route::post('/{patient}/transfer', [ClinicPatientController::class, 'transfer'])->name('transfer');
@@ -1463,13 +1472,19 @@ $clinicRoutes = function () {
             Route::put('/{patient}/clinical-entries/{kind}', [PatientClinicalEntryController::class, 'update'])
                 ->where('kind', 'condition|allergy|medication')
                 ->name('clinical-entries.update');
+            // Clinical staff manage safety alerts and the medical-history notes (writeClinicalData); history is kept.
+            Route::post('/{patient}/alerts', [PatientSafetyController::class, 'storeAlert'])->name('alerts.store');
+            Route::post('/{patient}/alerts/{alert}/resolve', [PatientSafetyController::class, 'resolveAlert'])->whereNumber('alert')->name('alerts.resolve');
+            Route::put('/{patient}/medical-notes', [PatientSafetyController::class, 'updateNotes'])->name('medical-notes.update');
+            // Send a WhatsApp message by hand (approved templates only; each kind checks its own permission).
+            Route::post('/{patient}/messages/share', [PatientMessageShareController::class, 'store'])->middleware('throttle:30,1')->name('messages.share');
             Route::post('/{patient}/session-packages', [PhysioController::class, 'sellPackage'])->name('session-packages.store');
             Route::post('/{patient}/session-packages/{package}/cancel', [PhysioController::class, 'cancelPackage'])->name('session-packages.cancel');
             // Patient 360 sections, each loaded when opened, a page at a time.
             Route::get('/{patient}/360/bills/{bill}', [Patient360SectionController::class, 'bill'])->whereNumber('bill')->name('360.bill');
             Route::get('/{patient}/360/dental/teeth/{tooth}', [Patient360SectionController::class, 'tooth'])->whereNumber('tooth')->name('360.dental.tooth');
             Route::get('/{patient}/360/{section}', [Patient360SectionController::class, 'show'])
-                ->where('section', 'timeline|encounters|appointments|treatment|prescriptions|investigations|billing|documents|follow-ups|communications|requests|audit|dental|physio')
+                ->where('section', 'timeline|visits|encounters|appointments|treatment|prescriptions|investigations|billing|documents|follow-ups|communications|requests|audit|dental|physio')
                 ->middleware('throttle:240,1')
                 ->name('360.section');
             Route::post('/{patient}/dental/lab/{labOrder}/{step}', [DentalSpecialtyController::class, 'labStep'])

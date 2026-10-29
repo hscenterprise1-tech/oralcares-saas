@@ -72,7 +72,7 @@ export function BranchSwitcher({
         className={cn(
           'group inline-flex min-w-0 items-center gap-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2',
           variant === 'bar'
-            ? 'h-11 max-w-[240px] shrink-0 gap-2.5 rounded-md border border-cx-nav-line bg-white px-3.5 text-[14px] text-cx-nav-ink hover:bg-cx-nav-bg focus-visible:ring-cx-nav-teal sm:min-w-[200px] sm:justify-between'
+            ? 'h-11 max-w-[240px] shrink-0 gap-2.5 rounded-full border border-[#DCE6F3] bg-white px-3.5 text-[14px] text-cx-nav-ink shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:border-cx-nav-blue/40 focus-visible:ring-cx-nav-blue sm:min-w-[200px] sm:justify-between'
             : 'h-11 w-full justify-between rounded-xl bg-clinic-inset px-3 text-[12.5px] text-clinic-ink focus-visible:ring-clinic-brand-strong',
           !clinic.active_branch && !canSeeAllBranches(clinic) && (variant === 'bar' ? 'border-cx-amber-ink/40 text-cx-amber-ink' : 'border-clinic-warning/40 text-clinic-warning'),
         )}
@@ -99,7 +99,8 @@ export function BranchSwitcher({
   );
 }
 
-function BranchList({ clinic, links, onDone }: { clinic: ClinicContextProps; links: PortalLinks; onDone: () => void }) {
+/** The branch choice itself (search, list, switch): the top bar's selector and the sidebar's clinic card both open it. */
+export function BranchList({ clinic, links, onDone }: { clinic: ClinicContextProps; links: PortalLinks; onDone: () => void }) {
   const listId = useId();
   const [query, setQuery] = useState('');
   const [remote, setRemote] = useState<{ items: BranchSummary[]; nextPage: number | null } | null>(null);

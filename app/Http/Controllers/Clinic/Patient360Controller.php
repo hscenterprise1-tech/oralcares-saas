@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic;
 
+use App\ClinicPermission;
 use App\Http\Controllers\Controller;
 use App\Models\AttachedDocument;
 use App\Models\Clinic;
@@ -13,15 +14,24 @@ use App\Models\Patient;
 use App\Models\PatientMerge;
 use App\Models\PatientTimelineEvent;
 use App\PatientStatus;
+use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\ClinicContext;
 use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\Patient360\Patient360SectionPolicy;
+use App\Services\Patient\Patient360\Patient360Sections;
 use App\Services\Patient\Patient360\Patient360Summary;
+use App\Services\Patient\PatientClinicalEntries;
+use App\Services\Physio\PhysioCareSummary;
 use App\Services\Security\Malware\ScannedUploadIntake;
 use App\Services\Security\Malware\UploadRejectedException;
 use App\Services\Security\SecurityAudit;
+use App\Support\ClinicAccess\ClinicAccess;
+use App\Support\Clinical\DefaultClinicalCatalogue;
+use App\Support\ClinicClock;
+use App\Support\ClinicFrontend;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -69,11 +79,24 @@ class Patient360Controller extends Controller
         $pending = $this->policy->pendingRequests($user, $patient);
         $base = fn (string $section) => route('clinic.patients.360.section', [$patient->id, $section]);
 
+        // A section is shown once its screen is built (`ClinicFrontend`); the policy decided who may open it.
+        $sections = collect($lens['sections'])->map(fn (array $section) => [...$section, 'built' => ClinicFrontend::patient360Section($section['key'])])->values()->all();
+        $built = array_column(array_filter($sections, fn (array $section) => $section['built']), 'key');
+
         return Inertia::render('ClinicPortal/Patients/Show', [
-            'patient' => $this->summary->identity($patient),
+            'patient' => $this->summary->identity($patient, $user),
             'state' => $this->summary->state($patient, $user),
             'context' => $this->summary->context($patient, $user),
-            'overview' => Inertia::defer(fn () => $this->summary->overview($patient, $user)),
+            'profile' => $this->summary->profile($patient, $user),
+            'overview' => Inertia::defer(fn () => [
+                ...$this->summary->overview($patient, $user),
+                // The latest documents, exactly as the Documents section lists them for this member (null when they may not open it).
+                'documents' => $this->policy->allows($user, $patient, 'documents')
+                    ? collect(app(Patient360Sections::class)->documents($patient, $user, 1)['data'])->take(4)->values()->all()
+                    : null,
+                // Physiotherapy at a glance (read-only) and where the desk confirms today's session; null outside physiotherapy clinics.
+                'physio_care' => app(PhysioCareSummary::class)->forPatient($patient, $user, $this->clinicContext->branch()),
+            ]),
             'lens' => [
                 'persona' => $lens['persona'],
                 'default_section' => $lens['default_section'],
@@ -87,9 +110,12 @@ class Patient360Controller extends Controller
                     ->whereNotNull('open_key')->limit(200)->get(['action_type', 'target_id'])
                     ->map(fn (DeletionRequest $r) => "{$r->action_type}:{$r->target_id}")->values()->all(),
             ],
-            'sections' => $lens['sections'],
+            'sections' => $sections,
+            // Every role opens on the Overview; its own sections are one tap away.
+            'open_section' => 'overview',
             'endpoints' => [
                 'timeline' => $base('timeline'),
+                'visits' => $base('visits'),
                 'clinical' => $base('encounters'),
                 'appointments' => $base('appointments'),
                 'treatment' => $base('treatment'),
@@ -110,9 +136,36 @@ class Patient360Controller extends Controller
                 'owner_mode' => route('clinic.owner-mode.store'),
                 'patients_index' => route('clinic.patients.index'),
             ],
-            'actions' => $this->policy->actions($user, $patient, $open, $pending),
+            'actions' => collect($this->policy->actions($user, $patient, $open, $pending))
+                ->map(fn (array $action) => [...$action, 'available' => $this->actionAvailable($action)])->values()->all(),
+            'links' => [
+                'index' => route('clinic.patients.index'),
+                // The Billing register filtered to this patient, for members it admits (money, billing.view, a billing workspace).
+                'bills' => $this->access->canViewBilling($user) && $user->hasClinicPermission(ClinicPermission::BillingView)
+                    && array_intersect(['command_center', 'front_desk', 'billing'], app(ClinicAccess::class)->workspaces()) !== [] && filled($patient->uhid)
+                    ? route('clinic.billing.index', ['q' => $patient->uhid]) : null,
+            ],
+            // Changing the medical-history conditions: clinical staff allowed to write this patient's record
+            // (`PatientClinicalEntryController`, which checks the same again), the clinic's own options.
+            'condition_editor' => $user->can('writeClinicalData', $patient)
+                ? [
+                    'url' => route('clinic.patients.clinical-entries.update', [$patient, DefaultClinicalCatalogue::KIND_CONDITION]),
+                    'options' => collect(app(ClinicalCatalogue::class)->effective($patient->clinic_id, DefaultClinicalCatalogue::KIND_CONDITION, $this->specialtyKeys($patient)))
+                        ->map(fn (array $item) => ['key' => $item['key'], 'name' => $item['name'], 'severity' => $item['severity'] ?? null])->values()->all(),
+                    'severities' => DefaultClinicalCatalogue::SEVERITIES,
+                    // Whether a name outside the clinic's list may be typed (Settings → Quick Care); the endpoint enforces it.
+                    'custom_allowed' => ! app(PatientClinicalEntries::class)->conditionsFromCatalogue($patient->clinic_id),
+                ] : null,
+            // Managing safety alerts and the medical-history notes (`PatientSafetyController`, which checks the same again).
+            'safety_editor' => $user->can('writeClinicalData', $patient)
+                ? [
+                    'alerts' => route('clinic.patients.alerts.store', $patient),
+                    'resolve' => route('clinic.patients.alerts.resolve', [$patient, '__ALERT__']),
+                    'notes' => route('clinic.patients.medical-notes.update', $patient),
+                    'severities' => DefaultClinicalCatalogue::SEVERITIES,
+                ] : null,
             // Practitioners only, with the specialty they recorded (or none).
-            'practitioners' => ($fields['appointments'] || $this->access->canManageFollowUps($user))
+            'practitioners' => ($fields['appointments'] || $this->access->canManageFollowUps($user) || $user->can('update', $patient))
                 ? ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('status', 'active')
                     ->whereHas('practitionerProfile')->with('practitionerProfile:id,clinic_employee_id,specialty')
                     ->orderBy('name')->limit(200)->get(['id', 'name'])
@@ -120,6 +173,70 @@ class Patient360Controller extends Controller
                     ->values()
                 : [],
         ]);
+    }
+
+    /**
+     * The printable patient summary: the page's own data for this member
+     * (the same role and branch rules), on paper. Audited.
+     */
+    public function print(Request $request, Patient $patient): \Illuminate\Http\Response|RedirectResponse
+    {
+        $this->authorize('view', $patient);
+        $clinic = $this->assertInClinic($patient);
+        if ($patient->status === PatientStatus::Merged) {
+            $survivorId = PatientMerge::query()->where('clinic_id', $patient->clinic_id)->where('source_patient_id', $patient->id)->value('survivor_patient_id');
+            if ($survivorId) {
+                return redirect()->route('clinic.patients.print', $survivorId);
+            }
+        }
+        $user = $request->user();
+        app(SecurityAudit::class)->record('patient.summary_printed', $patient);
+
+        return response()->view('clinic.patient_summary_printable', [
+            'clinic' => $clinic,
+            'patient' => $this->summary->identity($patient, $user),
+            'profile' => $this->summary->profile($patient, $user),
+            'context' => $this->summary->context($patient, $user),
+            'overview' => $this->summary->overview($patient, $user),
+            'printedBy' => $user->name,
+            'printedAt' => ClinicClock::now(),
+        ]);
+    }
+
+    /**
+     * The page an action opens, for actions that open one. An action whose
+     * page or section is not built yet is sent but not offered.
+     */
+    private const ACTION_PAGES = [
+        'continue_consultation' => 'clinic.consultations.show',
+        'start_consultation' => 'clinic.consultations.show',
+        'prescribe' => 'clinic.consultations.show',
+        'order_investigation' => 'clinic.consultations.show',
+        'treatment_plan' => 'clinic.consultations.show',
+        'book' => 'clinic.appointments.store',
+        'edit' => 'clinic.patients.edit',
+        'transfer' => 'clinic.patients.transfer',
+        'upload_document' => 'clinic.patients.documents.store',
+        'approvals' => 'clinic.approvals.index',
+    ];
+
+    /**
+     * Whether the page can offer an action now: check-in opens the desk's own
+     * intake popup; a section action needs its section built; anything else
+     * needs its page built.
+     *
+     * @param  array<string, mixed>  $action
+     */
+    private function actionAvailable(array $action): bool
+    {
+        return match (true) {
+            // Check-in opens the desk's intake popup; Assign doctor is a dialog on this page; the summary prints from its own route.
+            in_array($action['key'], ['check_in', 'transfer', 'print'], true) => true,
+            // The Billing section reads; collecting a payment stays on the Billing page.
+            $action['key'] === 'collect_payment' => false,
+            isset($action['section']) => ClinicFrontend::patient360Section($action['section']),
+            default => isset(self::ACTION_PAGES[$action['key']]) && ClinicFrontend::available(self::ACTION_PAGES[$action['key']]),
+        };
     }
 
     /**
@@ -225,6 +342,19 @@ class Patient360Controller extends Controller
         return $inline
             ? Storage::disk('private')->response($doc->file_path, $this->safeDownloadName($doc), ['X-Content-Type-Options' => 'nosniff'])
             : Storage::disk('private')->download($doc->file_path, $this->safeDownloadName($doc));
+    }
+
+    /**
+     * The patient's active specialties: the condition options offered are the
+     * ones `PatientClinicalEntryController` will accept for this patient.
+     *
+     * @return list<string>
+     */
+    private function specialtyKeys(Patient $patient): array
+    {
+        return DB::table('patient_specialties as ps')->join('clinic_specialties as cs', 'cs.id', '=', 'ps.clinic_specialty_id')
+            ->where('ps.clinic_id', $patient->clinic_id)->where('ps.patient_id', $patient->id)->where('ps.status', 'active')
+            ->pluck('cs.specialty_key')->all();
     }
 
     private function assertInClinic(Patient $patient): Clinic

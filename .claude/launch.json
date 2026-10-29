@@ -4,6 +4,18 @@
     {
       "name": "oralcares-dev",
       "url": "http://localhost:8000"
+    },
+    {
+      "name": "oralcares-vite",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "oralcares-app",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--port=8000"],
+      "port": 8000
     }
   ]
 }

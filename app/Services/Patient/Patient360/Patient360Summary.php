@@ -5,22 +5,28 @@ namespace App\Services\Patient\Patient360;
 use App\AppointmentStatus;
 use App\BillingStatus;
 use App\Models\Appointment;
+use App\Models\Branch;
 use App\Models\ClinicalDiagnosis;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicalOrderItem;
 use App\Models\Patient;
 use App\Models\PatientAlert;
 use App\Models\PatientBilling;
+use App\Models\PatientBranchActivity;
+use App\Models\PatientClinicalEntry;
 use App\Models\PatientFollowUp;
 use App\Models\PatientProcedure;
 use App\Models\PatientVisit;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\User;
+use App\PatientStatus;
 use App\Services\Patient\PatientClinicalEntries;
+use App\Services\Patient\PatientDirectoryAudience;
 use App\Services\Treatment\TreatmentReadModel;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
+use App\Support\ClinicFrontend;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -41,14 +47,21 @@ class Patient360Summary
     ) {}
 
     /**
+     * Who the patient is. The full mobile number and email go only to
+     * members whose work is contacting patients (the directory's rule,
+     * `PatientDirectoryAudience::canSeeContact`); everyone else gets the last
+     * four digits.
+     *
      * @return array<string, mixed>
      */
-    public function identity(Patient $patient): array
+    public function identity(Patient $patient, User $user): array
     {
         $patient->loadMissing('currentPractitioner:id,name');
         $lastVisit = PatientVisit::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
             ->tap(fn (Builder $query) => $this->inBranches($query))
-            ->with('branch:id,name')->latest('visit_date')->latest('id')->first();
+            ->with(['branch' => $this->clinicBranch($patient)])->latest('visit_date')->latest('id')->first();
+        $contact = app(PatientDirectoryAudience::class)->canSeeContact($user);
+        $digits = preg_replace('/\D/', '', (string) $patient->phone) ?? '';
 
         return [
             'id' => $patient->id,
@@ -58,15 +71,70 @@ class Patient360Summary
             'age' => $patient->age,
             'gender' => $patient->gender,
             'blood_group' => $patient->blood_group,
-            'phone' => $patient->phone,
-            'email' => $patient->email,
+            'phone' => $contact ? $patient->phone : null,
+            'phone_last_digits' => strlen($digits) >= 4 ? substr($digits, -4) : null,
+            'email' => $contact ? $patient->email : null,
             'status' => $patient->status?->value ?? 'active',
             'registered_on' => $patient->created_at?->toIso8601String(),
+            // The branch of the last visit among the member's own branches, and when it was.
             'branch' => $lastVisit?->branch?->name,
+            'last_visit_on' => $lastVisit?->visit_date?->toDateString(),
+            'registered_branch' => $this->registeredBranch($patient),
+            // The death record, when one exists: the date, and who recorded it and when.
+            'deceased' => $patient->status === PatientStatus::Deceased ? [
+                'on' => $patient->date_of_death?->toDateString(),
+                'recorded_at' => $patient->death_recorded_at?->toIso8601String(),
+                'recorded_by' => $patient->death_recorded_by ? User::query()->whereKey($patient->death_recorded_by)->value('name') : null,
+            ] : null,
             'practitioner' => $patient->currentPractitioner?->name,
-            'archived_at' => $patient->archived_at?->toIso8601String(),
-            'archive_reason' => $patient->archived_at ? $patient->archive_reason : null,
         ];
+    }
+
+    /**
+     * The patient's details beyond identity: address, preferred channel and
+     * emergency contact (`patient_profiles`). Addresses and the full
+     * emergency number follow the same contact rule as the mobile number;
+     * everyone else gets the emergency contact's name and last four digits.
+     *
+     * @return array<string, mixed>
+     */
+    public function profile(Patient $patient, User $user): array
+    {
+        $patient->loadMissing('profile');
+        $profile = $patient->profile;
+        $contact = app(PatientDirectoryAudience::class)->canSeeContact($user);
+        $emergencyDigits = preg_replace('/\D/', '', (string) $profile?->emergency_contact_phone) ?? '';
+        $address = $contact ? array_values(array_filter([
+            $profile?->address, $profile?->locality, $profile?->city, $profile?->state, $profile?->pincode ?: $profile?->postal_code, $profile?->country,
+        ], fn ($part) => filled($part))) : [];
+
+        return [
+            'address' => $address === [] ? null : implode(', ', $address),
+            'preferred_channel' => $profile?->preferred_channel,
+            'alternate_phone' => $contact ? $patient->alternate_phone : null,
+            'emergency_contact' => $profile?->emergency_contact_name || $profile?->emergency_contact_phone ? [
+                'name' => $profile->emergency_contact_name,
+                'phone' => $contact ? $profile->emergency_contact_phone : null,
+                'phone_last_digits' => strlen($emergencyDigits) >= 4 ? substr($emergencyDigits, -4) : null,
+            ] : null,
+            // Whether the full contact details were sent (so the page says why they are not shown).
+            'contact_visible' => $contact,
+        ];
+    }
+
+    /**
+     * The branch the patient was registered at, when it is one of the
+     * member's branches (`patient_branch_activity`, first source `registration`,
+     * else the earliest activity).
+     */
+    private function registeredBranch(Patient $patient): ?string
+    {
+        $ids = $this->access->branchIds();
+        $branchId = PatientBranchActivity::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->when($ids !== null, fn ($query) => $query->whereIn('branch_id', $ids ?: [0]))
+            ->orderByRaw("CASE WHEN first_source = 'registration' THEN 0 ELSE 1 END")->orderBy('first_seen_at')->value('branch_id');
+
+        return $branchId ? Branch::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereKey($branchId)->value('name') : null;
     }
 
     /**
@@ -101,7 +169,7 @@ class Patient360Summary
      */
     public function context(Patient $patient, User $user): array
     {
-        $patient->loadMissing('medicalHistory', 'alerts');
+        $patient->loadMissing(['medicalHistory', 'alerts.creator:id,name']);
         $entries = app(PatientClinicalEntries::class);
 
         // Conditions, allergies and medications come from the clinical entries.
@@ -109,9 +177,16 @@ class Patient360Summary
 
         // `patient_alerts` is the one alert system; the history's old
         // `medical_alerts` column is folded into it by the foundation backfill.
-        $alerts = $patient->alerts->reject(fn (PatientAlert $alert) => $alert->type === 'allergy')
-            ->map(fn (PatientAlert $alert) => ['text' => $alert->description, 'severity' => $alert->severity])
-            ->filter(fn (array $alert) => trim($alert['text']) !== '')->values();
+        // Safety alerts are the precautions staff recorded (`flag` from the
+        // clinic's alert catalogue, `manual`). The copies `syncDerivedAlerts`
+        // keeps of allergies and high-severity conditions are not repeated
+        // here: those are shown (or, for allergies, deliberately not shown)
+        // as what they are. Nothing is reclassified; most severe first.
+        $alerts = $patient->alerts->reject(fn (PatientAlert $alert) => in_array($alert->type, PatientClinicalEntries::DERIVED_ALERT_TYPES, true))
+            // Who recorded it and when, where that was stored (older alerts have no author).
+            ->map(fn (PatientAlert $alert) => ['id' => $alert->id, 'text' => $alert->description, 'severity' => $alert->severity, 'type' => $alert->type, 'recorded_on' => $alert->created_at ? ClinicClock::fromUtc($alert->created_at)->toDateString() : null, 'recorded_by' => $alert->creator?->name])
+            ->filter(fn (array $alert) => trim((string) $alert['text']) !== '')
+            ->sortBy(fn (array $alert) => [self::SEVERITY_RANK[$alert['severity']] ?? 9, $alert['text']])->values();
 
         $clinical = $this->access->canViewClinical($user);
 
@@ -131,8 +206,49 @@ class Patient360Summary
                 'prescribed' => $clinical ? $this->recentMedicines($patient) : [],
                 'reported' => $clinical ? $entries->labelsFor($patient, DefaultClinicalCatalogue::KIND_MEDICATION) : [],
             ],
+            // The patient's medical history conditions (diabetes, hypertension…), as recorded: who, when, how serious.
+            'medical_conditions' => $clinical ? $this->medicalConditions($patient) : [],
+            // The medical history's free-text notes are clinical history too.
+            'medical_notes' => $clinical && filled($patient->medicalHistory?->notes) ? (string) $patient->medicalHistory->notes : null,
+            'medical_notes_updated_on' => $clinical && filled($patient->medicalHistory?->notes) ? ($patient->medicalHistory->notes_updated_at ?? $patient->medicalHistory->updated_at)?->toDateString() : null,
+            'medical_notes_updated_by' => $clinical && $patient->medicalHistory?->notes_updated_by ? User::query()->whereKey($patient->medicalHistory->notes_updated_by)->value('name') : null,
             'clinical' => $clinical,
         ];
+    }
+
+    /** Alerts and conditions, most severe first; unknown severities last. */
+    private const SEVERITY_RANK = ['critical' => 0, 'high' => 1, 'moderate' => 2, 'medium' => 2, 'low' => 3];
+
+    /**
+     * Active medical-history conditions (clinical entries of kind `condition`),
+     * most severe first. `source` says how it came to be on record: reported
+     * at registration, or recorded by clinical staff.
+     *
+     * @return list<array{key: ?string, label: string, severity: ?string, source: string, recorded_on: ?string, recorded_by: ?string}>
+     */
+    private function medicalConditions(Patient $patient): array
+    {
+        $entries = PatientClinicalEntry::withoutGlobalScopes()
+            ->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->where('kind', DefaultClinicalCatalogue::KIND_CONDITION)->where('status', PatientClinicalEntry::ACTIVE)
+            ->with(['recorder' => fn ($query) => $query->select('id', 'name')])
+            ->get(['catalogue_key', 'label', 'severity', 'source', 'recorded_at', 'recorded_by']);
+
+        if ($entries->isEmpty()) {
+            // Records from before clinical entries: the names only.
+            return array_map(fn (string $label) => ['key' => null, 'label' => $label, 'severity' => null, 'source' => 'backfill', 'recorded_on' => null, 'recorded_by' => null],
+                app(PatientClinicalEntries::class)->legacyLabels($patient, DefaultClinicalCatalogue::KIND_CONDITION));
+        }
+
+        return $entries->sortBy(fn (PatientClinicalEntry $entry) => [self::SEVERITY_RANK[$entry->severity] ?? 9, mb_strtolower($entry->label)])
+            ->map(fn (PatientClinicalEntry $entry) => [
+                'key' => $entry->catalogue_key,
+                'label' => $entry->label,
+                'severity' => $entry->severity,
+                'source' => $entry->source,
+                'recorded_on' => $entry->recorded_at ? ClinicClock::fromUtc($entry->recorded_at)->toDateString() : null,
+                'recorded_by' => $entry->recorder?->name,
+            ])->values()->all();
     }
 
     /**
@@ -163,6 +279,10 @@ class Patient360Summary
             : collect();
 
         return [
+            'summary' => [
+                'appointments' => $this->appointmentSummary($patient, $user, $now),
+                'finance' => $this->access->canViewBilling($user) ? $this->financeSummary($patient) : null,
+            ],
             'current' => [
                 // Open treatments as separate care streams (Dental · Orthodontics, Physiotherapy · Sports Rehabilitation).
                 'care_streams' => $clinical ? $this->treatments->careStreams($patient->clinic_id, $patient->id, $this->access->branchIds()) : [],
@@ -183,7 +303,7 @@ class Patient360Summary
                 ] : null,
                 'investigations' => $openItems->map(fn (ClinicalOrderItem $item) => [
                     'name' => $item->item_name, 'status' => $item->status, 'category' => ClinicalOrderItem::CATEGORIES[$item->category]['label'] ?? $item->category,
-                    'url' => route('clinic.orders.show', $item->clinical_order_id),
+                    'url' => ClinicFrontend::available('clinic.orders.show') ? route('clinic.orders.show', $item->clinical_order_id) : null,
                 ])->values(),
                 'payments' => $unpaid->map(fn (PatientBilling $bill) => ['id' => $bill->id, 'number' => $bill->billing_number, 'outstanding' => (float) $bill->outstanding_balance])->values(),
             ],
@@ -196,7 +316,8 @@ class Patient360Summary
                     'complaint' => $latestEncounter->chief_complaint,
                     'diagnosis' => $latestEncounter->diagnoses->first()?->description,
                     'signed' => $latestEncounter->isFinalized(),
-                    'url' => $user->can('view', $latestEncounter) ? route('clinic.consultations.show', $latestEncounter) : null,
+                    // Linked once the consultation screen is built (`ClinicFrontend`).
+                    'url' => ClinicFrontend::available('clinic.consultations.show') && $user->can('view', $latestEncounter) ? route('clinic.consultations.show', $latestEncounter) : null,
                 ] : null,
                 'prescription' => $latestRx ? [
                     'number' => $latestRx->prescription_number,
@@ -212,7 +333,7 @@ class Patient360Summary
                     'date' => $latestResult->resulted_at?->toIso8601String(),
                     'summary' => $latestResult->result?->summary,
                     'is_abnormal' => (bool) $latestResult->result?->is_abnormal,
-                    'url' => route('clinic.orders.show', $latestResult->clinical_order_id),
+                    'url' => ClinicFrontend::available('clinic.orders.show') ? route('clinic.orders.show', $latestResult->clinical_order_id) : null,
                 ] : null,
                 'procedure' => $latestProcedure ? [
                     'name' => $latestProcedure->name,
@@ -259,6 +380,54 @@ class Patient360Summary
         return $ids === null ? $query : $query->whereIn($query->getModel()->qualifyColumn($column), $ids);
     }
 
+    /**
+     * A record's branch, read inside the patient's clinic. The organization
+     * scope is not applied: it hides a branch with no organization set,
+     * which leaves the visit or booking with no branch name at all.
+     */
+    public function clinicBranch(Patient $patient): \Closure
+    {
+        return fn ($query) => $query->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->select(['id', 'name']);
+    }
+
+    /**
+     * Upcoming bookings, visits attended and bookings missed, in the member's
+     * branches. A visit is a check-in (`Patient360Sections::ATTENDED_VISIT`),
+     * never a booking. Null for members who may not see appointments.
+     *
+     * @return array{upcoming: int, attended: int, missed: int}|null
+     */
+    private function appointmentSummary(Patient $patient, User $user, $now): ?array
+    {
+        if (! $this->access->canViewAppointments($user)) {
+            return null;
+        }
+        $bookings = fn () => Appointment::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)->tap(fn (Builder $query) => $this->inBranches($query));
+
+        return [
+            'upcoming' => $bookings()->where('scheduled_at', '>=', $now->startOfDay())
+                ->whereIn('status', [AppointmentStatus::Scheduled->value, AppointmentStatus::Confirmed->value])->count(),
+            'attended' => PatientVisit::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+                ->tap(fn (Builder $query) => $this->inBranches($query))->whereIn('visit_status', Patient360Sections::ATTENDED_VISIT)->count(),
+            'missed' => $bookings()->where('status', AppointmentStatus::NoShow->value)->count(),
+        ];
+    }
+
+    /**
+     * What the patient was billed, has paid and still owes, across live bills
+     * in the member's branches (cancelled bills are not counted).
+     *
+     * @return array{billed: float, paid: float, outstanding: float, bills: int}
+     */
+    private function financeSummary(Patient $patient): array
+    {
+        $totals = $this->bills($patient)->where('status', '!=', BillingStatus::Cancelled->value)
+            ->selectRaw('COALESCE(SUM(total_amount), 0) as billed, COALESCE(SUM(paid_amount), 0) as paid, COALESCE(SUM(outstanding_balance), 0) as outstanding, COUNT(*) as bills')
+            ->toBase()->first();
+
+        return ['billed' => (float) $totals->billed, 'paid' => (float) $totals->paid, 'outstanding' => (float) $totals->outstanding, 'bills' => (int) $totals->bills];
+    }
+
     private function outstanding(Patient $patient): float
     {
         return (float) $this->bills($patient)->where('status', '!=', BillingStatus::Cancelled->value)->sum('outstanding_balance');
@@ -273,7 +442,7 @@ class Patient360Summary
             ->tap(fn (Builder $query) => $this->inBranches($query))
             ->where('scheduled_at', '>=', $now->startOfDay())
             ->whereIn('status', [AppointmentStatus::Scheduled->value, AppointmentStatus::Confirmed->value, AppointmentStatus::CheckedIn->value])
-            ->with(['practitioner:id,name', 'branch:id,name'])->orderBy('scheduled_at')->first();
+            ->with(['practitioner:id,name', 'branch' => $this->clinicBranch($patient)])->orderBy('scheduled_at')->first();
 
         return $next ? [
             'id' => $next->id,
@@ -302,7 +471,7 @@ class Patient360Summary
     }
 
     /**
-     * @return list<array{description: string, code: ?string, status: string}>
+     * @return list<array{description: string, code: ?string, status: string, noted_on: ?string}>
      */
     private function activeConditions(Patient $patient): array
     {
@@ -310,9 +479,13 @@ class Patient360Summary
             ->whereHas('encounter', fn (Builder $query) => $this->inBranches($query)->whereNull('voided_at'))
             ->whereIn('status', ['confirmed', 'provisional'])
             ->where('created_at', '>=', now()->subYear())
-            ->latest('id')->limit(20)->get(['description', 'code', 'status'])
+            ->latest('id')->limit(20)->get(['description', 'code', 'status', 'created_at'])
             ->unique(fn (ClinicalDiagnosis $diagnosis) => strtolower(($diagnosis->code ?? '').'|'.$diagnosis->description))
-            ->take(6)->map(fn (ClinicalDiagnosis $diagnosis) => $diagnosis->only(['description', 'code', 'status']))->values()->all();
+            ->take(6)->map(fn (ClinicalDiagnosis $diagnosis) => [
+                ...$diagnosis->only(['description', 'code', 'status']),
+                // When it was recorded, on the clinic's calendar.
+                'noted_on' => $diagnosis->created_at ? ClinicClock::fromUtc($diagnosis->created_at)->toDateString() : null,
+            ])->values()->all();
     }
 
     /**

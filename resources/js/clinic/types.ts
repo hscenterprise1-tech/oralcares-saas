@@ -10,7 +10,6 @@ export type ClinicPermission =
   | 'patient.view'
   | 'patient.create'
   | 'patient.edit'
-  | 'patient.delete'
   | 'patient.search'
   | 'appointment.view'
   | 'appointment.create'
@@ -24,6 +23,7 @@ export type ClinicPermission =
   | 'prescription.manage'
   | 'treatment.start'
   | 'treatment.execute'
+  | 'physio.session.confirm'
   | 'catalog.manage'
   | 'specialty.configure'
   | 'consent.manage'
@@ -189,22 +189,21 @@ export interface FactsData {
 
 export type WidgetData = KpiData | ListData | StatsData | FactsData | { error: true };
 
-/** The owner's choice of widgets per staff role (Owner Mode only). */
-export interface DashboardVisibilitySettings {
-  action: string;
-  roles: string[];
-  widgets: { key: string; title: string }[];
-  hidden: Record<string, string[]>;
-}
-
 /**
  * Owner Mode as the server sees it on this request. Presentation only: the
  * server checks Owner Mode itself on every owner-only action.
  */
 export interface OwnerModeStatus {
-  /** The signed-in user is the owner of this clinic. */
+  /**
+   * Owner Mode can be entered here: the signed-in user owns this clinic and
+   * also works in it as a doctor. Any other owner holds the owner's
+   * privileges from sign-in, with no mode to enter.
+   */
   available: boolean;
+  /** A doctor-owner is in Owner Mode (Doctor Mode otherwise). */
   active: boolean;
+  /** The signed-in user owns this clinic. */
+  owner: boolean;
   expires_at: string | null;
   idle_timeout_minutes: number;
 }

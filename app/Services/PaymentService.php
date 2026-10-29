@@ -168,6 +168,7 @@ class PaymentService
             ]);
 
             $this->timeline($bill, $clinic, 'refund_recorded', ['refund_number' => $refund->refund_number, 'amount' => $refund->amount]);
+            app(SecurityAudit::class)->record('billing.refunded', $bill, ['refund_number' => $refund->refund_number, 'amount' => (float) $refund->amount], ['clinic_id' => $bill->clinic_id, 'branch_id' => $bill->branch_id]);
 
             event(new RefundInitiated($refund));
 

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A request to remove, void or archive a governed record, decided by the
+ * A request to remove, void or merge a governed record, decided by the
  * clinic owner. Written only through `Governance\DeletionGovernance`.
  *
  * pending ⇄ clarification_requested → executed (approved and carried out),

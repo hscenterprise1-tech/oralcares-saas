@@ -161,6 +161,12 @@ function Settings(props: PatientFormProps) {
                 <MultiChoiceChips label="Who may set team alerts" options={props.roles.map((role) => ({ value: role, label: role }))} value={props.quick_care.alert_roles} onChange={(roles) => quickCare({ alert_roles: roles })} noneLabel="Everyone who registers" size="sm" />
               </div>
             )}
+            <Switch
+              checked={props.quick_care.conditions_from_catalogue}
+              onCheckedChange={(conditionsFromCatalogue) => quickCare({ conditions_from_catalogue: conditionsFromCatalogue })}
+              label="Record medical conditions only from the clinic's list"
+              description="A condition typed by name is refused unless it is on the list; conditions already recorded stay. Add the clinic's own under Lists → Medical history."
+            />
           </Card>
 
           <Card as="div" className="p-5 sm:p-6">

@@ -30,7 +30,7 @@ class PatientConsentController extends Controller
 
         $clinic = Clinic::query()->findOrFail($patient->clinic_id);
 
-        return response()->json(['data' => $this->consents->for($patient, $request->user()), 'types' => $this->consents->types($clinic), 'options' => $this->consents->options($clinic),
+        return response()->json(['data' => $this->consents->for($patient, $request->user()), 'types' => $this->consents->types($clinic), 'options' => $this->consents->options($clinic), 'methods' => ConsentRecord::METHODS,
             'can_manage' => $request->user()->hasClinicPermission(ClinicPermission::ConsentManage)]);
     }
 

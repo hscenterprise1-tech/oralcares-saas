@@ -73,8 +73,10 @@ test('a receptionist\'s Control Center is named Reception, with every section th
     expect(collect($visit->json('deferredProps'))->flatten()->all())->toContain('follow_ups');
 
     $navigation = collect($page['props']['clinic']['navigation']);
-    expect($navigation->firstWhere('key', 'front_desk')['label'])->toBe('Queue')
-        ->and($navigation->pluck('label')->all())->not->toContain('Front Desk')
+    // Reception's one dashboard: the sidebar's Dashboard opens this page; there is no second queue entry.
+    expect($navigation->firstWhere('key', 'dashboard')['href'])->toEndWith('/clinic/reception')
+        ->and($navigation->pluck('key')->all())->not->toContain('front_desk')
+        ->and($navigation->pluck('label')->all())->not->toContain('Front Desk', 'Queue')
         ->and($navigation->pluck('key')->all())->not->toContain('check_in', 'patient_search');
 });
 
@@ -194,8 +196,8 @@ function navigationKeys(callable $as): array
     return $keys;
 }
 
-test('a receptionist reaches the Dashboard, Calendar, Patients, Queue and Billing from the sidebar', function () {
-    expect(navigationKeys($this->asReception))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'follow_ups', 'notifications', 'support']);
+test('a receptionist reaches the Dashboard (the Front Desk), Calendar, Patients and Billing from the sidebar', function () {
+    expect(navigationKeys($this->asReception))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
     ($this->asReception)()->get('/clinic/queue')->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('ClinicPortal/FrontDesk/List', false)
         ->where('list', 'waiting')

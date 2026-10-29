@@ -21,6 +21,7 @@ use App\QueueItemStatus;
 use App\Services\ClinicalPrescriptionService;
 use App\Services\Numbering\ClinicDocumentNumbers;
 use App\Services\Patient\FollowUps;
+use App\Services\Patient\PatientCareGuard;
 use App\Services\Patient\PatientSpecialties;
 use App\Services\QueueStateMachine;
 use App\Services\Security\SecurityAudit;
@@ -104,6 +105,8 @@ class EncounterWorkspace
      */
     public function startForPatient(Patient $patient, Branch $branch, ClinicEmployee $doctor, ?PatientVisit $visit = null, ?string $specialty = null): ClinicalEncounter
     {
+        app(PatientCareGuard::class)->assertCanReceiveCare($patient);
+
         return DB::transaction(fn () => $this->open($patient, $branch, $doctor, $visit, $specialty));
     }
 

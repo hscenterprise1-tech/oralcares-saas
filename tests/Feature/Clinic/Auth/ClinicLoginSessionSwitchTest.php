@@ -38,7 +38,8 @@ test('a colleague signing in over the owner\'s open session gets their own sessi
         ->assertSessionMissing(OwnerMode::SESSION_KEY);
 
     $this->assertAuthenticatedAs($receptionist);
-    $this->get('/clinic/dashboard-redirect')->assertRedirect(route('clinic.dashboard'));
+    // Reception's home is the Front Desk.
+    $this->get('/clinic/dashboard-redirect')->assertRedirect(route('clinic.reception'));
 });
 
 test('an account from another clinic signing in over an open session lands in its own clinic, never the previous one', function () {

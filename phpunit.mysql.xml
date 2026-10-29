@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    MySQL concurrency tests only, against the isolated database
+    `oralcares_concurrency_test` (see tests/Concurrency/environment.php).
+    Run: vendor/bin/pest -c phpunit.mysql.xml
+    The everyday suite (phpunit.xml) stays on SQLite in memory and never
+    includes tests/Concurrency.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/Concurrency/bootstrap.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="MySQL concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
+    </testsuites>
+    <groups>
+        <include>
+            <group>mysql-concurrency</group>
+        </include>
+    </groups>
+</phpunit>

@@ -146,7 +146,7 @@ it('lets the trial owner finish setup once, without touching the plan, specialty
 
     $this->get(route('clinic.onboarding.done'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Onboarding/Done', true));
     $this->get(route('clinic.onboarding.index'))->assertRedirect(route('dashboard'));
-    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Dashboard', true));
+    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/CommandCenter/Index', true));
 });
 
 it('never starts a second setup on retry, re-provisioning or conversion to paid', function () {
@@ -164,7 +164,7 @@ it('never starts a second setup on retry, re-provisioning or conversion to paid'
     expect($sessions)->toHaveCount(1)
         ->and($sessions->first()->status)->toBe(OnboardingSessionStatus::Completed)
         ->and(SecurityAuditLog::where('event', 'clinic.activated')->where('clinic_id', $trial->clinic_id)->count())->toBe(1);
-    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Dashboard', true));
+    $this->followingRedirects()->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/CommandCenter/Index', true));
 });
 
 it('keeps one trial owner out of another trial clinic\'s setup', function () {

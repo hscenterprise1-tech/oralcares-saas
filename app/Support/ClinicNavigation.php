@@ -104,7 +104,7 @@ class ClinicNavigation
             // Owner-approved deletions; the audience that decides or answers them.
             'key' => 'approvals', 'label' => 'Approvals', 'icon' => 'shield', 'section' => 'admin', 'order' => 100,
             'route' => 'clinic.approvals.index', 'requires' => ['workspace' => ['command_center']],
-            'keywords' => ['deletion requests', 'void', 'archive', 'merge'],
+            'keywords' => ['deletion requests', 'void', 'merge'],
         ],
         [
             'key' => 'staff', 'label' => 'Staff', 'icon' => 'staff', 'section' => 'admin', 'order' => 110,
@@ -137,8 +137,23 @@ class ClinicNavigation
         $domains ??= self::DOMAINS;
         usort($domains, fn (array $a, array $b) => ($a['order'] ?? 0) <=> ($b['order'] ?? 0));
 
+        // One dashboard per job: the Command Center for whoever runs the clinic, the Front Desk for reception
+        // (the Dashboard entry opens it, and it is not listed twice). There is no staff dashboard any more, so
+        // anyone else has no Dashboard entry: their home is already in the list (the Calendar, or Billing).
+        $receptionHome = ClinicWorkspaces::receptionHome($access);
+        $commandCenter = ClinicWorkspaces::commandCenter($access);
+
         $resolved = [];
         foreach ($domains as $domain) {
+            if ($receptionHome && $domain['key'] === 'front_desk') {
+                continue;
+            }
+            if ($domain['key'] === 'dashboard' && ! $commandCenter && ! $receptionHome) {
+                continue;
+            }
+            if ($receptionHome && $domain['key'] === 'dashboard') {
+                $domain = ['route' => 'clinic.reception', 'requires' => ['workspace' => ['front_desk']], 'keywords' => [...($domain['keywords'] ?? []), 'reception', 'front desk', 'queue', 'waiting', 'check in']] + $domain;
+            }
             $route = $domain['route'] ?? null;
             $requires = $domain['requires'] ?? [];
             if (! $access->allows($route === null ? $requires : $requires + ['route' => $route])) {

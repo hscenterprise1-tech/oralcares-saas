@@ -2,6 +2,7 @@
 
 use App\BranchStatus;
 use App\ClinicMembershipStatus;
+use App\ClinicPermission;
 use App\ClinicRole;
 use App\Http\Middleware\EnsureOwnerMode;
 use App\Models\Branch;
@@ -73,7 +74,8 @@ function ownerModeEvents(): array
 it('lets the owner, who is also a doctor, enter Owner Mode with their password', function () {
     $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
 
-    actAsOwnerModeMember($owner, $this->branch)->get('/clinic/dashboard')
+    // In Doctor Mode their home is the doctor's (the Calendar), offering Owner Mode.
+    actAsOwnerModeMember($owner, $this->branch)->followingRedirects()->get('/clinic/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('clinic.staff_roles', ['Doctor'])
             ->where('clinic.owner_mode.available', true)
@@ -93,14 +95,14 @@ it('lets the owner, who is also a doctor, enter Owner Mode with their password',
 });
 
 it('refuses a wrong password, stays off, and records the failure', function () {
-    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
 
     actAsOwnerModeMember($owner, $this->branch)->post('/clinic/owner-mode', ['password' => 'wrong'])
         ->assertSessionHasErrors(['password' => 'That password is not correct.']);
 
     $this->get('/clinic/__owner-only')->assertForbidden();
     expect(ownerModeEvents())->toBe(['owner_mode.verification_failed'])
-        ->and(json_encode(SecurityAuditLog::sole()->context))->not->toContain('wrong');
+        ->and(json_encode(SecurityAuditLog::where('event', 'owner_mode.verification_failed')->sole()->context))->not->toContain('wrong');
 });
 
 it('never offers or grants Owner Mode to a staff member who is not the owner', function (ClinicRole $role) {
@@ -122,7 +124,7 @@ it('never offers or grants Owner Mode to a staff member who is not the owner', f
 ]);
 
 it('holds Owner Mode to the clinic it was entered in', function () {
-    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
     $otherClinic = Clinic::factory()->create();
     $otherBranch = Branch::factory()->create(['clinic_id' => $otherClinic->id, 'status' => BranchStatus::Active]);
     $staffThere = ClinicMembership::factory()->create([
@@ -163,13 +165,13 @@ it('cannot be aimed at another clinic through the request', function () {
 });
 
 it('lets the owner leave Owner Mode without signing out', function () {
-    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
     actAsOwnerModeMember($owner, $this->branch)->post('/clinic/owner-mode', ['password' => 'correct-horse']);
 
     $this->delete('/clinic/owner-mode')->assertRedirect();
 
     $this->get('/clinic/__owner-only')->assertForbidden();
-    $this->get('/clinic/dashboard')->assertOk()
+    $this->followingRedirects()->get('/clinic/dashboard')->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page->where('clinic.owner_mode.active', false));
     $this->assertAuthenticatedAs($owner['user']);
     expect(ownerModeEvents())->toBe(['owner_mode.activated', 'owner_mode.exited']);
@@ -177,7 +179,7 @@ it('lets the owner leave Owner Mode without signing out', function () {
 
 it('stays on while in use and expires after the idle timeout, needing the password again', function () {
     config(['security.owner_mode.idle_timeout_minutes' => 15]);
-    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
     actAsOwnerModeMember($owner, $this->branch)->post('/clinic/owner-mode', ['password' => 'correct-horse']);
 
     // Each request inside the window keeps it alive.
@@ -188,7 +190,7 @@ it('stays on while in use and expires after the idle timeout, needing the passwo
 
     $this->travel(16)->minutes();
     $this->get('/clinic/__owner-only')->assertForbidden()->assertSee(EnsureOwnerMode::REFUSAL);
-    $this->get('/clinic/dashboard')
+    $this->followingRedirects()->get('/clinic/dashboard')
         ->assertInertia(fn (AssertableInertia $page) => $page->where('clinic.owner_mode.active', false)->where('clinic.owner_mode.available', true));
 
     expect(ownerModeEvents())->toBe(['owner_mode.activated', 'owner_mode.expired']);
@@ -198,7 +200,7 @@ it('stays on while in use and expires after the idle timeout, needing the passwo
 });
 
 it('records activation with the verification method and a fresh session id', function () {
-    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
     actAsOwnerModeMember($owner, $this->branch)->get('/clinic/dashboard');
     $before = session()->getId();
 
@@ -214,4 +216,50 @@ it('records activation with the verification method and a fresh session id', fun
 it('is not open to a guest', function () {
     $this->post('/clinic/owner-mode', ['password' => 'correct-horse'])->assertRedirect('/clinic/login');
     expect(ownerModeEvents())->toBe([]);
+});
+
+it('gives an owner who does not treat patients the owner\'s privileges from sign-in, with no mode and no password', function () {
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true);
+
+    actAsOwnerModeMember($owner, $this->branch)->get('/clinic/dashboard')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('ClinicPortal/CommandCenter/Index', false)
+            ->where('clinic.owner_mode.owner', true)
+            // Nothing to enter: Owner Mode is not offered at all.
+            ->where('clinic.owner_mode.available', false));
+
+    // Owner-only work, again and again, without Owner Mode or a password prompt.
+    foreach (range(1, 3) as $visit) {
+        $this->travel(20)->minutes();
+        $this->get('/clinic/__owner-only')->assertOk()->assertSee('owner area');
+    }
+    expect(session(OwnerMode::SESSION_KEY))->toBeNull()
+        ->and(ownerModeEvents())->toBe([]);
+});
+
+it('keeps an owner who also works as a doctor in Doctor Mode until they enter Owner Mode, and back in it when they leave', function () {
+    $owner = ownerModeMember($this->clinic, $this->branch, owner: true, role: ClinicRole::Doctor);
+
+    // Doctor Mode: a doctor's home (the Calendar) and permissions, no owner-only work.
+    actAsOwnerModeMember($owner, $this->branch)->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
+    $this->get('/clinic/appointments')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('ClinicPortal/Appointments/Index', false)
+            ->where('clinic.owner_mode.available', true)
+            ->where('clinic.owner_mode.active', false)
+            ->where('clinic.permissions', fn ($permissions) => collect($permissions)->sort()->values()->all() === collect(OwnerMode::doctorModePermissions())->sort()->values()->all()));
+    $this->get('/clinic/__owner-only')->assertForbidden();
+    $this->get('/clinic/admin/employees')->assertForbidden();
+
+    // Owner Mode: the owner's home and every permission.
+    $this->post('/clinic/owner-mode', ['password' => 'correct-horse'])->assertRedirect();
+    $this->get('/clinic/dashboard')->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('ClinicPortal/CommandCenter/Index', false)
+        ->where('clinic.permissions', ClinicPermission::values()));
+    $this->get('/clinic/__owner-only')->assertOk();
+
+    // Leaving it is Doctor Mode again, on the doctor's own home.
+    $this->delete('/clinic/owner-mode')->assertRedirect('/clinic/dashboard');
+    $this->get('/clinic/__owner-only')->assertForbidden();
+    $this->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
 });

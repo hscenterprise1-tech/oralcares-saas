@@ -256,7 +256,7 @@ function Registration({ practitioners, specialties, branch, form, links }: Creat
                 />
                 {moreFields(forModule(form, specialty)).length > 0 && (
                   <div className="space-y-3 border-t border-cx-line pt-4">
-                    <p className="text-[12px] font-bold uppercase tracking-wide text-clinic-secondary">Contact &amp; details</p>
+                    <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">Contact &amp; details</p>
                     <MoreDetailsFields config={forModule(form, specialty)} data={data} setField={setField} errors={errors} idPrefix="pr" />
                   </div>
                 )}
@@ -289,7 +289,7 @@ function Registration({ practitioners, specialties, branch, form, links }: Creat
                 )}
                 {showsSafety(forModule(form, specialty)) ? (
                   <div className="space-y-3">
-                    <p className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-clinic-secondary">
+                    <p className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">
                       <ShieldAlert className="h-4 w-4" aria-hidden="true" />
                       Medical safety
                     </p>
@@ -321,8 +321,10 @@ function Section({ title, icon: Icon, className, children }: { title: string; ic
 
   return (
     <section aria-labelledby={id} className={className}>
-      <h2 id={id} className="mb-4 flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-wide text-clinic-secondary">
-        <Icon className="h-4 w-4" aria-hidden="true" />
+      <h2 id={id} className="mb-4 flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">
+        <span className="grid h-5 w-5 place-items-center rounded-md bg-gradient-to-br from-[#E3F6F2] to-[#E6F0FB] text-[#0F7C6E]" aria-hidden="true">
+          <Icon className="h-3.5 w-3.5" />
+        </span>
         {title}
       </h2>
       {children}

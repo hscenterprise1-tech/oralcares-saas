@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ReceptionIntakeDialog, type IntakeMode, type PatientIdentity } from '@/pages/Clinic/Reception/intake/ReceptionIntakeDialog';
+import { prefetchIntakeConfig } from '@/pages/Clinic/Reception/intake/useIntakeConfig';
 import { refreshLiveProps } from '../live';
 import type { ClinicContextProps } from '../types';
 
@@ -43,6 +44,16 @@ export function IntakeProvider({ clinic, children }: { clinic: ClinicContextProp
     [available, canRegister],
   );
   const api = useMemo(() => ({ available, canRegister, open }), [available, canRegister, open]);
+
+  // Read New Case / Repeat Case's settings once the page has settled, so the first opening shows its form at once.
+  useEffect(() => {
+    if (!available || branchId === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => prefetchIntakeConfig(String(branchId)), 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [available, branchId]);
 
   return (
     <IntakeContext.Provider value={api}>

@@ -122,7 +122,7 @@ class ClinicReports
 
     protected function reportPatientsNew(Clinic $clinic, array $f, int $limit): array
     {
-        $q = DB::table('patients')->where('patients.clinic_id', $clinic->id)->whereNull('patients.archived_at')
+        $q = DB::table('patients')->where('patients.clinic_id', $clinic->id)
             ->where('patients.created_at', '>=', $this->start($f))->where('patients.created_at', '<', $this->end($f))
             ->when($f['specialty'], fn (Builder $q, $s) => $q->whereExists(fn ($e) => $e->from('patient_specialties')->join('clinic_specialties', 'clinic_specialties.id', '=', 'patient_specialties.clinic_specialty_id')
                 ->whereColumn('patient_specialties.patient_id', 'patients.id')->where('clinic_specialties.specialty_key', $s)))
@@ -146,7 +146,7 @@ class ClinicReports
         $repeat = (clone $visits)->where('registration_type', 'repeat')->distinct()->count('patient_id');
         $active = (clone $visits)->distinct()->count('patient_id');
         $cutoff = CarbonImmutable::parse($f['to'])->subMonths(6)->toDateString();
-        $inactive = DB::table('patients')->where('clinic_id', $clinic->id)->whereNull('archived_at')->where('status', 'active')
+        $inactive = DB::table('patients')->where('clinic_id', $clinic->id)->where('status', 'active')
             ->whereNotExists(fn ($e) => $e->from('patient_visits')->whereColumn('patient_visits.patient_id', 'patients.id')->where('patient_visits.visit_date', '>=', $cutoff))->count();
 
         return $this->result(

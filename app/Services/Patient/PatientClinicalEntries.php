@@ -2,11 +2,13 @@
 
 namespace App\Services\Patient;
 
+use App\Models\Clinic;
 use App\Models\Patient;
 use App\Models\PatientAlert;
 use App\Models\PatientClinicalEntry;
 use App\Models\User;
 use App\Services\Clinical\ClinicalCatalogue;
+use App\Services\Reception\PatientFlowConfigService;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -40,10 +42,13 @@ class PatientClinicalEntries
      * @param  list<EntryInput>  $entries
      * @return list<array{catalogue_key: ?string, label: string, dedupe_key: string, severity: ?string, details: ?array<string, mixed>}>
      */
-    public function prepare(int $clinicId, string $kind, array $entries, string $field, string|array|null $specialtyKey = null): array
+    public function prepare(int $clinicId, string $kind, array $entries, string $field, string|array|null $specialtyKey = null, array $alreadyRecorded = [], bool $import = false): array
     {
         $this->assertEntryKind($kind);
         $items = collect($this->catalogue->effective($clinicId, $kind, $specialtyKey))->keyBy('key');
+        // A clinic that keeps conditions to its own list refuses typed names that are not on it.
+        // What the patient already has stays (`$alreadyRecorded`, dedupe keys), and history imports are never refused.
+        $catalogueOnly = ! $import && $kind === DefaultClinicalCatalogue::KIND_CONDITION && $this->conditionsFromCatalogue($clinicId);
 
         $prepared = [];
         foreach (array_values($entries) as $index => $entry) {
@@ -76,6 +81,9 @@ class PatientClinicalEntries
             // A typed name that matches an enabled item is that item.
             $match = $items->first(fn (array $item) => mb_strtolower($item['name']) === mb_strtolower($label));
             $dedupe = $match['key'] ?? mb_strtolower($label);
+            if ($catalogueOnly && $match === null && ! in_array($dedupe, $alreadyRecorded, true)) {
+                throw ValidationException::withMessages(["{$field}.{$index}" => "“{$label}” is not in this clinic's list of conditions. Choose one from the list, or ask an administrator to add it in Settings."]);
+            }
             $prepared[$dedupe] = [
                 'catalogue_key' => $match['key'] ?? null,
                 'label' => $match['name'] ?? $label,
@@ -86,6 +94,27 @@ class PatientClinicalEntries
         }
 
         return array_values($prepared);
+    }
+
+    /** Whether the clinic records conditions only from its own catalogue (Settings → Patient form → Quick Care). */
+    public function conditionsFromCatalogue(int $clinicId): bool
+    {
+        $clinic = Clinic::query()->withoutGlobalScopes()->find($clinicId);
+
+        return app(PatientFlowConfigService::class)->quickCare($clinic)['conditions_from_catalogue'];
+    }
+
+    /**
+     * The dedupe keys of a patient's active entries of one kind: what may be
+     * kept as it is even where the clinic now keeps to its catalogue.
+     *
+     * @return list<string>
+     */
+    public function activeKeys(Patient $patient, string $kind): array
+    {
+        return PatientClinicalEntry::withoutGlobalScopes()
+            ->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->where('kind', $kind)->where('status', PatientClinicalEntry::ACTIVE)->pluck('dedupe_key')->all();
     }
 
     /**
@@ -122,7 +151,7 @@ class PatientClinicalEntries
 
         $names = $this->legacyLabels($patient, $kind);
         if ($names !== []) {
-            $this->addMissing($patient, $kind, $this->prepare($patient->clinic_id, $kind, array_map(fn (string $name) => ['label' => mb_substr($name, 0, 160)], $names), $kind), 'backfill', null);
+            $this->addMissing($patient, $kind, $this->prepare($patient->clinic_id, $kind, array_map(fn (string $name) => ['label' => mb_substr($name, 0, 160)], $names), $kind, import: true), 'backfill', null);
         }
     }
 

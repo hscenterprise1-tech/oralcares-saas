@@ -130,6 +130,8 @@ test('a price is never edited: a change closes the open version, cannot start in
 });
 
 test('only the owner, in Owner Mode, changes the clinic specialties; deactivating keeps history', function () {
+    // The owner works here as a doctor too: Doctor Mode until they enter Owner Mode.
+    $this->f->doctor('Dr. Owner', $this->f->owner);
     ($this->as)(ClinicRole::ClinicAdmin)()->putJson('/clinic/admin/specialties', ['specialties' => ['dental']])->assertForbidden();
     ($this->asOwner)()->putJson('/clinic/admin/specialties', ['specialties' => ['dental']])->assertStatus(403);
     ($this->asOwnerInOwnerMode)()->putJson('/clinic/admin/specialties', ['specialties' => ['unknown-thing']])->assertUnprocessable();
