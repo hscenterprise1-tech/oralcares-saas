@@ -79,6 +79,19 @@ test('a service carries the clinic\'s own number of visits, which the dental vis
     expect(DentalConsultation::sittingsFor($plain))->toBe(['visits' => 3, 'step' => 5]);
 });
 
+test('a treatment shows each stage\'s description and time and the version\'s usual visit time, so a draft can be edited without losing them', function () {
+    $id = ($this->asOwner)()->postJson('/clinic/admin/catalog/treatments', ['specialty_key' => 'dental', 'code' => 'RCT-X', 'name' => 'RCT with crown'])->assertCreated()->json('data.id');
+    ($this->asOwner)()->postJson("/clinic/admin/catalog/treatments/{$id}/versions", [
+        'treatment_type' => 'multi_stage', 'charging_model' => 'upfront', 'default_duration_minutes' => 40,
+        'stages' => [['name' => 'Access', 'description' => 'Open and clean the canals', 'duration_minutes' => 60, 'planned_sessions' => 1]],
+    ])->assertCreated();
+
+    ($this->asOwner)()->getJson("/clinic/admin/catalog/treatments/{$id}")->assertOk()
+        ->assertJsonPath('data.versions.0.default_duration_minutes', 40)
+        ->assertJsonPath('data.versions.0.stages.0.description', 'Open and clean the canals')
+        ->assertJsonPath('data.versions.0.stages.0.duration_minutes', 60);
+});
+
 test('staff who do not manage the catalogue cannot add from the ready-made list', function () {
     [$doctor, $session] = $this->f->memberWithRole(ClinicRole::Doctor);
     $this->actingAs($doctor)->withSession($session)->postJson('/clinic/admin/catalog/procedures/library', ['codes' => ['DEN-RCT']])->assertForbidden();

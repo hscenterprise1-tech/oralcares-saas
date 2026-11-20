@@ -71,7 +71,7 @@ class CatalogPageController extends Controller
             ->orderBy('category')->orderBy('name')->limit(1000)
             ->get(['id', 'code', 'name', 'category', 'specialty_key', 'default_duration_minutes', 'is_billable', 'is_bookable', 'is_active', 'metadata'])
             ->map(fn (ClinicalProcedure $p) => [
-                'id' => $p->id, 'code' => $p->code, 'name' => $p->name, 'category' => $p->category,
+                'id' => $p->id, 'code' => $p->code, 'name' => $p->name, 'category' => $p->category, 'specialty' => $p->specialty_key,
                 'duration' => $p->default_duration_minutes, 'bookable' => (bool) $p->is_bookable, 'billable' => (bool) $p->is_billable,
                 'active' => (bool) $p->is_active, 'price' => $prices[$p->id] ?? null,
                 'usual_sittings' => DentalConsultation::sittingsOf($p->name),

@@ -78,10 +78,10 @@ class TreatmentCatalogController extends Controller
             'versions' => $versions->map(fn (CatalogTreatmentVersion $v) => [
                 'id' => $v->id, 'version' => $v->version, 'status' => $v->status, 'treatment_type' => $v->treatment_type,
                 'charging_model' => $v->charging_model, 'targets' => $v->targets(), 'planned_sessions' => $v->planned_sessions,
-                'validity_days' => $v->validity_days, 'published_at' => $v->published_at?->toIso8601String(), 'retired_at' => $v->retired_at?->toIso8601String(),
+                'validity_days' => $v->validity_days, 'default_duration_minutes' => $v->default_duration_minutes, 'published_at' => $v->published_at?->toIso8601String(), 'retired_at' => $v->retired_at?->toIso8601String(),
                 'price' => $v->charging_model === 'upfront' ? ($prices['v'.$v->id] ?? null) : null,
                 'stages' => $v->stages->map(fn (CatalogStage $s) => [
-                    'id' => $s->id, 'position' => $s->position, 'name' => $s->name, 'is_optional' => $s->is_optional, 'planned_sessions' => $s->planned_sessions,
+                    'id' => $s->id, 'position' => $s->position, 'name' => $s->name, 'description' => $s->description, 'duration_minutes' => $s->duration_minutes, 'is_optional' => $s->is_optional, 'planned_sessions' => $s->planned_sessions,
                     'price' => $v->charging_model === 'per_stage' ? ($prices['s'.$s->id] ?? null) : null,
                     'procedures' => $s->procedures->map(fn (CatalogStageProcedure $p) => [
                         'clinical_procedure_id' => $p->clinical_procedure_id, 'code' => $p->procedure?->code, 'name' => $p->procedure?->name,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { Library, Pencil, Plus, Search, Tags } from 'lucide-react';
-import { ClinicHttpError, ERROR_COPY, requestJson } from '@/clinic/http';
+import { requestJson } from '@/clinic/http';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Button } from '@/clinic/ui/Button';
 import { Checkbox, Field, Input, Select, Switch } from '@/clinic/ui/controls';
@@ -9,9 +9,12 @@ import { Modal } from '@/clinic/ui/Modal';
 import { Notice } from '@/clinic/ui/Notice';
 import { PageHeader } from '@/clinic/ui/PageHeader';
 import { EmptyState } from '@/clinic/ui/states';
+import { PillTabs } from '@/clinic/ui/Tabs';
 import { toast } from '@/clinic/ui/Toast';
 import { formatMoney } from '@/clinic/ui/visuals';
 import { cn } from '@/lib/utils';
+import { problem } from './components/api';
+import { TreatmentsTab } from './components/TreatmentsTab';
 
 interface Service {
   id: number;
@@ -23,6 +26,7 @@ interface Service {
   billable: boolean;
   active: boolean;
   price: number | null;
+  specialty: string | null;
   /** The clinic's own setting, or null when the standard for this kind of service applies. */
   sittings: { visits: number; step: number } | null;
   usual_sittings: { visits: number; step: number };
@@ -41,25 +45,15 @@ interface LibraryItem {
 
 /** `CatalogPageController::index`: the server is the contract. */
 interface Props {
-  specialties: { key: string; label: string }[];
+  specialties: { key: string; label: string; targets: { key: string; label: string }[] }[];
+  treatment_types: string[];
+  charging_models: string[];
   services: Service[];
   library: LibraryItem[];
   api: { library: string; procedures: string; treatments: string; prices: string };
 }
 
 const SURFACE = 'rounded-2xl border border-cx-line/80 bg-white shadow-cx-card';
-
-/** What the server said went wrong, in words a person can act on. */
-function problem(error: unknown): string {
-  if (error instanceof ClinicHttpError) {
-    const body = error.body as { message?: string; errors?: Record<string, string[]> } | null;
-    const first = body?.errors ? Object.values(body.errors)[0]?.[0] : undefined;
-
-    return first ?? body?.message ?? ERROR_COPY[error.kind];
-  }
-
-  return ERROR_COPY.server;
-}
 
 export default function Catalog(props: Props) {
   return (
@@ -76,7 +70,8 @@ export default function Catalog(props: Props) {
  * switched off is never offered for booking or billing, and nothing already
  * recorded for a patient changes.
  */
-function CatalogPage({ services, library, api }: Props) {
+function CatalogPage({ specialties, treatment_types, charging_models, services, library, api }: Props) {
+  const [tab, setTab] = useState<'services' | 'treatments'>('services');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState<'all' | 'on' | 'off'>('all');
@@ -121,6 +116,7 @@ function CatalogPage({ services, library, api }: Props) {
         title="Services & prices"
         description={`${onCount} of ${services.length} services switched on${unpriced > 0 ? ` · ${unpriced} without a price` : ''}`}
         actions={
+          tab !== 'services' ? undefined : (
           <>
             {library.length > 0 && (
               <Button onClick={() => setPicking(true)}>
@@ -131,8 +127,16 @@ function CatalogPage({ services, library, api }: Props) {
               <Plus className="h-4 w-4" aria-hidden="true" /> New service
             </Button>
           </>
+          )
         }
       />
+
+      <PillTabs label="Catalogue" className="mb-4" value={tab} onChange={setTab} options={[{ key: 'services', label: 'Services & prices', count: services.length }, { key: 'treatments', label: 'Treatments & stages' }]} />
+
+      {tab === 'treatments' ? (
+        <TreatmentsTab specialties={specialties} treatment_types={treatment_types} charging_models={charging_models} services={services} api={api} />
+      ) : (
+      <>
 
       {unpriced > 0 && (
         <Notice tone="warning" className="mb-4">
@@ -219,6 +223,8 @@ function CatalogPage({ services, library, api }: Props) {
             </section>
           ))}
         </div>
+      )}
+      </>
       )}
 
       {editing && <ServiceDialog service={editing === 'new' ? null : editing} categories={categories} api={api} onClose={() => setEditing(null)} onSaved={refresh} />}
