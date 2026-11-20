@@ -34,6 +34,9 @@ class ClinicFrontend
         // Follow-ups across patients (overdue, today, next 30 days, done) and the clinic's reports.
         'clinic.follow-ups.index',
         'clinic.reports.index',
+        // Time off and pay: leave requests and decisions, payroll months, salaries, advances and payslips.
+        'clinic.leave.index',
+        'clinic.payroll.index',
         'admin.settings.index',
         'admin.consents.index',
         'admin.settings.patient-form',

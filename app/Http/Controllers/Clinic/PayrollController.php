@@ -85,6 +85,7 @@ class PayrollController extends Controller
                 'open_advances' => round((float) $advances->get($employee->id, collect())->sum(fn (ClinicSalaryAdvance $a) => $a->outstanding()), 2),
             ])->values(),
             'next_month' => $today->format('Y-m'),
+            'links' => ['index' => route('clinic.payroll.index', [], false)],
             'can' => ['manage' => $request->user()->hasClinicPermission(ClinicPermission::PayrollManage)],
             'options' => ['types' => ClinicSalaryStructure::TYPES, 'methods' => ClinicExpenses::METHODS, 'line_kinds' => ClinicPayrollEntryLine::MANUAL],
         ]);

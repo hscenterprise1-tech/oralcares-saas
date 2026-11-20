@@ -112,6 +112,18 @@ class ClinicNavigation
             'keywords' => ['team', 'employees', 'doctors', 'invitations', 'shifts'],
         ],
         [
+            // Time off: staff ask for their own, whoever approves decides.
+            'key' => 'leave', 'label' => 'Leave', 'icon' => 'leave', 'section' => 'admin', 'order' => 115,
+            'route' => 'clinic.leave.index', 'requires' => ['permissions' => ['leave.request', 'leave.approve']],
+            'keywords' => ['time off', 'holiday', 'absence', 'sick', 'casual'],
+        ],
+        [
+            // Salaries, monthly pay, advances and payslips (`payroll.view`).
+            'key' => 'payroll', 'label' => 'Payroll', 'icon' => 'wallet', 'section' => 'admin', 'order' => 118,
+            'route' => 'clinic.payroll.index', 'requires' => ['permissions' => ['payroll.view']],
+            'keywords' => ['salary', 'payslip', 'pay', 'advance', 'wages'],
+        ],
+        [
             'key' => 'branches', 'label' => 'Branches', 'icon' => 'branches', 'section' => 'admin', 'order' => 120,
             'route' => 'admin.branches.index', 'requires' => ['permissions' => ['branch.manage']],
             'keywords' => ['locations', 'rooms'],
