@@ -25,6 +25,7 @@ import {
     type DentalPayload,
     type PlanItem,
 } from "../../DentalSection";
+import { LabSteps, SpecialtyPanels } from "../../DentalSpecialtyPanels";
 import { SellPackage, type Physio } from "../../PhysioSection";
 import type { Patient360Props } from "../../types";
 import { useEndpoint } from "../store";
@@ -886,6 +887,12 @@ function DentalView({ endpoint }: { endpoint: string }) {
                             </ul>
                         </Card>
                     )}
+                    <SpecialtyPanels
+                        endodontic={data.endodontic}
+                        implants={data.implants}
+                        orthodontic={data.orthodontic ?? null}
+                        visitUrl={data.open_consultation?.url ?? null}
+                    />
                     {(data.lab ?? []).length > 0 && (
                         <Card
                             title="Lab work"
@@ -906,12 +913,12 @@ function DentalView({ endpoint }: { endpoint: string }) {
                                                 tone="violet"
                                                 className="ml-1.5"
                                             >
-                                                {humanize(row.status)}
+                                                {row.status_label ?? humanize(row.status)}
                                             </Pill>
                                         )}
                                         <span className="block text-cx-text-2">
                                             {[
-                                                row.laboratory,
+                                                row.laboratory ?? row.lab,
                                                 row.due
                                                     ? `due ${day(row.due)}`
                                                     : null,
@@ -922,6 +929,10 @@ function DentalView({ endpoint }: { endpoint: string }) {
                                                 .filter(Boolean)
                                                 .join(" · ")}
                                         </span>
+                                        <LabSteps
+                                            order={row}
+                                            onChanged={() => void state.reload()}
+                                        />
                                     </li>
                                 ))}
                             </ul>

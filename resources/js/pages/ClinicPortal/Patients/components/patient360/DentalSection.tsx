@@ -11,6 +11,7 @@ import { ErrorState, PermissionState } from '@/clinic/ui/states';
 import { formatMoney, humanize } from '@/clinic/ui/visuals';
 import { ERROR_COPY, errorKind, requestJson, type ClinicHttpErrorKind } from '@/clinic/http';
 import { shortDate } from '../format';
+import { LabSteps, SpecialtyPanels, type EndoRecord, type ImplantRecordRow, type LabRow, type OrthoCaseRow } from './DentalSpecialtyPanels';
 
 /*
  * Dental (only where Dental is part of the clinic's plan — the server
@@ -115,14 +116,10 @@ export type DentalPayload = {
     date: string | null;
     preview_url: string | null;
   }[];
-  lab?: {
-    id?: number;
-    restoration?: string;
-    laboratory?: string | null;
-    status?: string;
-    due?: string | null;
-    teeth?: number[];
-  }[];
+  lab?: LabRow[];
+  endodontic?: EndoRecord[];
+  implants?: ImplantRecordRow[];
+  orthodontic?: OrthoCaseRow | null;
   periodontal?: {
     latest: {
       recorded_on?: string;
@@ -245,6 +242,7 @@ export function DentalSection({ endpoint }: { endpoint: string }) {
           </ul>
         </Panel>
       )}
+      <SpecialtyPanels endodontic={data.endodontic} implants={data.implants} orthodontic={data.orthodontic ?? null} visitUrl={data.open_consultation?.url ?? null} />
       {((data.imaging?.length ?? 0) > 0 || (data.images?.length ?? 0) > 0) && (
         <Panel title="X-rays and imaging">
           <ul className="divide-y divide-cx-line text-[13.5px]">
@@ -285,10 +283,11 @@ export function DentalSection({ endpoint }: { endpoint: string }) {
                   <span className="font-semibold text-cx-text">{order.restoration ?? 'Lab case'}</span>
                   <span className="text-cx-text-2">
                     {' '}
-                    · {[order.teeth?.length ? `Teeth ${order.teeth.join(', ')}` : null, order.laboratory, order.due ? `due ${shortDate(order.due)}` : null].filter(Boolean).join(' · ')}
+                    · {[order.teeth?.length ? `Teeth ${order.teeth.join(', ')}` : null, order.laboratory ?? order.lab, order.due ? `due ${shortDate(order.due)}` : null].filter(Boolean).join(' · ')}
                   </span>
                 </span>
-                {order.status && <Pill tone="blue">{humanize(order.status)}</Pill>}
+                {order.status && <Pill tone="blue">{order.status_label ?? humanize(order.status)}</Pill>}
+                <div className="w-full"><LabSteps order={order} onChanged={load} /></div>
               </li>
             ))}
           </ul>
