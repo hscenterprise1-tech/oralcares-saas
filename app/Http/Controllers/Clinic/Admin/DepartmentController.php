@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
+use App\Http\Controllers\Concerns\LinksInfrastructurePages;
 use App\Http\Controllers\Controller;
 use App\Models\ClinicDepartment;
 use App\Services\ClinicContext;
@@ -13,6 +14,8 @@ use Inertia\Response;
 
 class DepartmentController extends Controller
 {
+    use LinksInfrastructurePages;
+
     /**
      * Display a listing of the resource.
      */
@@ -22,7 +25,8 @@ class DepartmentController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'key', 'is_active']);
 
-        return Inertia::render('Clinic/Admin/Infrastructure/Departments', [
+        return Inertia::render('ClinicPortal/Admin/Departments', [
+            'links' => $this->links(),
             'departments' => $departments,
         ]);
     }

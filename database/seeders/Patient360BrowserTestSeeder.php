@@ -57,9 +57,11 @@ class Patient360BrowserTestSeeder extends Seeder
             ['clinic_id' => $clinic->id, 'name' => 'Main Branch'],
             Branch::factory()->make(['clinic_id' => $clinic->id, 'name' => 'Main Branch', 'is_main' => true, 'status' => BranchStatus::Active])->toArray(),
         );
+        // The organisation scope shows a member only their own organisation's rows, so the branch and the members must carry the clinic's.
+        $branch->forceFill(['organization_id' => $clinic->organization_id])->save();
 
         $member = function (string $who, ?ClinicRole $role, bool $owner = false) use ($clinic, $branch, $password): User {
-            $user = User::query()->updateOrCreate(['email' => "p360-{$who}@browser-test.test"], ['name' => 'P360 '.ucfirst($who), 'password' => $password, 'user_type' => UserType::ClinicUser]);
+            $user = User::query()->updateOrCreate(['email' => "p360-{$who}@browser-test.test"], ['name' => 'P360 '.ucfirst($who), 'password' => $password, 'user_type' => UserType::ClinicUser, 'organization_id' => $clinic->organization_id]);
             ClinicMembership::query()->withoutGlobalScopes()->updateOrCreate(
                 ['clinic_id' => $clinic->id, 'user_id' => $user->id],
                 ['is_primary_owner' => $owner, 'has_all_branches_access' => true, 'status' => ClinicMembershipStatus::Active],

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
+use App\Http\Controllers\Concerns\LinksInfrastructurePages;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ClinicRoom;
@@ -14,6 +15,8 @@ use Inertia\Response;
 
 class RoomController extends Controller
 {
+    use LinksInfrastructurePages;
+
     /**
      * Display a listing of the resource.
      */
@@ -37,7 +40,8 @@ class RoomController extends Controller
                 'is_active' => $room->is_active,
             ]);
 
-        return Inertia::render('Clinic/Admin/Infrastructure/Rooms', [
+        return Inertia::render('ClinicPortal/Admin/Rooms', [
+            'links' => $this->links(),
             'rooms' => $rooms,
             'branches' => $branches,
         ]);

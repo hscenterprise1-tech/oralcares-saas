@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Clinic\Admin;
 
 use App\BranchStatus;
 use App\Exceptions\ResourceLimitExceededException;
+use App\Http\Controllers\Concerns\LinksInfrastructurePages;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\ClinicOperatingHour;
@@ -22,6 +23,8 @@ use Inertia\Response;
 
 class BranchController extends Controller
 {
+    use LinksInfrastructurePages;
+
     /**
      * Display a listing of the resource.
      */
@@ -35,7 +38,8 @@ class BranchController extends Controller
             ->map(fn (Branch $branch) => $this->transform($branch));
         $subscription = $limits->getActiveSubscription($clinic);
 
-        return Inertia::render('Clinic/Admin/Infrastructure/Branches', [
+        return Inertia::render('ClinicPortal/Admin/Branches', [
+            'links' => $this->links(),
             'branches' => $branches,
             'branchStatuses' => BranchStatus::cases(),
             // Surfaced up front rather than only on a failed create — the

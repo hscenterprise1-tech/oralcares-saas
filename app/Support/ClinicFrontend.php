@@ -43,6 +43,10 @@ class ClinicFrontend
         'admin.employees.show',
         'admin.employees.edit',
         'admin.staff-documents.settings',
+        // Clinic layout: branches (with opening hours), departments, rooms and chairs.
+        'admin.branches.index',
+        'admin.departments.index',
+        'admin.rooms.index',
         'admin.settings.automation',
         'admin.settings.physio',
         'clinic.notifications.index',
