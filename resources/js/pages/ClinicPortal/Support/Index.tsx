@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, Plus, LifeBuoy } from 'lucide-react';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Button } from '@/clinic/ui/Button';
 import { Card } from '@/clinic/ui/Card';
@@ -30,6 +30,7 @@ export default function SupportIndex({ tickets, scope, links }: Props) {
   return (
     <ClinicPortalShell title="Support">
       <PageHeader
+        icon={LifeBuoy}
         title="Support"
         description={
           scope === 'clinic'

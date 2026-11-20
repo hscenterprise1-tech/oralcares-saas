@@ -31,7 +31,7 @@ const GROUP_TONE: Tone[] = ['blue', 'teal', 'violet', 'amber', 'mint', 'rose'];
 
 function Panel({ icon, tone, title, caption, children }: { icon: typeof Smile; tone: Tone; title: string; caption: string; children: React.ReactNode }) {
   return (
-    <section className="h-full rounded-[22px] border border-white/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-18px_rgba(30,50,110,0.28)] sm:p-6">
+    <section className="h-full rounded-2xl border border-cx-line/80 bg-white p-5 shadow-cx-card sm:p-6">
       <header className="mb-4 flex items-start gap-3">
         <IconTile icon={icon} tone={tone} />
         <div>

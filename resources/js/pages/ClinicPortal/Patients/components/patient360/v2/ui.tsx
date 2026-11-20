@@ -122,7 +122,7 @@ export function Card({
   );
 
   return (
-    <section id={id} aria-label={title} className={cn('flex min-w-0 flex-col rounded-[22px] border border-white/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-18px_rgba(30,50,110,0.28)]', className)}>
+    <section id={id} aria-label={title} className={cn('flex min-w-0 flex-col rounded-2xl border border-cx-line/80 bg-white shadow-cx-card', className)}>
       <header className="flex min-h-[60px] items-start justify-between gap-3 px-5 pt-4">
         {heading}
         {action && !expanded && <div className="shrink-0">{action}</div>}

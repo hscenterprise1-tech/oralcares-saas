@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Wallet } from 'lucide-react';
 import { Link, router } from '@inertiajs/react';
 import { BillingTabs, clean, day, FilterBar, Figure, type BillingTab } from '@/clinic/billing/BillingFrame';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
@@ -40,7 +41,7 @@ export default function BillingSummary({ summary, filters, branches, tabs, links
 
   return (
     <ClinicPortalShell title="Financial Summaries">
-      <PageHeader title="Billing" description={`What the clinic billed, collected and spent, ${range}.`} />
+      <PageHeader icon={Wallet} title="Billing" description={`What the clinic billed, collected and spent, ${range}.`} />
       <BillingTabs tabs={tabs} current="summary" />
 
       <FilterBar onApply={() => apply()} onClear={() => apply({ branch: null, from: '', to: '' } as never)} dirty={Boolean(filters.branch)}>

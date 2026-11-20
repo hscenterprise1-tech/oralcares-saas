@@ -1,4 +1,5 @@
 import { Link, router } from '@inertiajs/react';
+import { ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Card } from '@/clinic/ui/Card';
@@ -46,7 +47,7 @@ export default function OrdersIndex({ branch, tab, category, counts, categories,
   return (
     <ClinicPortalShell title="Investigations">
       <div className="w-full space-y-4">
-        <PageHeader title="Investigations" description={branch?.name} />
+        <PageHeader icon={ClipboardList} title="Investigations" description={branch?.name} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <PillTabs label="Worklist" value={tab} onChange={(key) => go({ tab: key })} options={TABS.map(([key, label]) => ({ key, label, count: counts[key] }))} />
           <select aria-label="Type" value={category ?? ''} onChange={(event) => go({ category: event.target.value || null })} className="h-10 rounded-[10px] border border-cx-line bg-white px-3 text-[13.5px]">

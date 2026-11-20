@@ -32,7 +32,7 @@ export function ZoneBar({
   onClearCase: () => void;
 }) {
   return (
-    <nav aria-label="Patient record" className="rounded-[20px] bg-white/70 p-1.5 shadow-[inset_0_0_0_1px_rgba(213,219,230,0.8)] backdrop-blur">
+    <nav aria-label="Patient record" className="rounded-2xl bg-white/70 p-1.5 shadow-[inset_0_0_0_1px_rgba(213,219,230,0.8)] backdrop-blur">
       <ul className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {zones.map((zone) => {
           const look = ZONE_LOOK[zone.key];

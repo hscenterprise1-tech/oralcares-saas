@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { Plus, Repeat } from 'lucide-react';
+import { Plus, Repeat, Wallet } from 'lucide-react';
 import { BillingTabs, clean, day, FilterBar, Figure, Pager, when, type BillingTab, type PagedList } from '@/clinic/billing/BillingFrame';
 import { useOwnerModeStepUp } from '@/clinic/ownerModeStepUp';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
@@ -110,6 +110,7 @@ export default function ExpensesIndex({ filters, summary, expenses, options: cho
   return (
     <ClinicPortalShell title="Expenses">
       <PageHeader
+        icon={Wallet}
         title="Billing"
         description="What the clinic spends: recorded, decided, then paid."
         actions={

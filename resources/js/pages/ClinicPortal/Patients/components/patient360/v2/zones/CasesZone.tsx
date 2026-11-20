@@ -63,7 +63,7 @@ function CaseDetail({ row, onStep }: { row: CaseRow; onStep: (step: Step) => voi
   const tone = MODULE_TONE[row.module] ?? 'teal';
 
   return (
-    <section aria-labelledby={`case-${row.id}-title`} className="overflow-hidden rounded-[24px] bg-white shadow-cx-card">
+    <section aria-labelledby={`case-${row.id}-title`} className="overflow-hidden rounded-2xl border border-cx-line/80 bg-white shadow-cx-card">
       <div className="relative overflow-hidden bg-gradient-to-br from-[#EEF5FF] via-[#F4F0FF] to-[#ECFBF7] px-5 py-5 sm:px-6">
         <span aria-hidden="true" className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-[#9B7BF2]/15 blur-2xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
@@ -260,7 +260,7 @@ export function CasesZone({ endpoint, treatmentEndpoint, selected, onSelect }: {
                       type="button"
                       aria-current={isCurrent ? 'true' : undefined}
                       onClick={() => onSelect(row.id)}
-                      className={cn('flex h-full w-full items-start gap-3 rounded-[20px] bg-white p-3.5 text-left shadow-cx-card transition-all', FOCUS, isCurrent ? 'ring-2 ring-[#6B48DE]/40' : 'hover:-translate-y-0.5')}
+                      className={cn('flex h-full w-full items-start gap-3 rounded-2xl bg-white p-3.5 text-left shadow-cx-card transition-all', FOCUS, isCurrent ? 'ring-2 ring-[#6B48DE]/40' : 'hover:-translate-y-0.5')}
                     >
                       <IconTile icon={Icon} tone={MODULE_TONE[row.module] ?? 'teal'} size="sm" />
                       <span className="min-w-0 flex-1">

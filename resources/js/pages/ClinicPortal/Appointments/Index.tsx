@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
-import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Search, Settings2, SlidersHorizontal, Stethoscope, X } from 'lucide-react';
+import { AlertTriangle, CalendarPlus, ChevronLeft, ChevronRight, Search, Settings2, SlidersHorizontal, Stethoscope, X, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClinic } from '@/clinic/context';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
@@ -154,6 +154,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
   return (
     <ClinicPortalShell title="Appointments">
       <PageHeader
+        icon={CalendarDays}
         title="Appointments"
         description={rangeLabel(view, range.start, range.end, date)}
         actions={
@@ -321,7 +322,7 @@ export default function AppointmentsIndex(props: CalendarProps) {
       )}
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <section aria-label="Calendar" className="min-w-0 overflow-hidden rounded-3xl border border-white/70 bg-white/[0.93] shadow-[0_1px_2px_rgba(16,24,40,0.04)] backdrop-blur-sm">
+        <section aria-label="Calendar" className="min-w-0 overflow-hidden rounded-2xl border border-cx-line/80 bg-white shadow-cx-card">
           {isPhone && view !== 'month' ? (
             <div>
               {view === 'week' && (

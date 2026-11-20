@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { Check, HelpCircle, MessageSquareReply, Undo2, X } from 'lucide-react';
+import { Check, HelpCircle, MessageSquareReply, Undo2, X, ShieldCheck } from 'lucide-react';
 import { useOwnerModeStepUp } from '@/clinic/ownerModeStepUp';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { StatusBadge } from '@/clinic/ui/badges';
@@ -109,6 +109,7 @@ export default function ApprovalsIndex({ requests, tab, counts, owner, ownerMode
   return (
     <ClinicPortalShell title="Approvals">
       <PageHeader
+        icon={ShieldCheck}
         title="Approvals"
         description={
           owner

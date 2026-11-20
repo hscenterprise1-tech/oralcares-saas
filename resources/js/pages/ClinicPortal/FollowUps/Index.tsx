@@ -65,6 +65,7 @@ function FollowUpBoard({ tab, mine, can_filter_mine: canFilterMine, counts, foll
     <div className="w-full pb-10">
       <PageHeader
         eyebrow={<p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-cx-nav-teal-strong">Patients</p>}
+        icon={CalendarClock}
         title="Follow-ups"
         description="Patients who should come back: book them, move the date, or close the follow-up."
         actions={
@@ -119,7 +120,7 @@ function FollowUpBoard({ tab, mine, can_filter_mine: canFilterMine, counts, foll
         })}
       </nav>
 
-      <section className="overflow-hidden rounded-[22px] border border-[#E6EBF1] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <section className="overflow-hidden rounded-2xl border border-cx-line/80 bg-white shadow-cx-card">
         {followUps.data.length === 0 ? (
           <div className="flex flex-col items-center px-6 py-14 text-center">
             <IconTile icon={current.icon} tone={current.tone} size="lg" />

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Wallet } from 'lucide-react';
 import { router } from '@inertiajs/react';
 import { BillDetailDialog } from '@/clinic/billing/BillDetailDialog';
 import { BillingTabs, clean, FilterBar, Figure, Pager, when, type BillingTab, type PagedList } from '@/clinic/billing/BillingFrame';
@@ -56,7 +57,7 @@ export default function BillingReversals({ reversals, totals, filters, branches,
 
   return (
     <ClinicPortalShell title="Refunds & Adjustments">
-      <PageHeader title="Billing" description="Money returned to patients, and balances conceded or written off, with who recorded each and why." />
+      <PageHeader icon={Wallet} title="Billing" description="Money returned to patients, and balances conceded or written off, with who recorded each and why." />
       <BillingTabs tabs={tabs} current="reversals" />
 
       <FilterBar onApply={() => apply()} onClear={() => { setDraft(empty); apply(empty); }} dirty={dirty}>

@@ -339,7 +339,7 @@ function EditForm({ patient, fieldConfig = {}, channels = [], links }: EditProps
         </div>
       )}
 
-      <div className="overflow-clip rounded-[22px] border border-white/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-18px_rgba(30,50,110,0.28)]">
+      <div className="overflow-clip rounded-2xl border border-cx-line/80 bg-white shadow-cx-card">
         <Group icon={UserRound} tone="blue" title="Personal">
           {text('first_name', 'First name', { isRequired: true })}
           {text('middle_name', 'Middle name', { config: 'middle_name' })}

@@ -35,7 +35,7 @@ export default function PhysioSettings(props: Props) {
 }
 
 const field = cn('h-10 w-full rounded-xl border border-[#DCE6F3] bg-white px-3 text-[13.5px] text-cx-nav-ink', FOCUS);
-const CARD = 'rounded-[22px] border border-white/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-18px_rgba(30,50,110,0.28)] sm:p-6';
+const CARD = 'rounded-2xl border border-cx-line/80 bg-white p-5 shadow-cx-card sm:p-6';
 const TONES: [string, string][] = [
   ['#F1EDFD', '#6B48DE'],
   ['#FDF3E7', '#E9821A'],

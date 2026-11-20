@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Wallet } from 'lucide-react';
 import { Link, router } from '@inertiajs/react';
 import { BillDetailDialog } from '@/clinic/billing/BillDetailDialog';
 import { BillingTabs, clean, day, FilterBar, Figure, Pager, when, type BillingTab, type PagedList } from '@/clinic/billing/BillingFrame';
@@ -73,7 +74,7 @@ export default function BillingIndex({ view, bills, collections, totals, ready, 
 
   return (
     <ClinicPortalShell title="Billing">
-      <PageHeader title="Billing" description="Bills raised at the clinic, what has been collected, and what is still due." />
+      <PageHeader icon={Wallet} title="Billing" description="Bills raised at the clinic, what has been collected, and what is still due." />
       <BillingTabs tabs={tabs} current="bills" />
 
       <PillTabs label="Show" className="mb-4" value={view} onChange={switchView} options={[{ key: 'bills', label: 'Bills' }, { key: 'collections', label: 'Collections' }]} />

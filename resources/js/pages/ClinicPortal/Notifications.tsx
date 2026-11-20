@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCheck } from 'lucide-react';
+import { CheckCheck, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useClinicShared } from '@/clinic/context';
 import { ERROR_COPY, errorKind, requestJson } from '@/clinic/http';
@@ -99,6 +99,7 @@ export default function Notifications({ links }: { links: { read: string } }) {
   return (
     <ClinicPortalShell title="Notifications">
       <PageHeader
+        icon={Bell}
         title="Notifications"
         description="Updates for you at this clinic."
         actions={

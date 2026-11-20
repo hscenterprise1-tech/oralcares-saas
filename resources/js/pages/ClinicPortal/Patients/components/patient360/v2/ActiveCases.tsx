@@ -36,7 +36,7 @@ export function ActiveCases({ cases, selected, onSelect, onOpen }: { cases: Acti
             <li key={item.id} className="w-[290px] shrink-0 snap-start">
               <div
                 className={cn(
-                  'flex h-full flex-col rounded-[20px] bg-white p-4 shadow-cx-card ring-1 ring-inset transition',
+                  'flex h-full flex-col rounded-2xl bg-white p-4 shadow-cx-card ring-1 ring-inset transition',
                   isSelected ? cn('bg-gradient-to-br ring-[#1769AA]/30', look.wash) : 'ring-transparent',
                 )}
               >

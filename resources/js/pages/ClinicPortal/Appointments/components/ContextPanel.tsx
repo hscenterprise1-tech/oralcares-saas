@@ -164,7 +164,7 @@ function slotLabel(start: string): string {
 
 function Card({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
   return (
-    <section aria-label={title} className="rounded-3xl border border-white/70 bg-white/[0.93] p-4 backdrop-blur-sm">
+    <section aria-label={title} className="rounded-2xl border border-cx-line/80 bg-white p-4 shadow-cx-card">
       <div className="mb-2.5 flex items-center justify-between gap-2">
         <h2 className="text-[14px] font-bold tracking-tight text-clinic-ink">{title}</h2>
         {aside && <span className="rounded-full bg-clinic-inset px-2 py-0.5 text-[11px] font-bold tabular-nums text-clinic-ink">{aside}</span>}
