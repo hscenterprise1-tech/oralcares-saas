@@ -39,6 +39,27 @@ return [
 
     'connections' => [
 
+        /*
+         * The scratch database `backup:verify` restores a backup into to prove it can be restored
+         * (`BACKUP_VERIFY_CONNECTION=restore_scratch`). It must be a different database from the
+         * application's: the command refuses to run against the same host and database, and empties
+         * this one first. Host, port and login default to the application's own.
+         */
+        'restore_scratch' => [
+            'driver' => 'mysql',
+            'host' => env('BACKUP_VERIFY_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('BACKUP_VERIFY_PORT', env('DB_PORT', '3306')),
+            'database' => env('BACKUP_VERIFY_DATABASE', 'oralcares_restore_scratch'),
+            'username' => env('BACKUP_VERIFY_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('BACKUP_VERIFY_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),

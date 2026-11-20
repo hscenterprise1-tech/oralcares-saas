@@ -80,3 +80,22 @@ test('Meta\'s verification challenge is answered only for OralCares\' token', fu
     $this->get('/webhooks/clinic-whatsapp?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=42')->assertOk()->assertSee('42');
     $this->get('/webhooks/clinic-whatsapp?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=42')->assertForbidden();
 });
+
+test('in production a webhook with no app secret configured is refused, never trusted', function () {
+    config(['services.meta_whatsapp.app_secret' => null]);
+    $message = ($this->sent)($this->a, $this->shared, 'wamid.P1');
+    $body = json_encode(['entry' => [['changes' => [['value' => ['metadata' => ['phone_number_id' => 'PN-SHARED'], ...($this->status)('wamid.P1', 'failed')]]]]]]);
+    $send = fn () => $this->call('POST', '/webhooks/clinic-whatsapp', [], [], [], ['CONTENT_TYPE' => 'application/json'], $body);
+
+    $this->app['env'] = 'production';
+    $send()->assertForbidden();
+    expect($message->fresh()->status)->toBe('sent');
+
+    // Local work and tests may run unverified, as before.
+    $this->app['env'] = 'testing';
+    $send()->assertOk();
+});
+
+test('a wrong signature is refused everywhere', function () {
+    $this->call('POST', '/webhooks/clinic-whatsapp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => 'sha256=bad'], '{}')->assertForbidden();
+});

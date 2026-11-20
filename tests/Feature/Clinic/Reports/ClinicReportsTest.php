@@ -222,3 +222,29 @@ test('the two revenue reports need the billing permission', function () {
 
     expect($keys)->not->toContain('finance_by_doctor')->and($keys)->not->toContain('finance_by_service')->and($keys)->not->toContain('finance_items');
 });
+
+test('a member limited to one branch reads only that branch\'s figures, whatever branch they ask for', function () {
+    $other = \App\Models\Branch::factory()->create(['clinic_id' => $this->f->clinic->id, 'name' => 'Second Branch', 'status' => \App\BranchStatus::Active]);
+    $patient = $this->f->patient('Branch', 'Wise');
+    $billing = app(BillingService::class);
+    $billing->createBill($this->f->clinic, $patient, $this->f->branch, [['description' => 'Main branch filling', 'quantity' => 1, 'unit_price' => 1000]]);
+    $billing->createBill($this->f->clinic, $patient, $other, [['description' => 'Second branch crown', 'quantity' => 1, 'unit_price' => 5000]]);
+
+    [$member, $session] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
+    $membership = \App\Models\ClinicMembership::query()->where('user_id', $member->id)->firstOrFail();
+    $membership->forceFill(['has_all_branches_access' => false])->save();
+    $membership->syncAssignedBranches(collect([$this->f->branch]));
+    $as = fn () => $this->actingAs($member)->withSession($session);
+
+    $services = fn (array $query) => collect(($this->report)('finance_by_service', $query, $as)['rows'])->pluck('service')->all();
+
+    // No branch asked, the other branch asked: both read the member's own branch only.
+    expect($services([]))->toBe(['Main branch filling'])
+        ->and($services(['branch_id' => $other->id]))->toBe(['Main branch filling']);
+
+    // They are offered only their own branch to choose from.
+    $as()->get('/clinic/reports?report=finance_by_service')->assertInertia(fn (Assert $page) => $page->has('options.branches', 1)->where('options.branches.0.id', $this->f->branch->id));
+
+    // The owner still sees the whole clinic.
+    expect(collect(($this->report)('finance_by_service')['rows'])->pluck('service')->all())->toContain('Main branch filling', 'Second branch crown');
+});

@@ -71,6 +71,9 @@ class SecurityProductionCheck extends Command
         $this->check('both', $scanner->isReal(), 'A real malware scanner is configured', 'MALWARE_SCANNER is "'.config('security.malware.driver').'": uploads are refused (production) or unscanned (elsewhere)');
         $this->check('both', ! ($scanner instanceof ClamAvScanner) || $scanner->ping(), 'The malware scanner answers', 'clamd at '.config('security.malware.clamav.host').':'.config('security.malware.clamav.port').' did not answer PING');
 
+        // Webhooks: without Meta's app secret a callback cannot be told from a forgery, so it is refused.
+        $this->check('both', filled(config('services.meta_whatsapp.app_secret')), 'WhatsApp webhook secret is set', 'META_WHATSAPP_APP_SECRET is not set: WhatsApp callbacks (delivery states and patient replies) are refused until it is');
+
         // Storage
         $this->check('both', config('filesystems.default') !== 'public', 'Default disk is not public', 'FILESYSTEM_DISK is "public": files would be web-reachable by default');
         $this->check('production', config('filesystems.disks.private.driver') === 's3' && filled(config('filesystems.disks.private.bucket')), 'Patient documents on object storage', 'PRIVATE_FILESYSTEM_DRIVER is not s3 (with PRIVATE_AWS_BUCKET): documents live on one app server\'s disk');

@@ -72,6 +72,13 @@ account. Losing it makes every backup unrecoverable.
 - **Implemented:** the pipeline, encryption, retention, restore test and
   health checks. Tests: `BackupTest` (the dump and restore steps use fakes;
   everything between them is real).
-- **Not run:** a real dump or restore. There is no MySQL client, bucket or
-  scratch database in the development environment. The first real
-  `backup:verify` in staging is the evidence that is still missing.
+- **Run once, locally (2026-11-21):** a real `backup:run` of the development
+  database followed by `backup:verify` into a scratch database passed: 306
+  tables restored and matched their manifest. It used a throw-away key, the
+  local `backups` disk and the MySQL 8.0 client binaries; the file and the
+  scratch database were deleted afterwards. The `restore_scratch` connection
+  is defined in `config/database.php` for this (it defaults to the
+  application's own host and login, with its own database name).
+- **Not run:** against staging or production: an off-server bucket, the real
+  key in the secret manager, and the weekly schedule. The first `backup:verify`
+  there is the evidence that is still missing.

@@ -70,6 +70,16 @@ class WebhookSignatureVerifier
         return $result === self::INVALID || $result === self::MISSING;
     }
 
+    /**
+     * Whether a webhook must be refused: a signature that is wrong or missing, and — wherever real messages are handled
+     * (staging, production) — a payload that cannot be checked at all because no app secret is configured. Only local
+     * work and tests may run unverified.
+     */
+    public function refuses(string $result): bool
+    {
+        return $this->rejects($result) || ($result === self::UNCONFIGURED && app()->environment(['production', 'staging']));
+    }
+
     protected function secret(): ?string
     {
         $secret = config('services.meta_whatsapp.app_secret');

@@ -36,7 +36,7 @@ class ClinicWhatsAppWebhookController extends Controller
     public function handle(Request $request): JsonResponse
     {
         $signature = $this->signatures->check($request);
-        if ($this->signatures->rejects($signature)) {
+        if ($this->signatures->refuses($signature)) {
             Log::warning('Clinic WhatsApp webhook refused: signature check failed', ['result' => $signature, 'ip' => $request->ip()]);
 
             return response()->json(['status' => 'invalid_signature'], 403);

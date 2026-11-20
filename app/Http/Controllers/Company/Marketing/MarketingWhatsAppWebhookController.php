@@ -48,14 +48,15 @@ class MarketingWhatsAppWebhookController extends Controller
          * processing a payload creates conversations, messages and contacts, so
          * anything able to reach the server could post one.
          *
-         * A bad or missing signature is refused outright. An unconfigured
-         * secret still processes — see `WebhookSignatureVerifier` — but the
-         * event is recorded as unverified rather than quietly indistinguishable
-         * from a signed one.
+         * A bad or missing signature is refused outright, and so is an
+         * unconfigured secret in staging and production
+         * (`WebhookSignatureVerifier::refuses`). Local work with no secret
+         * still processes, with the event recorded as unverified rather than
+         * quietly indistinguishable from a signed one.
          */
         $signature = $this->signatures->check($request);
 
-        if ($this->signatures->rejects($signature)) {
+        if ($this->signatures->refuses($signature)) {
             Log::warning('WhatsApp webhook refused: signature check failed', [
                 'result' => $signature,
                 'ip' => $request->ip(),
