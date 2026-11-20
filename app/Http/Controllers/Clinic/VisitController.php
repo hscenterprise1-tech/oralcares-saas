@@ -60,7 +60,8 @@ class VisitController extends Controller
             ];
         });
 
-        return Inertia::render('Clinic/Visits/Index', [
+        return Inertia::render('ClinicPortal/Visits/Index', [
+            'links' => ['patient' => route('clinic.patients.show', ['patient' => '__ID__'])],
             'visits' => $visits,
             'filters' => [
                 'date' => $date,

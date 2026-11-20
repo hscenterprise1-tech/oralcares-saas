@@ -136,7 +136,7 @@ it('opens the visits page for a role with visit.view', function () {
 
     $this->withSession($session)->get(route('clinic.visits.index'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Clinic/Visits/Index', false)->has('visits.data', 1));
+        ->assertInertia(fn ($page) => $page->component('ClinicPortal/Visits/Index', false)->has('visits.data', 1));
 });
 
 it('refuses the visits page to a role that can view patients but not visits', function () {

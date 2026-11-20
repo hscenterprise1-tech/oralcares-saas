@@ -82,6 +82,12 @@ class ClinicNavigation
             'keywords' => ['analytics', 'insights'],
         ],
         [
+            // Every visit at the branch, newest first (`visit.view`).
+            'key' => 'visits', 'label' => 'Visits', 'icon' => 'notes', 'section' => 'additional', 'order' => 65,
+            'route' => 'clinic.visits.index', 'requires' => ['permissions' => ['visit.view']],
+            'keywords' => ['visit log', 'history', 'attended', 'check in'],
+        ],
+        [
             // The follow-up worklist, on its route's own rule (`Patient360Access::canManageFollowUps`, patients module).
             'key' => 'follow_ups', 'label' => 'Follow-ups', 'icon' => 'follow-ups', 'section' => 'additional', 'order' => 70,
             'route' => 'clinic.follow-ups.index',
