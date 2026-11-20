@@ -46,7 +46,7 @@ it('shows the current branding on the settings page', function () {
     $clinic->update(['display_name' => 'Branded Dental']);
 
     $this->actingAs($user)->get(route('admin.settings.index'))->assertInertia(fn ($page) => $page
-        ->component('Clinic/Admin/Settings/Index', false)
+        ->component('ClinicPortal/Settings/General', false)
         ->where('branding.display_name', 'Branded Dental')
         ->where('branding.name', $clinic->name)
         ->where('branding.logo_url', null)

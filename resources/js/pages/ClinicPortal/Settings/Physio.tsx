@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Switch } from '@/clinic/ui/controls';
 import { BTN_PRIMARY, FOCUS, IconTile } from '../Patients/components/patient360/v2/ui';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs, type SettingsLinks } from './SettingsTabs';
 
 type Treatment = { key: string; label: string; minutes: number; price: number; active: boolean };
 type Addon = { key: string; label: string; minutes: number; price: number; active: boolean };
@@ -23,6 +23,7 @@ type Props = {
   catalogue: Catalogue;
   exercise_options: { categories: Option[]; levels: Option[] };
   links: { update: string; self: string; patient_form: string; automation: string };
+  settings_links: SettingsLinks;
 };
 
 export default function PhysioSettings(props: Props) {
@@ -52,7 +53,7 @@ const slug = (label: string) => label.toLowerCase().trim().replace(/[^a-z0-9]+/g
  * types are made of. The consultation and the desk read these; nothing is
  * priced by hand there.
  */
-function PhysioSettingsPage({ catalogue, exercise_options: options, links }: Props) {
+function PhysioSettingsPage({ catalogue, exercise_options: options, links, settings_links }: Props) {
   const { errors } = usePage<{ errors: Record<string, string> }>().props;
   const initial = useMemo(() => catalogue, [catalogue]);
   const [data, setData] = useState<Catalogue>(catalogue);
@@ -103,7 +104,7 @@ function PhysioSettingsPage({ catalogue, exercise_options: options, links }: Pro
 
   return (
     <div className="mx-auto w-full max-w-[1100px] pb-24 lg:pb-8">
-      <SettingsTabs active="physio" links={{ patient_form: links.patient_form, automation: links.automation, physio: links.self }} />
+      <SettingsTabs active="physio" links={settings_links} />
 
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>

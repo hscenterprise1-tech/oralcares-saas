@@ -11,7 +11,7 @@ import { FieldEditor } from './patient-form/FieldEditor';
 import { ListsEditor } from './patient-form/ListsEditor';
 import { Preview } from './patient-form/Preview';
 import type { FieldDefinition, PatientFormProps } from './patient-form/types';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs, type SettingsLinks } from './SettingsTabs';
 
 /**
  * Settings → Patient form: what the clinic asks when a patient is
@@ -91,7 +91,7 @@ function Settings(props: PatientFormProps) {
 
   return (
     <>
-      <SettingsTabs active="patient-form" links={{ patient_form: props.links.self, automation: props.links.automation, physio: props.links.physio }} />
+      <SettingsTabs active="patient-form" links={props.settings_links} />
       <PageHeader
         eyebrow={<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-cx-nav-teal-strong">Settings</span>}
         title="Patient form"

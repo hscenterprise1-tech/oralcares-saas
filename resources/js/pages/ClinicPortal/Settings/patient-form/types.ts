@@ -39,6 +39,7 @@ export interface PatientFormProps {
   visit_reason: FieldState;
   lists: Record<ListKind, ListItem[]>;
   links: { fields: string; template: string; quick_care: string; check_in: string; catalogue: string; automation?: string; physio?: string | null; self?: string };
+  settings_links: import('../SettingsTabs').SettingsLinks;
 }
 
 export type Screen = 'new_case' | 'full_page';

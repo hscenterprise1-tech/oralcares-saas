@@ -34,6 +34,8 @@ class ClinicFrontend
         // Follow-ups across patients (overdue, today, next 30 days, done) and the clinic's reports.
         'clinic.follow-ups.index',
         'clinic.reports.index',
+        'admin.settings.index',
+        'admin.consents.index',
         'admin.settings.patient-form',
         // Services & treatments: the clinic's own price list and treatment catalogue.
         'admin.catalog.index',

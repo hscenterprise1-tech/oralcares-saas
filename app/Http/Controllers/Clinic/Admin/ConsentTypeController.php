@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic\Admin;
 
+use App\Http\Controllers\Concerns\LinksSettingsPages;
 use App\Http\Controllers\Controller;
 use App\Models\ClinicConsentType;
 use App\Models\ConsentRecord;
@@ -23,6 +24,8 @@ use Inertia\Response;
  */
 class ConsentTypeController extends Controller
 {
+    use LinksSettingsPages;
+
     public function __construct(
         protected ClinicContext $clinicContext,
         protected ConsentTypes $types,
@@ -36,6 +39,8 @@ class ConsentTypeController extends Controller
         $given = ConsentRecord::query()->where('clinic_id', $clinic->id)->toBase()->selectRaw('consent_type, count(*) as total')->groupBy('consent_type')->pluck('total', 'consent_type');
 
         return Inertia::render('ClinicPortal/Admin/Consents', [
+            'settings_links' => $this->settingsLinks($clinic),
+            'links' => ['base' => route('admin.consents.index')],
             'types' => $this->types->all($clinic)
                 ->filter(fn (ClinicConsentType $type) => $type->specialty_key === null || in_array($type->specialty_key, $specialties, true))
                 ->map(fn (ClinicConsentType $type) => [

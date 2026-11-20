@@ -123,9 +123,9 @@ class ClinicNavigation
             'keywords' => ['treatments', 'procedures', 'prices', 'price list', 'rate list', 'catalogue', 'rct', 'implant', 'braces'],
         ],
         [
-            // Settings opens on the patient form (fields, templates, lists, safety options): the settings screen that is built.
+            // Settings opens on General (name and logo, front desk, case numbers); the other settings pages are tabs beside it.
             'key' => 'settings', 'label' => 'Settings', 'icon' => 'settings', 'section' => 'admin', 'order' => 130,
-            'route' => 'admin.settings.patient-form', 'requires' => ['permissions' => ['settings.manage']],
+            'route' => 'admin.settings.index', 'requires' => ['permissions' => ['settings.manage']],
             'keywords' => ['preferences', 'configuration', 'patient form', 'registration fields', 'address', 'allergies', 'visit reasons', 'template'],
         ],
     ];

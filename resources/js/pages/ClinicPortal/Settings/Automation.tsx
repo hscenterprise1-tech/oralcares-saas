@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Switch } from '@/clinic/ui/controls';
 import { BTN_PRIMARY, FOCUS, IconTile, Pill, type Tone } from '../Patients/components/patient360/v2/ui';
-import { SettingsTabs } from './SettingsTabs';
+import { SettingsTabs, type SettingsLinks } from './SettingsTabs';
 
 type Props = {
   patient: { auto_no_show: boolean; no_show_after_minutes: number; recall_months: number; recall_choices: number[]; staff_alerts: boolean; morning_digest: boolean; auto_assign_doctor: boolean };
@@ -16,6 +16,7 @@ type Props = {
     automations: { key: string; label: string; group: string; enabled: boolean }[];
   };
   links: { update: string; patient_form: string; self: string; physio: string | null };
+  settings_links: SettingsLinks;
 };
 
 export default function AutomationSettings(props: Props) {
@@ -48,7 +49,7 @@ function Panel({ icon, tone, title, caption, children }: { icon: typeof Smile; t
  * which WhatsApp messages go out. One Save for the page; the server checks
  * the permission and every value again.
  */
-function AutomationPage({ patient, whatsapp, links }: Props) {
+function AutomationPage({ patient, whatsapp, links, settings_links }: Props) {
   const initial = useMemo(
     () => ({
       auto_no_show: patient.auto_no_show,
@@ -83,7 +84,7 @@ function AutomationPage({ patient, whatsapp, links }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] pb-24 lg:pb-8">
-      <SettingsTabs active="automation" links={{ patient_form: links.patient_form, automation: links.self, physio: links.physio }} />
+      <SettingsTabs active="automation" links={settings_links} />
 
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Clinic\Admin;
 
 use App\ClinicRole;
+use App\Http\Controllers\Concerns\LinksSettingsPages;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Clinic\UpdateCaseNumberConfigRequest;
 use App\Models\Clinic;
@@ -37,6 +38,8 @@ use InvalidArgumentException;
 
 class SettingsController extends Controller
 {
+    use LinksSettingsPages;
+
     public function __construct(
         protected PatientFieldConfigService $fieldConfigService,
         protected CaseNumberConfigService $caseNumberConfigService,
@@ -51,7 +54,15 @@ class SettingsController extends Controller
     {
         $clinic = $context->clinic();
 
-        return Inertia::render('Clinic/Admin/Settings/Index', [
+        return Inertia::render('ClinicPortal/Settings/General', [
+            'settings_links' => $this->settingsLinks($clinic),
+            'links' => [
+                'branding' => route('admin.settings.update'),
+                'check_in' => route('admin.settings.check-in'),
+                'quick_care' => route('admin.settings.quick-care'),
+                'patient_flow' => route('admin.settings.patient-flow'),
+                'case_number' => route('admin.settings.case-number'),
+            ],
             'branding' => [
                 'display_name' => $clinic->display_name,
                 'name' => $clinic->name,
@@ -168,6 +179,7 @@ class SettingsController extends Controller
         ];
 
         return Inertia::render('ClinicPortal/Settings/PatientForm', [
+            'settings_links' => $this->settingsLinks($context->clinic()),
             'modules' => collect(app(ClinicSpecialties::class)->activeKeys($clinic))
                 ->map(fn (string $key) => ['key' => $key, 'label' => $registry->get($key)['label'] ?? $key])->values()->all(),
             'fields' => $this->fieldConfigService->definitions($clinic),
@@ -361,6 +373,7 @@ class SettingsController extends Controller
         $groups = (array) config('clinic_whatsapp.groups', []);
 
         return Inertia::render('ClinicPortal/Settings/Automation', [
+            'settings_links' => $this->settingsLinks($context->clinic()),
             'patient' => [
                 'auto_no_show' => $booking['auto_no_show'],
                 'no_show_after_minutes' => $booking['no_show_after_minutes'],
@@ -397,6 +410,7 @@ class SettingsController extends Controller
         abort_if($specialties->active($clinic, PhysioCareSummary::SPECIALTY) === null, 404);
 
         return Inertia::render('ClinicPortal/Settings/Physio', [
+            'settings_links' => $this->settingsLinks($context->clinic()),
             'catalogue' => $catalogue->resolve($clinic),
             'exercise_options' => [
                 'categories' => collect(PhysioCatalogue::EXERCISE_CATEGORIES)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),

@@ -54,13 +54,13 @@ test('the owner opens Patient form settings with every setting it saves, and no 
     $this->actingAs($receptionist)->withSession($session)->get('/clinic/admin/settings/patient-form')->assertForbidden();
 });
 
-test('Settings in the navigation opens the patient form, as a built page', function () {
+test('Settings in the navigation opens General, as a built page', function () {
     $navigation = collect(($this->asOwner)()->get('/clinic/admin/settings/patient-form')->viewData('page')['props']['clinic']['navigation'] ?? []);
     $entry = $navigation->firstWhere('key', 'settings');
 
     expect($entry)->not->toBeNull()
         ->and($entry['available'])->toBeTrue()
-        ->and($entry['href'])->toBe(route('admin.settings.patient-form', [], false));
+        ->and($entry['href'])->toBe(route('admin.settings.index', [], false));
 });
 
 // ---------------------------------------------------------------- Address
