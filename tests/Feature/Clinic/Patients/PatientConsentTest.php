@@ -79,3 +79,20 @@ test('a consent is reached only through its own patient, in its own clinic', fun
 
     expect(ConsentRecord::find($consent)->status)->toBe(ConsentRecord::GRANTED);
 });
+
+test('a consent form can be printed to sign: the clinic\'s wording, the patient, signature lines, and nothing is recorded', function () {
+    $page = ($this->as)(ClinicRole::Receptionist)()->get("{$this->url}/print")->assertOk();
+
+    $page->assertSee('Patient consent')->assertSee('Asha Rao')->assertSee('General treatment')->assertSee('Witness (clinic staff)');
+    expect(ConsentRecord::query()->where('patient_id', $this->patient->id)->count())->toBe(0)
+        ->and(SecurityAuditLog::where('event', 'patient.consent_form_printed')->exists())->toBeTrue();
+});
+
+test('one consent can be printed by its key, and an unknown key prints nothing', function () {
+    ($this->as)(ClinicRole::Receptionist)()->get("{$this->url}/print?type=communication")->assertOk()->assertSee('Communication')->assertDontSee('General treatment');
+    ($this->as)(ClinicRole::Receptionist)()->get("{$this->url}/print?type=nothing")->assertNotFound();
+});
+
+test('only a member who may manage consents prints the form', function () {
+    ($this->as)(ClinicRole::BillingStaff)()->get("{$this->url}/print")->assertForbidden();
+});

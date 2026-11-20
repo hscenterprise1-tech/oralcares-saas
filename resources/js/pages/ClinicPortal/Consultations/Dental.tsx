@@ -39,7 +39,7 @@ type Props = {
   can_edit: boolean;
   /** Set when the desk runs this visit for a dentist who has no login. */
   desk: { dentist: string } | null;
-  links: { finish: string; record: string | null; patient: string; calendar: string; today: string; checkout: string | null };
+  links: { finish: string; summary: string; record: string | null; patient: string; calendar: string; today: string; checkout: string | null };
 };
 
 /** One line of the visit's work: an item of an open plan (`id`), or a new one from the clinic's services. */
@@ -358,6 +358,7 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
                 <>
                   <div className="mt-3 flex justify-between border-t border-[#EEF2F7] pt-3 text-[15px] font-bold text-[#1D2E4A]">To pay <span>{rupee(dental.to_bill)}</span></div>
                   {links.checkout && dental.to_bill > 0 && <Link href={links.checkout} className={cn(BTN_PRIMARY, 'mt-3.5 h-12 w-full text-[15px]')}>Take payment</Link>}
+                  <a href={links.summary} target="_blank" rel="noopener" className={cn(BTN, 'mt-2.5 h-11 w-full text-[14px]')}><FileText className="h-4 w-4" aria-hidden="true" /> Print visit summary</a>
                 </>
               ) : (
                 <>

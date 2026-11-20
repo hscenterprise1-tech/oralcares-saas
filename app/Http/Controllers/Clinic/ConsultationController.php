@@ -263,6 +263,8 @@ class ConsultationController extends Controller
                 // The full record is the clinical team's; the desk has Patient 360 instead.
                 'record' => $desk ? null : route('clinic.consultations.show', $encounter).'?record=1',
                 'patient' => route('clinic.patients.show', $patient->id),
+                // What the patient takes home: the visit summary, printable.
+                'summary' => route($desk ? 'clinic.desk-dental.summary' : 'clinic.consultations.dental.summary', $encounter),
                 'calendar' => route('clinic.appointments.index'),
                 'today' => $desk ? route('clinic.reception') : route('clinic.consultations.index'),
                 'checkout' => $user->hasClinicPermission(ClinicPermission::BillingCreate) ? route('clinic.billing.checkout', $encounter) : null,
@@ -315,6 +317,39 @@ class ConsultationController extends Controller
         $response = back()->with('success', $message);
 
         return $result['booking_problem'] ? $response->withErrors(['booking' => $result['booking_problem']]) : $response;
+    }
+
+    /**
+     * The dental visit summary the patient takes home (printable): why they came, what was found, what was done today,
+     * the advice and the visits already booked. Read by the dentist's team or by the desk running the visit.
+     */
+    public function dentalSummary(ClinicalEncounter $encounter): HttpResponse
+    {
+        if (! app(DeskDental::class)->runs(request()->user(), $encounter)) {
+            $this->authorize('view', $encounter);
+        }
+        $encounter->load(['patient' => fn ($query) => $query->withoutGlobalScopes(), 'doctor:id,name', 'branch', 'diagnoses' => fn ($query) => $query->orderByDesc('is_primary')->orderBy('id')]);
+        $patient = $encounter->patient;
+        abort_unless($encounter->clinic_id === $this->clinicContext->clinic()?->id, 404);
+
+        $next = Appointment::withoutGlobalScopes()->where('clinic_id', $encounter->clinic_id)->where('patient_id', $patient->id)
+            ->where('scheduled_at', '>=', now())->whereIn('status', array_map(fn (AppointmentStatus $status) => $status->value, AppointmentStatus::checkable()))
+            ->with('practitioner:id,name')->orderBy('scheduled_at')->limit(8)->get()
+            ->map(fn ($appointment) => ['when' => ClinicClock::fromUtc($appointment->scheduled_at)->format('D, d M Y, g:i A'), 'with' => $appointment->practitioner?->name])->all();
+
+        app(SecurityAudit::class)->record('dental.visit_summary_printed', $encounter, ['patient_id' => $patient->id]);
+
+        return response()->view('clinic.dental_visit_summary_printable', [
+            'clinic' => Clinic::query()->findOrFail($encounter->clinic_id),
+            'branch' => $encounter->branch,
+            'patient' => $patient,
+            'encounter' => $encounter,
+            'dentist' => $encounter->doctor?->name,
+            'diagnoses' => $encounter->diagnoses->pluck('description')->filter()->values()->all(),
+            'done' => $encounter->procedures()->withoutGlobalScopes()->orderBy('id')->get(['name', 'details'])
+                ->map(fn ($procedure) => ['name' => $procedure->name, 'tooth' => $procedure->details['tooth_number'] ?? null])->all(),
+            'next' => $next,
+        ]);
     }
 
     /**

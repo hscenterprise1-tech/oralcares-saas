@@ -7,11 +7,16 @@ use App\Http\Controllers\Concerns\AnswersDomainErrors;
 use App\Http\Controllers\Concerns\BindsToActiveClinic;
 use App\Http\Controllers\Controller;
 use App\Models\Clinic;
+use App\Models\ClinicConsentType;
 use App\Models\ConsentRecord;
 use App\Models\Patient;
+use App\Services\ClinicContext;
 use App\Services\Patient\ConsentService;
+use App\Services\Patient\ConsentTypes;
+use App\Services\Security\SecurityAudit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 /**
@@ -45,6 +50,35 @@ class PatientConsentController extends Controller
         ]);
 
         return $this->attemptJson(fn () => ['data' => ['id' => $this->consents->capture($patient, $data, $request->user())->id]], 201);
+    }
+
+    /**
+     * A consent form to print and sign: the wording of every consent the clinic asks for now (or the one named by
+     * `type`), the patient's identity, and signature lines. Printing records nothing.
+     */
+    public function print(Request $request, Patient $patient, ConsentTypes $types): Response
+    {
+        $this->inActiveClinic($patient);
+        $this->authorize('view', $patient);
+        abort_unless($request->user()->hasClinicPermission(ClinicPermission::ConsentManage), 403);
+        $clinic = Clinic::query()->findOrFail($patient->clinic_id);
+        $only = $request->query('type');
+
+        $forms = $types->available($clinic)
+            ->when(is_string($only) && $only !== '', fn ($list) => $list->where('key', $only))
+            ->map(fn (ClinicConsentType $type) => ['label' => $type->label, 'version' => (int) $type->current_version, 'text' => (string) $types->current($type)?->text])
+            ->filter(fn (array $form) => $form['text'] !== '')
+            ->values()->all();
+        abort_if($forms === [], 404);
+
+        app(SecurityAudit::class)->record('patient.consent_form_printed', $patient, ['consents' => count($forms)]);
+
+        return response()->view('clinic.consent_form_printable', [
+            'clinic' => $clinic,
+            'branch' => app(ClinicContext::class)->workingBranch(),
+            'patient' => $patient,
+            'forms' => $forms,
+        ]);
     }
 
     public function revoke(Request $request, Patient $patient, ConsentRecord $consent): JsonResponse

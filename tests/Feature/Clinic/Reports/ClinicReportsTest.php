@@ -182,3 +182,43 @@ test('what was billed lists every bill line with its treatment and the share of 
     expect($result['rows'][0])->toMatchArray(['patient' => 'Line Items', 'item' => 'Session', 'amount' => 800.0, 'paid' => 400.0])
         ->and(collect($result['summary'])->pluck('value', 'label')['Balance'])->toEqual(400);
 });
+
+test('revenue by doctor groups the billed lines by the doctor they were billed under, with paid and balance', function () {
+    $patient = $this->f->patient('Doc', 'Wise');
+    $bill = app(BillingService::class)->createBill($this->f->clinic, $patient, $this->f->branch, [
+        ['description' => 'Root canal', 'quantity' => 1, 'unit_price' => 6000],
+        ['description' => 'Filling', 'quantity' => 1, 'unit_price' => 2000],
+    ], doctor: $this->t->physio);
+    app(PaymentService::class)->recordPayment($bill->fresh(), PaymentMethod::Cash, 4000);
+
+    $result = ($this->report)('finance_by_doctor');
+    $row = collect($result['rows'])->firstWhere('doctor', $this->t->physio->name);
+
+    expect($row)->toMatchArray(['lines' => 2, 'patients' => 1, 'billed' => 8000.0, 'paid' => 4000.0, 'balance' => 4000.0])
+        ->and(collect($result['summary'])->pluck('value', 'label')['Billed'])->toEqual(8000);
+});
+
+test('revenue by service groups the billed lines by what they were for, most revenue first', function () {
+    $patient = $this->f->patient('Service', 'Wise');
+    $bill = app(BillingService::class)->createBill($this->f->clinic, $patient, $this->f->branch, [
+        ['description' => 'Root canal', 'quantity' => 1, 'unit_price' => 6000],
+        ['description' => 'Filling', 'quantity' => 2, 'unit_price' => 1000],
+    ]);
+    app(PaymentService::class)->recordPayment($bill->fresh(), PaymentMethod::Upi, 8000);
+
+    $rows = collect(($this->report)('finance_by_service')['rows']);
+
+    expect($rows->pluck('service')->first())->toBe('Root canal')
+        ->and($rows->firstWhere('service', 'Filling'))->toMatchArray(['quantity' => 2, 'billed' => 2000.0, 'paid' => 2000.0, 'balance' => 0.0]);
+});
+
+test('the two revenue reports need the billing permission', function () {
+    [$doctor, $session] = $this->f->memberWithRole(ClinicRole::Doctor);
+    $this->f->doctor('Dr. Reports', $doctor);
+    $keys = [];
+    $this->actingAs($doctor)->withSession($session)->get('/clinic/reports')->assertOk()->assertInertia(function (Assert $page) use (&$keys) {
+        $keys = collect($page->toArray()['props']['reports'])->pluck('key')->all();
+    });
+
+    expect($keys)->not->toContain('finance_by_doctor')->and($keys)->not->toContain('finance_by_service')->and($keys)->not->toContain('finance_items');
+});

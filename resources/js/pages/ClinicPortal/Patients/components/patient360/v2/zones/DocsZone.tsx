@@ -342,7 +342,14 @@ function Consents({ endpoint }: { endpoint: string }) {
       title="Consents"
       icon={FileSignature}
       tone="amber"
-      action={state.data?.can_manage ? <button type="button" className={BTN_SM} onClick={() => setRecording(true)}>Record consent</button> : undefined}
+      action={
+        state.data?.can_manage ? (
+          <span className="flex flex-wrap gap-1.5">
+            <a href={`${endpoint}/print`} target="_blank" rel="noopener" className={BTN_SM}>Print consent form</a>
+            <button type="button" className={BTN_SM} onClick={() => setRecording(true)}>Record consent</button>
+          </span>
+        ) : undefined
+      }
     >
       {!state.data ? (
         <Pending error={state.error} onRetry={state.reload} />

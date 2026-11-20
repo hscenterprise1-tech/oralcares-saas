@@ -1363,6 +1363,7 @@ $clinicRoutes = function () {
             ->middleware(['clinic_workspace:front_desk', 'clinic_permission:dental.desk.run'])->group(function () {
                 Route::get('/', [ConsultationController::class, 'deskDental'])->name('show');
                 Route::post('/finish', [ConsultationController::class, 'finishDental'])->middleware('throttle:30,1')->name('finish');
+                Route::get('/summary', [ConsultationController::class, 'dentalSummary'])->name('summary');
             });
 
         // ==========================================
@@ -1373,6 +1374,7 @@ $clinicRoutes = function () {
         Route::prefix('consultations')->name('clinic.consultations.')->middleware('clinic_permission:clinical.view')->group(function () {
             Route::get('/', [ConsultationController::class, 'index'])->name('index');
             Route::get('/{encounter}', [ConsultationController::class, 'show'])->whereNumber('encounter')->name('show');
+            Route::get('/{encounter}/dental/summary', [ConsultationController::class, 'dentalSummary'])->whereNumber('encounter')->name('dental.summary');
 
             Route::middleware('clinic_permission:clinical.edit')->group(function () {
                 Route::post('/queue/{item}', [ConsultationController::class, 'startFromQueue'])->name('start-from-queue');
@@ -1603,6 +1605,8 @@ $clinicRoutes = function () {
 
             // Consents (X1).
             Route::get('/{patient}/consents', [PatientConsentController::class, 'index'])->name('consents.index');
+            // The consent form to print and sign (nothing is recorded by printing).
+            Route::get('/{patient}/consents/print', [PatientConsentController::class, 'print'])->middleware('clinic_permission:consent.manage')->name('consents.print');
             Route::middleware('clinic_permission:consent.manage')->group(function () {
                 Route::post('/{patient}/consents', [PatientConsentController::class, 'store'])->name('consents.store');
                 Route::post('/{patient}/consents/{consent}/revoke', [PatientConsentController::class, 'revoke'])->whereNumber('consent')->name('consents.revoke');

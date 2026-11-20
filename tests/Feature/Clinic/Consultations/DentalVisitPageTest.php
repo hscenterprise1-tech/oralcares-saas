@@ -178,3 +178,17 @@ test('once the visit is signed the specialty records can be read but not written
 
     ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}")->assertInertia(fn (Assert $page) => $page->where('dental.specialty.can_write', false));
 });
+
+test('the visit summary prints what the patient takes home: complaint, diagnosis, work done, advice', function () {
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [
+        'consultation' => ['complaint' => 'Pain, lower left', 'diagnosis' => 'Irreversible pulpitis', 'advice' => 'Avoid chewing on the left for two days.'],
+        'work' => [['procedure_id' => $this->rct->id, 'tooth' => 36, 'done' => true]],
+    ])->assertSessionHasNoErrors();
+
+    ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}/dental/summary")->assertOk()
+        ->assertSee('Dental visit summary')->assertSee('Rahul Sharma')->assertSee('Pain, lower left')->assertSee('Irreversible pulpitis')
+        ->assertSee('Root canal treatment')->assertSee('tooth 36')->assertSee('Avoid chewing on the left for two days.');
+
+    [$billing, $session] = $this->f->memberWithRole(ClinicRole::BillingStaff);
+    $this->actingAs($billing)->withSession($session)->get("/clinic/consultations/{$this->encounter->id}/dental/summary")->assertForbidden();
+});

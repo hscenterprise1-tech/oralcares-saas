@@ -62,6 +62,8 @@ class ClinicReports
             'physio_packages' => ['group' => 'Packages', 'label' => 'Packages and sessions', 'description' => 'Packages sold, sessions sold and used, utilisation, sessions left.', 'extension' => 'session_packages', 'filters' => $common],
             'physio_expiring' => ['group' => 'Packages', 'label' => 'Ending soon', 'description' => 'Active packages whose validity ends in the next 30 days.', 'extension' => 'session_packages', 'filters' => ['branch']],
             'finance_items' => ['group' => 'Billing', 'label' => 'What was billed', 'description' => 'Every line billed: patient, what it was for, the treatment, the doctor, amount, and how much of its bill is paid.', 'permission' => 'billing.view', 'filters' => [...$common, 'practitioner'], 'facets' => ['payment', 'treatment_name', 'item_type']],
+            'finance_by_doctor' => ['group' => 'Billing', 'label' => 'Revenue by doctor', 'description' => 'For each doctor: lines billed, patients, billed, discounts, paid and balance.', 'permission' => 'billing.view', 'filters' => $common],
+            'finance_by_service' => ['group' => 'Billing', 'label' => 'Revenue by service', 'description' => 'For each service or treatment billed: how often, billed, discounts, paid and balance.', 'permission' => 'billing.view', 'filters' => [...$common, 'practitioner']],
             'finance_revenue' => ['group' => 'Billing', 'label' => 'Collection by day and method', 'description' => 'Billed, discounts, collected by method, refunds, by day.', 'permission' => 'billing.view', 'filters' => $common],
             'finance_outstanding' => ['group' => 'Billing', 'label' => 'Outstanding', 'description' => 'Every open balance, oldest first, with how long it is overdue.', 'permission' => 'billing.view', 'filters' => ['branch']],
             'follow_ups' => ['group' => 'Follow-ups', 'label' => 'Follow-ups', 'description' => 'Due, completed, missed and still overdue.', 'filters' => [...$common, 'practitioner'], 'mine' => true],
@@ -587,6 +589,65 @@ class ClinicReports
                 'quantity' => (int) $r->quantity, 'discount' => round((float) $r->discount_amount, 2), 'amount' => round((float) $r->final_amount, 2), 'paid' => round((float) $r->paid, 2),
                 'bill_status' => ucfirst(str_replace('_', ' ', (string) $r->bill_status)),
             ])->all(),
+            $total > $limit,
+        );
+    }
+
+    /**
+     * Revenue by doctor: the lines billed in the period, grouped by the doctor
+     * they were billed under (the line's doctor, else the bill's). Paid is each
+     * line's share of its bill's payments, as everywhere in these reports.
+     */
+    protected function reportFinanceByDoctor(Clinic $clinic, array $f, int $limit): array
+    {
+        $rows = $this->liveItems(DB::table('patient_billing_items as i'), $clinic)
+            ->leftJoin('clinic_employees as d', 'd.id', '=', DB::raw('coalesce(i.doctor_id, b.doctor_id)'))
+            ->where('b.issued_at', '>=', $this->start($f))->where('b.issued_at', '<', $this->end($f))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('b.branch_id', $b))
+            ->groupBy('d.id', 'd.name')
+            ->selectRaw('d.id as doctor_id, d.name as doctor, count(*) as n, count(distinct b.patient_id) as patients, sum(i.final_amount) as billed, sum(i.discount_amount) as discounts, sum('.self::PAID_SHARE.') as paid')
+            ->orderByRaw('sum(i.final_amount) desc')->limit($limit + 1)->get();
+        $total = $rows->count();
+        $rows = $rows->take($limit);
+
+        return $this->result(
+            [['label' => 'Doctors', 'value' => $rows->count()], ['label' => 'Lines billed', 'value' => (int) $rows->sum('n')], ['label' => 'Billed', 'value' => round((float) $rows->sum('billed'), 2), 'format' => 'money'],
+                ['label' => 'Paid', 'value' => round((float) $rows->sum('paid'), 2), 'format' => 'money'], ['label' => 'Balance', 'value' => round(max(0, (float) $rows->sum('billed') - (float) $rows->sum('paid')), 2), 'format' => 'money']],
+            [['key' => 'doctor', 'label' => 'Doctor'], ['key' => 'lines', 'label' => 'Lines', 'format' => 'number'], ['key' => 'patients', 'label' => 'Patients', 'format' => 'number'], ['key' => 'billed', 'label' => 'Billed', 'format' => 'money'],
+                ['key' => 'discounts', 'label' => 'Discounts', 'format' => 'money'], ['key' => 'paid', 'label' => 'Paid', 'format' => 'money'], ['key' => 'balance', 'label' => 'Balance', 'format' => 'money']],
+            $rows->map(fn ($r) => [
+                'doctor' => $r->doctor ?? 'Not assigned to a doctor', 'lines' => (int) $r->n, 'patients' => (int) $r->patients, 'billed' => round((float) $r->billed, 2),
+                'discounts' => round((float) $r->discounts, 2), 'paid' => round((float) $r->paid, 2), 'balance' => round(max(0, (float) $r->billed - (float) $r->paid), 2),
+            ])->values()->all(),
+            $total > $limit,
+        );
+    }
+
+    /**
+     * Revenue by service: the lines billed in the period, grouped by what they
+     * were for (the line's description), most revenue first.
+     */
+    protected function reportFinanceByService(Clinic $clinic, array $f, int $limit): array
+    {
+        $rows = $this->liveItems(DB::table('patient_billing_items as i'), $clinic)
+            ->where('b.issued_at', '>=', $this->start($f))->where('b.issued_at', '<', $this->end($f))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('b.branch_id', $b))
+            ->when($f['practitioner_id'], fn (Builder $q, $p) => $q->whereRaw('coalesce(i.doctor_id, b.doctor_id) = ?', [$p]))
+            ->groupBy('i.description')
+            ->selectRaw('i.description as service, sum(i.quantity) as qty, count(distinct b.patient_id) as patients, sum(i.final_amount) as billed, sum(i.discount_amount) as discounts, sum('.self::PAID_SHARE.') as paid')
+            ->orderByRaw('sum(i.final_amount) desc')->limit($limit + 1)->get();
+        $total = $rows->count();
+        $rows = $rows->take($limit);
+
+        return $this->result(
+            [['label' => 'Services', 'value' => $rows->count()], ['label' => 'Billed', 'value' => round((float) $rows->sum('billed'), 2), 'format' => 'money'], ['label' => 'Paid', 'value' => round((float) $rows->sum('paid'), 2), 'format' => 'money'],
+                ['label' => 'Balance', 'value' => round(max(0, (float) $rows->sum('billed') - (float) $rows->sum('paid')), 2), 'format' => 'money']],
+            [['key' => 'service', 'label' => 'Service'], ['key' => 'quantity', 'label' => 'Done', 'format' => 'number'], ['key' => 'patients', 'label' => 'Patients', 'format' => 'number'], ['key' => 'billed', 'label' => 'Billed', 'format' => 'money'],
+                ['key' => 'discounts', 'label' => 'Discounts', 'format' => 'money'], ['key' => 'paid', 'label' => 'Paid', 'format' => 'money'], ['key' => 'balance', 'label' => 'Balance', 'format' => 'money']],
+            $rows->map(fn ($r) => [
+                'service' => $r->service ?: 'Other', 'quantity' => (int) $r->qty, 'patients' => (int) $r->patients, 'billed' => round((float) $r->billed, 2),
+                'discounts' => round((float) $r->discounts, 2), 'paid' => round((float) $r->paid, 2), 'balance' => round(max(0, (float) $r->billed - (float) $r->paid), 2),
+            ])->values()->all(),
             $total > $limit,
         );
     }

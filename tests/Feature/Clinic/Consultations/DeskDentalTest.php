@@ -110,3 +110,11 @@ test('the owner can take the desk\'s right to run dental visits away', function 
     ($this->open)($item)->assertForbidden();
     expect(ClinicalEncounter::query()->withoutGlobalScopes()->count())->toBe(0);
 });
+
+test('the desk running the visit prints the visit summary for the patient too', function () {
+    ($this->open)(($this->checkIn)($this->dentist))->assertRedirect();
+    $encounter = ClinicalEncounter::query()->withoutGlobalScopes()->sole();
+    ($this->asDesk)()->post("/clinic/front-desk/dental/{$encounter->id}/finish", ['consultation' => ['complaint' => 'Toothache', 'advice' => 'Rinse with warm salt water.'], 'work' => []])->assertSessionHasNoErrors();
+
+    ($this->asDesk)()->get("/clinic/front-desk/dental/{$encounter->id}/summary")->assertOk()->assertSee('Dr. Tooth')->assertSee('Toothache')->assertSee('Rinse with warm salt water.');
+});
