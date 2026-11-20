@@ -133,12 +133,75 @@ return [
      */
     'catalogues' => [
         'dental' => [
-            ['code' => 'DEN-CONS', 'name' => 'Dental consultation', 'category' => 'General Dentistry', 'duration' => 20, 'price' => 500],
-            ['code' => 'DEN-SCAL', 'name' => 'Scaling & polishing', 'category' => 'General Dentistry', 'duration' => 45, 'price' => 1500],
-            ['code' => 'DEN-FILL', 'name' => 'Composite filling', 'category' => 'Restorative', 'duration' => 45, 'price' => 2000],
-            ['code' => 'DEN-RCT', 'name' => 'Root canal treatment', 'category' => 'Endodontics', 'duration' => 60, 'price' => 6000],
-            ['code' => 'DEN-EXT', 'name' => 'Tooth extraction', 'category' => 'Oral Surgery', 'duration' => 30, 'price' => 1500],
+            // Diagnostics
+            ['code' => 'DEN-CONS', 'name' => 'Dental consultation', 'category' => 'Diagnostics', 'duration' => 20, 'price' => 500],
+            ['code' => 'DEN-FUP', 'name' => 'Follow-up consultation', 'category' => 'Diagnostics', 'duration' => 15, 'price' => 300],
             ['code' => 'DEN-XRAY', 'name' => 'Dental X-ray (IOPA)', 'category' => 'Diagnostics', 'duration' => 10, 'price' => 300],
+            ['code' => 'DEN-OPG', 'name' => 'OPG (panoramic X-ray)', 'category' => 'Diagnostics', 'duration' => 15, 'price' => 800],
+            ['code' => 'DEN-CBCT', 'name' => 'CBCT scan', 'category' => 'Diagnostics', 'duration' => 20, 'price' => 3500],
+            ['code' => 'DEN-CEPH', 'name' => 'Cephalogram', 'category' => 'Diagnostics', 'duration' => 15, 'price' => 800],
+            ['code' => 'DEN-PHOTO', 'name' => 'Intra-oral photographs', 'category' => 'Diagnostics', 'duration' => 10, 'price' => 300],
+            ['code' => 'DEN-STUDY', 'name' => 'Study models', 'category' => 'Diagnostics', 'duration' => 20, 'price' => 1000],
+            // Preventive
+            ['code' => 'DEN-SCAL', 'name' => 'Scaling & polishing', 'category' => 'Preventive', 'duration' => 45, 'price' => 1500],
+            ['code' => 'DEN-FLUO', 'name' => 'Fluoride application', 'category' => 'Preventive', 'duration' => 15, 'price' => 600],
+            ['code' => 'DEN-SEAL', 'name' => 'Pit & fissure sealant (per tooth)', 'category' => 'Preventive', 'duration' => 15, 'price' => 700],
+            ['code' => 'DEN-ORAL', 'name' => 'Oral hygiene instruction', 'category' => 'Preventive', 'duration' => 15, 'price' => 300],
+            // Restorative
+            ['code' => 'DEN-FILL', 'name' => 'Composite filling', 'category' => 'Restorative', 'duration' => 45, 'price' => 2000],
+            ['code' => 'DEN-GIC', 'name' => 'Glass ionomer filling', 'category' => 'Restorative', 'duration' => 30, 'price' => 1200],
+            ['code' => 'DEN-INLAY', 'name' => 'Inlay / onlay', 'category' => 'Restorative', 'duration' => 60, 'price' => 7000],
+            ['code' => 'DEN-POST', 'name' => 'Post & core build-up', 'category' => 'Restorative', 'duration' => 45, 'price' => 2500],
+            ['code' => 'DEN-DESENS', 'name' => 'Desensitisation', 'category' => 'Restorative', 'duration' => 20, 'price' => 800],
+            // Endodontics
+            ['code' => 'DEN-RCT', 'name' => 'Root canal treatment', 'category' => 'Endodontics', 'duration' => 60, 'price' => 6000],
+            ['code' => 'DEN-RCT-RE', 'name' => 'Root canal re-treatment', 'category' => 'Endodontics', 'duration' => 75, 'price' => 9000],
+            ['code' => 'DEN-PULPOT', 'name' => 'Pulpotomy', 'category' => 'Endodontics', 'duration' => 30, 'price' => 2500],
+            ['code' => 'DEN-APICO', 'name' => 'Apicoectomy', 'category' => 'Endodontics', 'duration' => 60, 'price' => 8000],
+            // Periodontics
+            ['code' => 'DEN-SRP', 'name' => 'Scaling and root planing (per quadrant)', 'category' => 'Periodontics', 'duration' => 45, 'price' => 2000],
+            ['code' => 'DEN-GING', 'name' => 'Gingivectomy / gingivoplasty', 'category' => 'Periodontics', 'duration' => 45, 'price' => 4000],
+            ['code' => 'DEN-FLAP', 'name' => 'Flap surgery (per quadrant)', 'category' => 'Periodontics', 'duration' => 60, 'price' => 8000],
+            ['code' => 'DEN-SPLINT', 'name' => 'Periodontal splinting', 'category' => 'Periodontics', 'duration' => 45, 'price' => 3500],
+            // Prosthodontics
+            ['code' => 'DEN-CRN-PFM', 'name' => 'Crown - porcelain fused to metal', 'category' => 'Prosthodontics', 'duration' => 45, 'price' => 4000],
+            ['code' => 'DEN-CRN-ZIR', 'name' => 'Crown - zirconia', 'category' => 'Prosthodontics', 'duration' => 45, 'price' => 9000],
+            ['code' => 'DEN-BRIDGE', 'name' => 'Fixed bridge (per unit)', 'category' => 'Prosthodontics', 'duration' => 45, 'price' => 5000],
+            ['code' => 'DEN-VENEER', 'name' => 'Veneer (per tooth)', 'category' => 'Prosthodontics', 'duration' => 60, 'price' => 12000],
+            ['code' => 'DEN-RPD', 'name' => 'Removable partial denture', 'category' => 'Prosthodontics', 'duration' => 45, 'price' => 8000],
+            ['code' => 'DEN-CD', 'name' => 'Complete denture (per arch)', 'category' => 'Prosthodontics', 'duration' => 45, 'price' => 12000],
+            ['code' => 'DEN-DENTREP', 'name' => 'Denture repair / reline', 'category' => 'Prosthodontics', 'duration' => 30, 'price' => 1500],
+            // Implantology
+            ['code' => 'DEN-IMP', 'name' => 'Dental implant (fixture)', 'category' => 'Implantology', 'duration' => 60, 'price' => 30000],
+            ['code' => 'DEN-IMP-CRN', 'name' => 'Implant abutment and crown', 'category' => 'Implantology', 'duration' => 45, 'price' => 15000],
+            ['code' => 'DEN-SINUS', 'name' => 'Sinus lift', 'category' => 'Implantology', 'duration' => 90, 'price' => 25000],
+            ['code' => 'DEN-BONE', 'name' => 'Bone graft', 'category' => 'Implantology', 'duration' => 60, 'price' => 15000],
+            // Oral surgery
+            ['code' => 'DEN-EXT', 'name' => 'Tooth extraction', 'category' => 'Oral Surgery', 'duration' => 30, 'price' => 1500],
+            ['code' => 'DEN-SURG', 'name' => 'Surgical extraction', 'category' => 'Oral Surgery', 'duration' => 45, 'price' => 4000],
+            ['code' => 'DEN-WISDOM', 'name' => 'Impacted wisdom tooth removal', 'category' => 'Oral Surgery', 'duration' => 60, 'price' => 7000],
+            ['code' => 'DEN-ABSC', 'name' => 'Abscess drainage', 'category' => 'Oral Surgery', 'duration' => 30, 'price' => 1500],
+            ['code' => 'DEN-BIOPSY', 'name' => 'Oral biopsy', 'category' => 'Oral Surgery', 'duration' => 30, 'price' => 3000],
+            ['code' => 'DEN-FRENEC', 'name' => 'Frenectomy', 'category' => 'Oral Surgery', 'duration' => 30, 'price' => 3500],
+            // Orthodontics
+            ['code' => 'DEN-BRACE-M', 'name' => 'Metal braces (full treatment)', 'category' => 'Orthodontics', 'duration' => 60, 'price' => 35000],
+            ['code' => 'DEN-BRACE-C', 'name' => 'Ceramic braces (full treatment)', 'category' => 'Orthodontics', 'duration' => 60, 'price' => 55000],
+            ['code' => 'DEN-ALIGN', 'name' => 'Clear aligners (full treatment)', 'category' => 'Orthodontics', 'duration' => 45, 'price' => 120000],
+            ['code' => 'DEN-RETAIN', 'name' => 'Retainer', 'category' => 'Orthodontics', 'duration' => 30, 'price' => 4000],
+            // Paediatric
+            ['code' => 'DEN-PED-FILL', 'name' => 'Paediatric filling', 'category' => 'Paediatric', 'duration' => 30, 'price' => 1200],
+            ['code' => 'DEN-PED-EXT', 'name' => 'Milk tooth extraction', 'category' => 'Paediatric', 'duration' => 20, 'price' => 800],
+            ['code' => 'DEN-PED-CRN', 'name' => 'Stainless steel crown', 'category' => 'Paediatric', 'duration' => 30, 'price' => 3000],
+            ['code' => 'DEN-SPACE', 'name' => 'Space maintainer', 'category' => 'Paediatric', 'duration' => 30, 'price' => 3000],
+            // Cosmetic
+            ['code' => 'DEN-WHITE', 'name' => 'Teeth whitening (in-office)', 'category' => 'Cosmetic', 'duration' => 60, 'price' => 8000],
+            ['code' => 'DEN-BOND', 'name' => 'Cosmetic bonding / smile correction', 'category' => 'Cosmetic', 'duration' => 60, 'price' => 6000],
+            ['code' => 'DEN-GUM-DEP', 'name' => 'Gum depigmentation', 'category' => 'Cosmetic', 'duration' => 45, 'price' => 8000],
+            // Other
+            ['code' => 'DEN-NIGHT', 'name' => 'Night guard / occlusal splint', 'category' => 'Other', 'duration' => 30, 'price' => 5000],
+            ['code' => 'DEN-TMJ', 'name' => 'TMJ therapy session', 'category' => 'Other', 'duration' => 30, 'price' => 1500],
+            ['code' => 'DEN-EMERG', 'name' => 'Emergency visit / pain relief', 'category' => 'Other', 'duration' => 20, 'price' => 800],
+            ['code' => 'DEN-LASER', 'name' => 'Laser dental procedure', 'category' => 'Other', 'duration' => 30, 'price' => 3000],
         ],
         'orthodontics' => [
             ['code' => 'ORT-CONS', 'name' => 'Orthodontic consultation', 'category' => 'Orthodontics', 'duration' => 30, 'price' => 800],

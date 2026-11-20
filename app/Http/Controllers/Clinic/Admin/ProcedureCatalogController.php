@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CatalogPriceVersion;
 use App\Models\ClinicalProcedure;
 use App\Services\ClinicContext;
+use App\Services\Treatment\ServiceLibrary;
 use App\Services\Treatment\TreatmentCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,6 +67,14 @@ class ProcedureCatalogController extends Controller
         return $this->attemptJson(fn () => ['data' => $this->present($this->catalog->saveProcedure($this->clinicContext->clinic(), null, $data, $request->user()))], 201);
     }
 
+    /** Add the picked ready-made services (and their starting prices) to the clinic's catalogue. */
+    public function importLibrary(Request $request, ServiceLibrary $library): JsonResponse
+    {
+        $data = $request->validate(['codes' => ['required', 'array', 'min:1', 'max:200'], 'codes.*' => ['string', 'max:40']]);
+
+        return $this->attemptJson(fn () => ['data' => ['added' => $library->import($this->clinicContext->clinic(), $data['codes'], $request->user())]], 201);
+    }
+
     public function update(Request $request, ClinicalProcedure $procedure): JsonResponse
     {
         $this->inActiveClinic($procedure);
@@ -117,6 +126,9 @@ class ProcedureCatalogController extends Controller
             'is_bookable' => ['nullable', 'boolean'],
             'targets' => ['nullable', 'array', 'max:5'],
             'targets.*' => ['string', 'max:30'],
+            'sittings' => ['sometimes', 'nullable', 'array'],
+            'sittings.visits' => ['required_with:sittings', 'integer', 'min:1', 'max:30'],
+            'sittings.step' => ['required_with:sittings', 'integer', 'min:1', 'max:365'],
         ]);
     }
 }

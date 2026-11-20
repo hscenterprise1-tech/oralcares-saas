@@ -1798,6 +1798,7 @@ $clinicRoutes = function () {
                 Route::get('/', [ClinicAdminCatalogPageController::class, 'index'])->name('index');
                 Route::get('procedures', [ClinicAdminProcedureCatalogController::class, 'index'])->name('procedures.index');
                 Route::post('procedures', [ClinicAdminProcedureCatalogController::class, 'store'])->name('procedures.store');
+                Route::post('procedures/library', [ClinicAdminProcedureCatalogController::class, 'importLibrary'])->name('procedures.library');
                 Route::put('procedures/{procedure}', [ClinicAdminProcedureCatalogController::class, 'update'])->whereNumber('procedure')->name('procedures.update');
                 Route::post('procedures/{procedure}/active', [ClinicAdminProcedureCatalogController::class, 'setActive'])->whereNumber('procedure')->name('procedures.active');
 

@@ -261,7 +261,7 @@ class TreatmentCatalog
      * Create or edit a procedure in the clinic's catalog. Its price is not
      * here — prices are versions (`CatalogPricing`).
      *
-     * @param  array{code: string, name: string, category?: ?string, description?: ?string, specialty_key?: ?string, default_duration_minutes?: ?int, is_billable?: bool, is_bookable?: bool, targets?: list<string>}  $data
+     * @param  array{code: string, name: string, category?: ?string, description?: ?string, specialty_key?: ?string, default_duration_minutes?: ?int, is_billable?: bool, is_bookable?: bool, targets?: list<string>, sittings?: ?array{visits: int, step: int}}  $data
      */
     public function saveProcedure(Clinic $clinic, ?ClinicalProcedure $procedure, array $data, User $by): ClinicalProcedure
     {
@@ -288,7 +288,12 @@ class TreatmentCatalog
             'default_duration_minutes' => $data['default_duration_minutes'] ?? $procedure->default_duration_minutes ?? 30,
             'is_billable' => (bool) ($data['is_billable'] ?? $procedure->is_billable ?? true),
             'is_bookable' => (bool) ($data['is_bookable'] ?? $procedure->is_bookable ?? true),
-            'metadata' => [...((array) ($procedure->metadata ?? [])), 'targets' => $targets],
+            // `sittings`: how many visits the service usually takes and the days between them; null clears the clinic's own setting.
+            'metadata' => [
+                ...((array) ($procedure->metadata ?? [])),
+                'targets' => $targets,
+                ...(array_key_exists('sittings', $data) ? ['sittings' => $data['sittings']] : []),
+            ],
         ])->save();
         $this->audit->record($created ? 'catalog.procedure.created' : 'catalog.procedure.updated', $procedure, ['code' => $procedure->code, 'changed' => array_keys($procedure->getChanges())], ['clinic_id' => $clinic->id]);
 

@@ -117,6 +117,12 @@ class ClinicNavigation
             'keywords' => ['locations', 'rooms'],
         ],
         [
+            // The clinic's services and treatments: the owner switches on what the clinic offers and prices it.
+            'key' => 'services', 'label' => 'Services', 'icon' => 'services', 'section' => 'admin', 'order' => 125,
+            'route' => 'admin.catalog.index', 'requires' => ['permissions' => ['catalog.manage']],
+            'keywords' => ['treatments', 'procedures', 'prices', 'price list', 'rate list', 'catalogue', 'rct', 'implant', 'braces'],
+        ],
+        [
             // Settings opens on the patient form (fields, templates, lists, safety options): the settings screen that is built.
             'key' => 'settings', 'label' => 'Settings', 'icon' => 'settings', 'section' => 'admin', 'order' => 130,
             'route' => 'admin.settings.patient-form', 'requires' => ['permissions' => ['settings.manage']],

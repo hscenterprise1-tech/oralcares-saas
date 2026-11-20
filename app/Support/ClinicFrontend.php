@@ -35,6 +35,14 @@ class ClinicFrontend
         'clinic.follow-ups.index',
         'clinic.reports.index',
         'admin.settings.patient-form',
+        // Services & treatments: the clinic's own price list and treatment catalogue.
+        'admin.catalog.index',
+        // Staff: the team list, one person's profile, add/edit, and the document checklist.
+        'admin.employees.index',
+        'admin.employees.create',
+        'admin.employees.show',
+        'admin.employees.edit',
+        'admin.staff-documents.settings',
         'admin.settings.automation',
         'admin.settings.physio',
         'clinic.notifications.index',

@@ -93,6 +93,11 @@ class DentalConsultation
             ->whereIn('status', [TreatmentPlan::PROPOSED, TreatmentPlan::ACCEPTED, TreatmentPlan::ACTIVE])
             ->with(['records' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')])->latest('id')->limit(10)->get();
 
+        // Services whose visits the clinic has set itself, by name (a plan item carries the name it was planned under).
+        $ownSittings = ClinicalProcedure::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereNotNull('metadata')->get(['id', 'name', 'metadata'])
+            ->filter(fn (ClinicalProcedure $service) => isset($service->metadata['sittings']))
+            ->mapWithKeys(fn (ClinicalProcedure $service) => [strtolower(trim($service->name)) => self::sittingsFor($service)])->all();
+
         return [
             'consultation' => [
                 'complaint' => $encounter->chief_complaint,
@@ -115,7 +120,7 @@ class DentalConsultation
                     ->map(fn (TreatmentRecord $item) => [
                         'id' => $item->id, 'description' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null,
                         'surfaces' => $item->surfaces ?? [], 'price' => $item->price !== null ? (float) $item->price : null,
-                        ...self::sittingsOf($item->description),
+                        ...($ownSittings[strtolower(trim((string) $item->description))] ?? self::sittingsOf($item->description)),
                     ])->values()->all(),
             ])->filter(fn (array $plan) => $plan['items'] !== [])->values()->all(),
             // What this visit has recorded so far (done today), so a reload shows the work.
@@ -250,8 +255,23 @@ class DentalConsultation
             ->map(fn (ClinicalProcedure $service) => [
                 'id' => $service->id, 'code' => $service->code, 'name' => $service->name, 'category' => $service->category,
                 'price' => $this->catalogue->effectivePrice($clinic->id, $service, $branch->id),
-                ...self::sittingsOf($service->name),
+                ...self::sittingsFor($service),
             ])->values()->all();
+    }
+
+    /**
+     * The visits a service usually takes: the clinic's own setting on the service when it has one,
+     * else the standard hint for its name.
+     *
+     * @return array{visits: int, step: int}
+     */
+    public static function sittingsFor(ClinicalProcedure $service): array
+    {
+        $own = $service->metadata['sittings'] ?? null;
+
+        return is_array($own) && isset($own['visits'], $own['step'])
+            ? ['visits' => (int) $own['visits'], 'step' => (int) $own['step']]
+            : self::sittingsOf($service->name);
     }
 
     /** @return list<array{id: int, date: ?string, doctor: ?string, complaint: ?string, work: list<string>}> */
