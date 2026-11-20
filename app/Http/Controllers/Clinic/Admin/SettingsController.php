@@ -12,6 +12,7 @@ use App\Models\ClinicWhatsAppSettings;
 use App\Services\Appointments\AppointmentSettingsService;
 use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\ClinicContext;
+use App\Services\Onboarding\Sections\BillingReceptionSection;
 use App\Services\Patient\CaseNumberConfigService;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\ClinicWorkAlerts;
@@ -20,6 +21,7 @@ use App\Services\PatientFieldConfigService;
 use App\Services\Physio\PhysioCareSummary;
 use App\Services\Physio\PhysioCatalogue;
 use App\Services\Reception\PatientFlowConfigService;
+use App\Services\Security\SecurityAudit;
 use App\Services\WhatsApp\ClinicWhatsApp;
 use App\Support\ClinicAccess\ClinicModules;
 use App\Support\Clinical\DefaultClinicalCatalogue;
@@ -62,7 +64,10 @@ class SettingsController extends Controller
                 'quick_care' => route('admin.settings.quick-care'),
                 'patient_flow' => route('admin.settings.patient-flow'),
                 'case_number' => route('admin.settings.case-number'),
+                'billing' => route('admin.settings.billing'),
             ],
+            // How the desk bills: tax, accepted payment methods, the registration fee and the receipt footer (`clinics.billing_config`).
+            'billing' => $this->billingSettings($clinic),
             'branding' => [
                 'display_name' => $clinic->display_name,
                 'name' => $clinic->name,
@@ -541,6 +546,55 @@ class SettingsController extends Controller
         $this->caseNumberConfigService->update($context->clinic(), $request->validated(), $request->user());
 
         return back()->with('success', 'Case number format saved.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function billingSettings(Clinic $clinic): array
+    {
+        $stored = (array) ($clinic->billing_config ?? []);
+
+        return [
+            'tax_mode' => in_array($stored['tax_mode'] ?? null, BillingReceptionSection::TAX_MODES, true) ? $stored['tax_mode'] : 'none',
+            'tax_percent' => (float) ($stored['tax_percent'] ?? 0),
+            'payment_methods' => array_values((array) ($stored['payment_methods'] ?? BillingReceptionSection::DEFAULTS['payment_methods'])),
+            'registration_fee' => isset($stored['registration_fee']) ? (float) $stored['registration_fee'] : null,
+            'receipt_footer' => $stored['receipt_footer'] ?? null,
+            'options' => ['tax_modes' => BillingReceptionSection::TAX_MODES, 'payment_methods' => array_values((array) config('clinic_onboarding.payment_methods'))],
+        ];
+    }
+
+    /**
+     * How the desk bills: the tax the clinic charges (none, included in the prices, or added on top), the payment methods
+     * it accepts, the registration fee and the receipt footer. A change applies to bills made from now on.
+     */
+    public function updateBilling(Request $request, ClinicContext $context): RedirectResponse
+    {
+        $clinic = $context->clinic();
+        $data = $request->validate([
+            'tax_mode' => ['required', Rule::in(BillingReceptionSection::TAX_MODES)],
+            'tax_percent' => ['required', 'numeric', 'min:0', 'max:28'],
+            'payment_methods' => ['required', 'array', 'min:1'],
+            'payment_methods.*' => ['distinct', Rule::in((array) config('clinic_onboarding.payment_methods'))],
+            'registration_fee' => ['nullable', 'numeric', 'min:0', 'max:100000'],
+            'receipt_footer' => ['nullable', 'string', 'max:300'],
+        ]);
+        $before = $this->billingSettings($clinic);
+
+        $clinic->update(['billing_config' => [
+            ...(array) ($clinic->billing_config ?? []),
+            'tax_mode' => $data['tax_mode'],
+            'tax_percent' => $data['tax_mode'] === 'none' ? 0 : (float) $data['tax_percent'],
+            'payment_methods' => array_values($data['payment_methods']),
+            'registration_fee' => isset($data['registration_fee']) ? (float) $data['registration_fee'] : null,
+            'receipt_footer' => $data['receipt_footer'] ?? null,
+        ]]);
+        app(SecurityAudit::class)->record('settings.billing_updated', $clinic, [
+            'tax_mode' => [$before['tax_mode'], $data['tax_mode']], 'tax_percent' => [$before['tax_percent'], $data['tax_mode'] === 'none' ? 0 : (float) $data['tax_percent']],
+        ], ['clinic_id' => $clinic->id]);
+
+        return back()->with('success', 'Billing settings saved. They apply to bills made from now on.');
     }
 
     /**

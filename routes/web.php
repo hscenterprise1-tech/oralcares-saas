@@ -1857,6 +1857,7 @@ $clinicRoutes = function () {
                 Route::post('settings/catalogue/{kind}', [ClinicAdminSettingsController::class, 'addCatalogueItem'])->name('settings.catalogue.store');
                 Route::put('settings/catalogue/{kind}/{key}', [ClinicAdminSettingsController::class, 'configureCatalogueItem'])->name('settings.catalogue.update');
                 Route::put('settings/case-number', [ClinicAdminSettingsController::class, 'updateCaseNumber'])->name('settings.case-number');
+                Route::put('settings/billing', [ClinicAdminSettingsController::class, 'updateBilling'])->name('settings.billing');
                 // The owner's automation: missed appointments, dental recall and the WhatsApp messages patients get.
                 Route::get('settings/automation', [ClinicAdminSettingsController::class, 'automation'])->name('settings.automation');
                 Route::put('settings/automation', [ClinicAdminSettingsController::class, 'updateAutomation'])->name('settings.automation.update');

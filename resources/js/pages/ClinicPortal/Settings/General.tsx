@@ -3,7 +3,7 @@ import { router, usePage } from '@inertiajs/react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Button } from '@/clinic/ui/Button';
-import { Checkbox, Field, Input, Select, Switch } from '@/clinic/ui/controls';
+import { Checkbox, Field, Input, Select, Switch, Textarea } from '@/clinic/ui/controls';
 import { Notice } from '@/clinic/ui/Notice';
 import { PageHeader } from '@/clinic/ui/PageHeader';
 import { humanize } from '@/clinic/ui/visuals';
@@ -24,7 +24,15 @@ interface CaseFormat {
 /** `SettingsController::index`: the server is the contract. */
 interface Props {
   settings_links: SettingsLinks;
-  links: { branding: string; check_in: string; quick_care: string; patient_flow: string; case_number: string };
+  links: { branding: string; check_in: string; quick_care: string; patient_flow: string; case_number: string; billing: string };
+  billing: {
+    tax_mode: 'none' | 'inclusive' | 'exclusive';
+    tax_percent: number;
+    payment_methods: string[];
+    registration_fee: number | null;
+    receipt_footer: string | null;
+    options: { tax_modes: string[]; payment_methods: string[] };
+  };
   branding: { display_name: string | null; name: string; logo_url: string | null };
   invoiceBranding: { legal_name: string | null; use_clinic_logo_for_invoice: boolean; invoice_logo_url: string | null; has_own_invoice_logo: boolean };
   patientFlow: { rooms_enabled: boolean };
@@ -83,6 +91,7 @@ function GeneralPage(props: Props) {
       <div className="space-y-4">
         <BrandingSection {...props} />
         <CheckInSection {...props} />
+        <BillingSection {...props} />
         <QuickCareSection {...props} />
         <CaseNumberSection {...props} />
       </div>
@@ -226,6 +235,57 @@ function QuickCareSection({ intake, links }: Props) {
           )}
         </fieldset>
       )}
+    </Section>
+  );
+}
+
+const TAX_LABEL: Record<string, string> = { none: 'No tax', exclusive: 'Tax added on top of the price', inclusive: 'Tax already in the price' };
+
+function BillingSection({ billing, links }: Props) {
+  const { errors } = usePage<{ errors: Record<string, string> }>().props;
+  const initial = { tax_mode: billing.tax_mode, tax_percent: String(billing.tax_percent), payment_methods: billing.payment_methods, registration_fee: billing.registration_fee != null ? String(billing.registration_fee) : '', receipt_footer: billing.receipt_footer ?? '' };
+  const [f, setF] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const dirty = JSON.stringify(f) !== JSON.stringify(initial);
+  const flip = (method: string, on: boolean) => setF((cur) => ({ ...cur, payment_methods: on ? [...cur.payment_methods, method] : cur.payment_methods.filter((m) => m !== method) }));
+
+  return (
+    <Section
+      title="Billing and tax"
+      hint="How bills are made at the desk. A change applies to bills made from now on; bills already made keep their tax."
+      saving={saving}
+      dirty={dirty}
+      onSave={() =>
+        router.put(links.billing, { ...f, tax_percent: f.tax_mode === 'none' ? 0 : Number(f.tax_percent), registration_fee: f.registration_fee === '' ? null : Number(f.registration_fee), receipt_footer: f.receipt_footer || null } as never, {
+          preserveScroll: true,
+          onStart: () => setSaving(true),
+          onFinish: () => setSaving(false),
+        })
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Tax on bills" htmlFor="bl-mode" error={errors.tax_mode}>
+          <Select id="bl-mode" value={f.tax_mode} onChange={(e) => setF({ ...f, tax_mode: e.target.value as typeof f.tax_mode })} options={billing.options.tax_modes.map((m) => ({ value: m, label: TAX_LABEL[m] ?? humanize(m) }))} />
+        </Field>
+        {f.tax_mode !== 'none' && (
+          <Field label="Tax rate (%)" htmlFor="bl-percent" error={errors.tax_percent} hint="GST: the bill prints as a tax invoice with CGST and SGST. Set your GSTIN on the branch.">
+            <Input id="bl-percent" type="number" min={0} max={28} step="0.5" value={f.tax_percent} onChange={(e) => setF({ ...f, tax_percent: e.target.value })} />
+          </Field>
+        )}
+        <Field label="Registration fee (₹)" htmlFor="bl-reg" error={errors.registration_fee} hint="Optional. Charged for a new patient.">
+          <Input id="bl-reg" type="number" min={0} value={f.registration_fee} onChange={(e) => setF({ ...f, registration_fee: e.target.value })} />
+        </Field>
+      </div>
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-[12px] font-semibold text-[#173B60]">Payments accepted at the desk</legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {billing.options.payment_methods.map((m) => <Checkbox key={m} checked={f.payment_methods.includes(m)} onCheckedChange={(on) => flip(m, on)} label={m === 'upi' ? 'UPI' : humanize(m)} />)}
+        </div>
+        {errors.payment_methods && <p role="alert" className="mt-1.5 text-[12px] font-medium text-[#B42318]">{errors.payment_methods}</p>}
+      </fieldset>
+      <Field label="Line at the bottom of every bill" htmlFor="bl-footer" className="mt-5" error={errors.receipt_footer}>
+        <Textarea id="bl-footer" value={f.receipt_footer} maxLength={300} onChange={(e) => setF({ ...f, receipt_footer: e.target.value })} placeholder="e.g. Thank you for visiting. Get well soon." />
+      </Field>
     </Section>
   );
 }

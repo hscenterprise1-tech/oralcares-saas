@@ -4,13 +4,23 @@
     $money = fn ($value) => '₹'.number_format((float) $value, 2);
     $branchAddress = $branch ? collect([$branch->address_line1, $branch->address_line2, $branch->city, $branch->state, $branch->pincode])->filter()->implode(', ') : null;
     $cancelled = $bill->status === \App\BillingStatus::Cancelled;
+    // A bill that carries tax is a tax invoice: GSTIN, the tax by rate (CGST and SGST, within the state) and the amount in words.
+    $taxed = (float) $bill->tax_amount > 0;
+    $gstin = $branch?->gstin ?: null;
+    $legalName = $clinic->legal_name ?: $clinic->name;
+    $logo = $clinic->use_clinic_logo_for_invoice ? $clinic->logo_url : ($clinic->invoice_logo_url ?: $clinic->logo_url);
+    $byRate = $taxed
+        ? $bill->items->filter(fn ($item) => (float) $item->tax_amount > 0)->groupBy(fn ($item) => number_format((float) $item->tax_rate, 2, '.', ''))
+            ->map(fn ($items, $rate) => ['rate' => (float) $rate, 'taxable' => round($items->sum(fn ($item) => (float) $item->final_amount - (float) $item->tax_amount), 2), 'tax' => round($items->sum(fn ($item) => (float) $item->tax_amount), 2)])
+            ->sortBy('rate')->values()
+        : collect();
 @endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bill {{ $bill->billing_number }}</title>
+    <title>{{ $taxed ? 'Tax invoice' : 'Bill' }} {{ $bill->billing_number }}</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; color: #101828; font-size: 12px; line-height: 1.45; margin: 0; background: #f2f4f7; }
@@ -25,6 +35,12 @@
         .lines th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #475467; border-bottom: 1px solid #d0d5dd; padding: 6px 4px; }
         .lines td { padding: 7px 4px; border-bottom: 1px solid #eaecf0; }
         .totals td { padding: 3px 4px; }
+        .gst th { text-align: right; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #475467; border-bottom: 1px solid #d0d5dd; padding: 5px 4px; }
+        .gst th:first-child, .gst td:first-child { text-align: left; }
+        .gst td { padding: 5px 4px; text-align: right; border-bottom: 1px solid #eaecf0; }
+        .words { margin-top: 12px; font-size: 11.5px; }
+        .sign { margin-top: 34px; text-align: right; font-size: 10.5px; color: #475467; }
+        .sign div { margin-top: 28px; }
         .void { position: absolute; top: 35%; left: 0; right: 0; text-align: center; font-size: 60px; font-weight: 700; color: rgba(217, 45, 32, 0.16); transform: rotate(-18deg); }
         @media print { body { background: #fff; } .page { margin: 0; max-width: none; } .no-print { display: none; } }
     </style>
@@ -36,13 +52,15 @@
     <table>
         <tr>
             <td>
-                <div style="font-size:17px;font-weight:700">{{ $clinic->name }}</div>
+                @if ($logo)<img src="{{ $logo }}" alt="" style="height:40px;margin-bottom:6px;display:block">@endif
+                <div style="font-size:17px;font-weight:700">{{ $legalName }}</div>
                 @if ($branch && $branch->name !== $clinic->name)<div>{{ $branch->name }}</div>@endif
                 @if ($branchAddress)<div class="muted">{{ $branchAddress }}</div>@endif
                 @if ($branch?->phone || $clinic->contact_phone)<div class="muted">Phone: {{ $branch?->phone ?: $clinic->contact_phone }}</div>@endif
+                @if ($gstin)<div class="muted">GSTIN: <strong>{{ $gstin }}</strong></div>@endif
             </td>
             <td class="right">
-                <div style="font-size:15px;font-weight:700">BILL</div>
+                <div style="font-size:15px;font-weight:700">{{ $taxed ? 'TAX INVOICE' : 'BILL' }}</div>
                 <div><strong>{{ $bill->billing_number }}</strong></div>
                 <div class="muted">{{ $issuedOn->format('d M Y, h:i A') }}</div>
             </td>
@@ -82,6 +100,28 @@
         <tr><td><strong>Balance due</strong></td><td class="right"><strong>{{ $money($bill->outstanding_balance) }}</strong></td></tr>
     </table>
 
+    @if ($taxed && $byRate->isNotEmpty())
+        <div style="margin-top:14px"><span class="label">Tax summary</span></div>
+        <table class="gst" style="margin-top:4px">
+            <thead><tr><th>Rate</th><th>Taxable value</th><th>CGST</th><th>SGST</th><th>Total tax</th></tr></thead>
+            <tbody>
+            @foreach ($byRate as $row)
+                <tr>
+                    <td>{{ rtrim(rtrim(number_format($row['rate'], 2), '0'), '.') }}%</td>
+                    <td>{{ $money($row['taxable']) }}</td>
+                    <td>{{ $money($row['tax'] / 2) }} <span class="muted">({{ rtrim(rtrim(number_format($row['rate'] / 2, 2), '0'), '.') }}%)</span></td>
+                    <td>{{ $money($row['tax'] / 2) }} <span class="muted">({{ rtrim(rtrim(number_format($row['rate'] / 2, 2), '0'), '.') }}%)</span></td>
+                    <td>{{ $money($row['tax']) }}</td>
+                </tr>
+            @endforeach
+            </tbody>
+        </table>
+    @endif
+
+    @if ($taxed)
+        <div class="words"><span class="label">Amount in words</span><br>{{ \App\Support\AmountInWords::rupees($bill->final_amount) }}</div>
+    @endif
+
     @if ($bill->payments->isNotEmpty())
         <div style="margin-top:16px"><span class="label">Payments received</span></div>
         <table class="lines">
@@ -104,6 +144,9 @@
             @endforeach
         </table>
     @endif
+
+    @if (filled($clinic->billing_config['receipt_footer'] ?? null))<div class="muted" style="margin-top:14px;font-size:11px">{{ $clinic->billing_config['receipt_footer'] }}</div>@endif
+    <div class="sign">For {{ $legalName }}<div>Authorised signatory</div></div>
 </div>
 </body>
 </html>
