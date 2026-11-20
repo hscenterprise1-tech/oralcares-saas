@@ -159,7 +159,7 @@ it('builds navigation from permissions: an admin gets the clinic section, a rece
 
     expect($admin['navigation'])->toContain('staff', 'settings')
         // Billing too: the desk runs billing in full since 2026-11-05.
-        ->and($receptionist['navigation'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
+        ->and($receptionist['navigation'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'visits', 'follow_ups', 'notifications', 'support', 'leave']);
 });
 
 it('leaves out a module the user has no permission for', function () {

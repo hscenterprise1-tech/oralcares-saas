@@ -69,6 +69,7 @@ use App\Services\Security\Malware\FakeMalwareScanner;
 use App\Services\Security\Malware\MalwareScannerVirusAdapter;
 use App\Services\Security\Malware\UnconfiguredScanner;
 use App\Services\Security\SecurityAudit;
+use App\Services\Staff\ClinicRolePermissions;
 use App\Shared\Search\Observers\SearchIndexObserver;
 use App\Support\ClinicPortalErrors;
 use App\Support\CrmPermissions;
@@ -99,6 +100,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(ClinicContext::class);
         // Which specialty products the clinic bought, read once per request or job.
         $this->app->scoped(SpecialtyEntitlements::class);
+        // What a clinic's owner changed about each role, read once per request or job (`ClinicRolePermissions`).
+        $this->app->scoped(ClinicRolePermissions::class);
 
         // Where a clinic's data lives: one primary database today (ADR-001 §P).
         $this->app->singleton(TenantConnectionResolver::class, SingleDatabaseTenantResolver::class);

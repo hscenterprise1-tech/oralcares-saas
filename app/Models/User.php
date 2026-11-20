@@ -8,6 +8,7 @@ use App\OrganizationRole;
 use App\OrganizationType;
 use App\Services\ClinicContext;
 use App\Services\OwnerMode\OwnerMode;
+use App\Services\Staff\ClinicRolePermissions;
 use App\UserType;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -213,8 +214,14 @@ class User extends Authenticatable
         }
 
         // Fail-closed: only an explicit Spatie grant (via an assigned
-        // ClinicRole, scoped to the active branch's team) grants access.
+        // ClinicRole, scoped to the active branch's team) grants access,
+        // unless this clinic's owner has changed what that role may do.
         try {
+            $decision = $context->hasClinic() ? app(ClinicRolePermissions::class)->decide($context->clinic(), $this->getRoleNames(), $permissionValue) : null;
+            if ($decision !== null) {
+                return $decision;
+            }
+
             return $this->hasPermissionTo($permissionValue);
         } catch (\Throwable) {
             // permission string might not exist in Spatie permissions table
@@ -260,6 +267,11 @@ class User extends Authenticatable
         try {
             setPermissionsTeamId($branch->id);
             $this->unsetRelation('roles')->unsetRelation('permissions');
+
+            $decision = app(ClinicRolePermissions::class)->decide($context->hasClinic() ? $context->clinic() : null, $this->getRoleNames(), $permissionValue);
+            if ($decision !== null) {
+                return $decision;
+            }
 
             return $this->hasPermissionTo($permissionValue);
         } catch (\Throwable) {

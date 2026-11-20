@@ -249,7 +249,7 @@ test("this month's spending matches the Expenses list: approved and paid only, d
         ->and(collect($list['by_category'])->firstWhere('name', 'Rent')['total'])->toEqual($month['categories'][0]['total']);
 });
 
-test('what waits on a decision: expenses to decide and to pay, payroll to finalise; no link to a page not built yet', function () {
+test('what waits on a decision: expenses to decide and to pay, payroll to finalise, each linking to its page', function () {
     ($this->expense)('pending', 300);
     ($this->expense)('pending', 200);
     ($this->expense)('approved', 1000);
@@ -259,7 +259,7 @@ test('what waits on a decision: expenses to decide and to pay, payroll to finali
 
     expect($items['expenses_to_decide'])->toMatchArray(['count' => 2, 'href' => '/clinic/expenses?status=pending&period=all'])
         ->and($items['expenses_to_pay'])->toMatchArray(['count' => 1, 'href' => '/clinic/expenses?status=approved&period=all'])
-        ->and($items['payroll_to_finalise'])->toMatchArray(['count' => 1, 'href' => null]);
+        ->and($items['payroll_to_finalise'])->toMatchArray(['count' => 1, 'href' => '/clinic/payroll']);
 });
 
 test('recent sensitive actions name what happened and who did it', function () {

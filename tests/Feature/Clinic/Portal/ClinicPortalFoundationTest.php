@@ -97,7 +97,7 @@ it('gives the owner every destination that exists, and none that does not', func
                 ->where('clinic.roles', ['Owner']);
 
             // Main, then Additional; New Case / Repeat Case are Dashboard quick actions; administration lives in the account menu.
-            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'reports', 'follow_ups', 'notifications', 'support', 'approvals', 'staff', 'branches', 'settings']);
+            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'reports', 'visits', 'follow_ups', 'notifications', 'support', 'approvals', 'staff', 'roles', 'leave', 'payroll', 'branches', 'services', 'settings']);
         });
 });
 
@@ -119,7 +119,7 @@ it('shows a receptionist only what the receptionist role grants at this branch',
             // Reception's one dashboard is the Front Desk.
             $page->component('ClinicPortal/FrontDesk/Index', true)->where('clinic.roles', ['Receptionist'])->where('clinic.is_owner', false);
 
-            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support'])
+            expect(portalNavKeys($page))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'visits', 'follow_ups', 'notifications', 'support', 'leave'])
                 ->and($page->toArray()['props']['clinic']['permissions'])->not->toContain('staff.manage');
         });
 });

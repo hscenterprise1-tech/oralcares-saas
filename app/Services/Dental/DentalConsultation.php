@@ -128,6 +128,8 @@ class DentalConsultation
                 ->map(fn ($procedure) => ['id' => $procedure->id, 'name' => $procedure->name, 'tooth' => $procedure->details['tooth_number'] ?? null])->values()->all(),
             'history' => $this->history($patient, $encounter),
             'booking' => $this->slots($clinic, $branch, $me, $patient),
+            // Root canal, implant, braces and lab work: the patient's records, written in this visit.
+            'specialty' => app(DentalSpecialtyView::class)->forVisit($encounter, $patient, $user->can('writeExtension', [$encounter, 'odontogram'])),
             'finished' => $encounter->isFinalized(),
             'to_bill' => $encounter->isFinalized()
                 ? round(collect(app(EncounterCheckout::class)->lines($encounter))->sum(fn (array $line) => $line['quantity'] * $line['unit_price']), 2)

@@ -13,6 +13,7 @@ use App\Http\Controllers\Clinic\Admin\EmployeeController as ClinicAdminEmployeeC
 use App\Http\Controllers\Clinic\Admin\EmployeeInvitationController as ClinicAdminEmployeeInvitationController;
 use App\Http\Controllers\Clinic\Admin\PricingController as ClinicAdminPricingController;
 use App\Http\Controllers\Clinic\Admin\ProcedureCatalogController as ClinicAdminProcedureCatalogController;
+use App\Http\Controllers\Clinic\Admin\RolePermissionController as ClinicAdminRolePermissionController;
 use App\Http\Controllers\Clinic\Admin\RoomController as ClinicAdminRoomController;
 use App\Http\Controllers\Clinic\Admin\SettingsController as ClinicAdminSettingsController;
 use App\Http\Controllers\Clinic\Admin\SpecialtyController as ClinicAdminSpecialtyController;
@@ -30,8 +31,8 @@ use App\Http\Controllers\Clinic\ClinicSearchController;
 use App\Http\Controllers\Clinic\ClinicSupportController;
 use App\Http\Controllers\Clinic\ConsultationController;
 use App\Http\Controllers\Clinic\ConsultationTreatmentController;
-use App\Http\Controllers\Clinic\DeletionRequestController;
 use App\Http\Controllers\Clinic\DayClosingController;
+use App\Http\Controllers\Clinic\DeletionRequestController;
 use App\Http\Controllers\Clinic\DentalController;
 use App\Http\Controllers\Clinic\DentalSpecialtyController;
 use App\Http\Controllers\Clinic\ExpenseController;
@@ -1805,6 +1806,11 @@ $clinicRoutes = function () {
                 Route::get('prices', [ClinicAdminPricingController::class, 'index'])->name('prices.index');
                 Route::post('prices', [ClinicAdminPricingController::class, 'store'])->name('prices.store');
             });
+
+            // What each role may do at this clinic: the primary owner only (checked in the controller), in Owner Mode.
+            Route::get('roles', [ClinicAdminRolePermissionController::class, 'index'])->name('roles.index');
+            Route::put('roles/{role}/permissions', [ClinicAdminRolePermissionController::class, 'update'])->name('roles.permissions.update');
+            Route::post('roles/{role}/reset', [ClinicAdminRolePermissionController::class, 'reset'])->name('roles.reset');
 
             // Specialties (T6): readable by catalog managers; changed only by the owner, in Owner Mode.
             Route::get('specialties', [ClinicAdminSpecialtyController::class, 'index'])

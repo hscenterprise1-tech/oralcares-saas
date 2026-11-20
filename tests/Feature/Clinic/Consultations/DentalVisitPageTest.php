@@ -150,3 +150,31 @@ test('a plan prints as an estimate for the dentist and the desk, at its own pric
     $other = $this->f->patient('Meera', 'Iyer');
     ($this->asDoctor)()->get(route('clinic.patients.dental.plans.estimate', [$other->id, $plan->id]))->assertNotFound();
 });
+
+test('the dental visit page carries the patient\'s root canal, implant, braces and lab work, with the address that saves each', function () {
+    $id = $this->encounter->id;
+    ($this->asDoctor)()->post("/clinic/consultations/{$id}/dental/endodontic", ['tooth_number' => 36, 'stage' => 'access', 'pulp_status' => 'necrotic', 'canals' => [['name' => 'MB', 'working_length' => 19.5]]])->assertSessionHasNoErrors();
+    ($this->asDoctor)()->post("/clinic/consultations/{$id}/dental/implants", ['tooth_number' => 46, 'status' => 'planned', 'system' => 'Nobel'])->assertSessionHasNoErrors();
+    ($this->asDoctor)()->post("/clinic/consultations/{$id}/dental/orthodontic", ['appliance' => 'fixed_metal', 'phase' => 'levelling', 'bracketed_teeth' => [13, 12]])->assertSessionHasNoErrors();
+    ($this->asDoctor)()->post("/clinic/consultations/{$id}/dental/lab", ['teeth' => [36], 'restoration' => 'Zirconia crown'])->assertSessionHasNoErrors();
+
+    ($this->asDoctor)()->get("/clinic/consultations/{$id}")->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('dental.specialty.can_write', true)
+        ->where('dental.specialty.endodontic.0.tooth', 36)
+        ->where('dental.specialty.endodontic.0.canals.0.name', 'MB')
+        ->where('dental.specialty.endodontic.0.url', fn ($url) => str_contains($url, "/clinic/consultations/{$id}/dental/endodontic/"))
+        ->where('dental.specialty.implants.0.system', 'Nobel')
+        ->where('dental.specialty.ortho.case.phase', 'levelling')
+        ->where('dental.specialty.ortho.case.bracketed_teeth', [12, 13])
+        ->where('dental.specialty.lab.0.restoration', 'Zirconia crown')
+        ->where('dental.specialty.lab.0.status', 'draft')
+        ->where('dental.specialty.lab.0.steps', fn ($steps) => collect($steps)->pluck('step')->contains('send'))
+        ->has('dental.specialty.vocab.endodontic.stages')
+        ->where('dental.specialty.links.lab', fn ($url) => str_ends_with($url, "/clinic/consultations/{$id}/dental/lab")));
+});
+
+test('once the visit is signed the specialty records can be read but not written from the page', function () {
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", ['consultation' => ['complaint' => 'Checkup'], 'work' => []])->assertSessionHasNoErrors();
+
+    ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}")->assertInertia(fn (Assert $page) => $page->where('dental.specialty.can_write', false));
+});

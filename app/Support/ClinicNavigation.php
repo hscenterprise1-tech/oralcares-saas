@@ -130,6 +130,12 @@ class ClinicNavigation
             'keywords' => ['salary', 'payslip', 'pay', 'advance', 'wages'],
         ],
         [
+            // What each role may do at this clinic. Only the primary owner (the page checks).
+            'key' => 'roles', 'label' => 'Roles & permissions', 'icon' => 'shield', 'section' => 'admin', 'order' => 112,
+            'route' => 'admin.roles.index', 'requires' => ['permissions' => ['specialty.configure']],
+            'keywords' => ['permissions', 'access', 'role', 'who can', 'rights'],
+        ],
+        [
             'key' => 'branches', 'label' => 'Branches', 'icon' => 'branches', 'section' => 'admin', 'order' => 120,
             'route' => 'admin.branches.index', 'requires' => ['permissions' => ['branch.manage']],
             'keywords' => ['locations', 'rooms'],

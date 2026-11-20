@@ -41,6 +41,8 @@ class ClinicFrontend
         // Time off and pay: leave requests and decisions, payroll months, salaries, advances and payslips.
         'clinic.leave.index',
         'clinic.payroll.index',
+        // Roles & permissions: what each role may do at this clinic (owner only).
+        'admin.roles.index',
         'admin.settings.index',
         'admin.consents.index',
         'admin.settings.patient-form',

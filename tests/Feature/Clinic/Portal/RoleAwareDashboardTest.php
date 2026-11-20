@@ -94,7 +94,7 @@ test('reception without billing rights: front office only — no Billing in the 
     $page = ($this->page)(($this->as)($reception));
 
     // Reception's Dashboard entry is the Front Desk; no second queue destination.
-    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'follow_ups', 'notifications', 'support'])
+    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'visits', 'follow_ups', 'notifications', 'support', 'leave'])
         ->and(collect($page['props']['clinic']['navigation'])->firstWhere('key', 'dashboard')['href'])->toBe('/clinic/reception');
 
     ($this->as)($reception)->get('/clinic/billing')->assertForbidden();
@@ -110,7 +110,7 @@ test('reception granted billing keeps the Front Desk as its dashboard, with Bill
     $reception[0]->unsetRelation('roles')->unsetRelation('permissions');
 
     $page = ($this->page)(($this->as)($reception));
-    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
+    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'visits', 'follow_ups', 'notifications', 'support', 'leave']);
     ($this->as)($reception)->get('/clinic/billing')->assertOk();
     ($this->as)($reception)->get('/clinic/dashboard')->assertRedirect(route('clinic.reception'));
 });
@@ -134,7 +134,7 @@ test('a doctor works from the Doctor Dashboard, with Appointments beside it: no 
     $page = ($this->page)(($this->as)($doctor));
 
     // The Dashboard entry is the doctor's day (Today); Appointments stays where it was; Reports is their own work.
-    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'reports', 'follow_ups', 'notifications', 'support'])
+    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'reports', 'visits', 'follow_ups', 'notifications', 'support', 'leave'])
         ->and(collect($page['props']['clinic']['navigation'])->firstWhere('key', 'dashboard')['href'])->toBe('/clinic/consultations')
         ->and(collect($page['props']['clinic']['navigation'])->firstWhere('key', 'reports')['label'])->toBe('My reports');
     ($this->as)($doctor)->get('/clinic/dashboard')->assertRedirect(route('clinic.consultations.index'));
@@ -169,7 +169,7 @@ test('the sidebar lists only what the user may open, and says which destinations
     $owner = ($this->page)(($this->asOwner)(), '/clinic/dashboard')['props']['clinic']['navigation'];
     $byKey = collect($owner)->keyBy('key');
 
-    expect($byKey->keys()->all())->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'reports', 'follow_ups', 'notifications', 'support', 'approvals', 'staff', 'branches', 'settings'])
+    expect($byKey->keys()->all())->toBe(['dashboard', 'appointments', 'patients', 'front_desk', 'billing', 'reports', 'visits', 'follow_ups', 'notifications', 'support', 'approvals', 'staff', 'roles', 'leave', 'payroll', 'branches', 'services', 'settings'])
         ->and($byKey['support']['available'])->toBeTrue()
         ->and($byKey['notifications']['available'])->toBeTrue()
         ->and($byKey)->not->toHaveKey('daily_closing')

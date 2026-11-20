@@ -511,7 +511,7 @@ it('completes onboarding end to end, invites staff, and activates the clinic', f
     // Configuration landed in the real stores.
     expect(ClinicOperatingHour::withoutGlobalScopes()->where('branch_id', $branchId)->where('day_of_week', 0)->value('is_closed'))->toBeTrue()
         ->and(ClinicRoom::where('branch_id', $branchId)->where('type', 'chair')->where('is_active', true)->count())->toBe(3)
-        ->and(ClinicalProcedure::withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('is_active', true)->count())->toBe(6)
+        ->and(ClinicalProcedure::withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('is_active', true)->count())->toBe(count(config('clinic_onboarding.catalogues.dental')))
         ->and($clinic->fresh()->appointment_config['holidays'])->toBe(['2026-12-25'])
         ->and($clinic->fresh()->appointment_config['buffer_minutes'])->toBe(5);
 
@@ -658,8 +658,8 @@ it('renders real Account, Wizard and Done pages, never the Unavailable placehold
         ->component('ClinicPortal/Onboarding/Done', true)
         ->where('kind', 'clinic')
         ->where('links.dashboard', route('dashboard'))
-        // Staff management has no page yet, so it is not offered.
-        ->where('links.staff', null));
+        // Staff management is a built page, so it is offered.
+        ->where('links.staff', route('admin.employees.index')));
 });
 
 it('every section the templates use has a form on the Wizard', function () {

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { Activity, ArrowLeft, CalendarCheck2, Check, ClipboardList, FileText, History, MessageSquareText, Plus, Search, Smile, Stethoscope, UserRound, Wallet, X, type LucideIcon } from 'lucide-react';
+import { Activity, ArrowLeft, CalendarCheck2, Check, ClipboardList, FileText, History, MessageSquareText, Plus, Search, Smile, Stethoscope, UserRound, Wallet, Wrench, X, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { BTN, BTN_PRIMARY, FOCUS, IconTile, Pill, type Tone } from '../Patients/components/patient360/v2/ui';
 import { CarePanel } from './ClinicalPanels';
+import { DentalSpecialty, type SpecialtyData } from './DentalSpecialty';
 
 type Condition = { label: string; tone: string; surface: boolean; category: string | null };
 type Tooth = { tooth: number; status: string; surfaces: string[]; notes: string | null };
@@ -30,6 +31,7 @@ type Props = {
     today: { id: number; name: string; tooth: number | null }[];
     history: HistoryRow[];
     booking: Booking;
+    specialty: SpecialtyData;
     finished: boolean;
     to_bill: number;
   };
@@ -75,7 +77,7 @@ export default function DentalConsultation(props: Props) {
   );
 }
 
-type Tab = 'today' | 'history' | 'treatments';
+type Tab = 'today' | 'specialty' | 'history' | 'treatments';
 
 /**
  * The dental workspace: why the patient came, what is found on which tooth,
@@ -174,6 +176,7 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
 
   const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: 'today', label: 'Today', icon: Stethoscope },
+    { key: 'specialty', label: 'Root canal · Implant · Braces · Lab', icon: Wrench },
     { key: 'history', label: 'History', icon: History },
     { key: 'treatments', label: 'Treatments & Packages', icon: Wallet },
   ];
@@ -230,6 +233,8 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
           );
         })}
       </nav>
+
+      {tab === 'specialty' && <DentalSpecialty data={dental.specialty} />}
 
       {tab === 'history' && (
         <Panel icon={History} tone="slate" title="Earlier visits" detail="Signed visits, newest first.">

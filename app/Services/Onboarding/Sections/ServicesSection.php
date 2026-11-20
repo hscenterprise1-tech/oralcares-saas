@@ -84,8 +84,8 @@ class ServicesSection extends AbstractSection
                     'category' => $procedure->category,
                     'duration' => (int) ($price?->duration_minutes ?? $procedure->default_duration_minutes ?? 30),
                     'price' => $price ? (float) $price->price : ($untouched ? ($suggested->get($procedure->code)['price'] ?? null) : null),
-                    // Suggestions start switched on, so the first save adopts them.
-                    'active' => $untouched ? true : (bool) $procedure->is_active,
+                    // The everyday suggestions (`core`) start switched on, so the first save adopts them; the rest of a long list wait for the owner to choose.
+                    'active' => $untouched ? (bool) ($suggested->get($procedure->code)['core'] ?? false) : (bool) $procedure->is_active,
                 ];
             })
             ->values()

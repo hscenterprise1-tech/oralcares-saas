@@ -206,7 +206,7 @@ function navigationKeys(callable $as): array
 }
 
 test('a receptionist reaches the Dashboard (the Front Desk), Calendar, Patients and Billing from the sidebar', function () {
-    expect(navigationKeys($this->asReception))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
+    expect(navigationKeys($this->asReception))->toBe(['dashboard', 'appointments', 'patients', 'billing', 'visits', 'follow_ups', 'notifications', 'support', 'leave']);
     ($this->asReception)()->get('/clinic/queue')->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('ClinicPortal/FrontDesk/List', false)
         ->where('list', 'waiting')
