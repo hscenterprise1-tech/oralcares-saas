@@ -36,6 +36,8 @@ class ClinicFrontend
         'clinic.reports.index',
         // Visits: the branch's visit log, by day.
         'clinic.visits.index',
+        // The clinic's WhatsApp: connection, automatic messages and the delivery log.
+        'clinic.whatsapp.index',
         // Time off and pay: leave requests and decisions, payroll months, salaries, advances and payslips.
         'clinic.leave.index',
         'clinic.payroll.index',

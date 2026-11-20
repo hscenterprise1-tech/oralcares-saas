@@ -6,10 +6,11 @@ export interface SettingsLinks {
   patient_form: string;
   automation: string;
   consents: string;
+  whatsapp: string;
   physio: string | null;
 }
 
-export type SettingsTab = 'general' | 'patient-form' | 'automation' | 'consents' | 'physio';
+export type SettingsTab = 'general' | 'patient-form' | 'automation' | 'consents' | 'whatsapp' | 'physio';
 
 /** The owner's settings pages, as tabs above each one. The hrefs come from the server (admin routes are not in the client route list). */
 export function SettingsTabs({ active, links }: { active: SettingsTab; links: SettingsLinks }) {
@@ -18,6 +19,7 @@ export function SettingsTabs({ active, links }: { active: SettingsTab; links: Se
     { key: 'patient-form', label: 'Patient form', href: links.patient_form },
     { key: 'automation', label: 'Automation & messages', href: links.automation },
     { key: 'consents', label: 'Consents', href: links.consents },
+    { key: 'whatsapp', label: 'WhatsApp', href: links.whatsapp },
     { key: 'physio', label: 'Physio problems & prices', href: links.physio },
   ];
 

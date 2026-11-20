@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic;
 
+use App\Http\Controllers\Concerns\LinksSettingsPages;
 use App\Http\Controllers\Controller;
 use App\Models\ClinicWhatsAppMessage;
 use App\Models\ClinicWhatsAppSettings;
@@ -21,6 +22,8 @@ use Inertia\Response;
  */
 class WhatsAppController extends Controller
 {
+    use LinksSettingsPages;
+
     private const PAGE = 25;
 
     public function __construct(
@@ -37,6 +40,7 @@ class WhatsAppController extends Controller
         $groups = (array) config('clinic_whatsapp.groups', []);
 
         return Inertia::render('ClinicPortal/WhatsApp/Index', [
+            'settings_links' => $this->settingsLinks($clinic),
             'status' => $this->whatsApp->status($clinic, $settings),
             'settings' => [
                 'enabled' => (bool) $settings->enabled,

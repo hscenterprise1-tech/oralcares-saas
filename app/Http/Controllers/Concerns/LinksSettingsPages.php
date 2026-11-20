@@ -14,7 +14,7 @@ use App\Services\Physio\PhysioCareSummary;
 trait LinksSettingsPages
 {
     /**
-     * @return array{general: string, patient_form: string, automation: string, consents: string, physio: string|null}
+     * @return array{general: string, patient_form: string, automation: string, consents: string, whatsapp: string, physio: string|null}
      */
     protected function settingsLinks(Clinic $clinic): array
     {
@@ -23,6 +23,7 @@ trait LinksSettingsPages
             'patient_form' => route('admin.settings.patient-form'),
             'automation' => route('admin.settings.automation'),
             'consents' => route('admin.consents.index'),
+            'whatsapp' => route('clinic.whatsapp.index'),
             'physio' => app(ClinicSpecialties::class)->active($clinic, PhysioCareSummary::SPECIALTY) !== null ? route('admin.settings.physio') : null,
         ];
     }
