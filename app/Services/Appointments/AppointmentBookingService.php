@@ -130,7 +130,7 @@ class AppointmentBookingService
     public function reschedule(Clinic $clinic, Branch $branch, Appointment $appointment, array $data, string $scope, ?User $actor): int
     {
         $this->assertUpcoming($appointment, 'moved');
-        // Moving a booking is a new time with the patient: not for a patient recorded as deceased.
+        // Moving a booking is a new time with the patient: not for a deleted record.
         if ($appointment->patient_id && ($patient = Patient::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->find($appointment->patient_id))) {
             app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         }

@@ -217,13 +217,13 @@ export function validatePatient(config: RegistrationConfig, data: PatientForm): 
   }
   if (data.dob_unknown) {
     const age = Number(data.age);
-    if (data.age === '' || !Number.isInteger(age) || age < 0 || age > 150) {
-      errors.age = 'Enter an approximate age (0–150).';
+    if (data.age === '' || !Number.isInteger(age) || age < 0 || age > 120) {
+      errors.age = 'Enter an approximate age (0–120).';
     }
   } else if (required(config, 'date_of_birth') && data.date_of_birth === '') {
     errors.date_of_birth = 'Enter the date of birth, or tick "not known".';
-  } else if (data.date_of_birth !== '' && data.date_of_birth >= toIsoDate(new Date())) {
-    errors.date_of_birth = 'The date of birth must be in the past.';
+  } else if (data.date_of_birth !== '' && data.date_of_birth > toIsoDate(new Date())) {
+    errors.date_of_birth = 'The date of birth cannot be in the future.';
   }
   if (required(config, 'email') && data.email.trim() === '') {
     errors.email = 'Enter an email address.';
@@ -495,7 +495,7 @@ export function DuplicateSuggestions({
                     <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-bold text-clinic-ink">
                       {match.name}
                       {/* Only a record marker a desk must not miss; there is no active / inactive state to show. */}
-                      {(match.status === 'deceased' || match.status === 'merged') && <StatusBadge status={match.status} />}
+                      {match.status === 'merged' && <StatusBadge status={match.status} />}
                     </p>
                     <p className="text-[12.5px] text-clinic-secondary">
                       {[match.uhid, [match.age !== null ? `${match.age}` : null, match.gender ? humanize(match.gender) : null].filter(Boolean).join(' · '), match.phone_hint].filter(Boolean).join(' · ')}

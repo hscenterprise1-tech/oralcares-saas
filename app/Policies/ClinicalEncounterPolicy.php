@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\User;
 use App\PatientStatus;
 use App\Services\ClinicContext;
+use App\Services\Patient\CrossBranchClinicalAccess;
 use App\Support\Specialty\SpecialtyRegistry;
 use App\UserType;
 
@@ -42,15 +43,16 @@ class ClinicalEncounterPolicy
     {
         return $this->viewAny($user)
             && $this->inActiveClinic($encounter->clinic_id)
-            && $this->canOpenBranch($encounter->branch_id);
+            // Another branch's notes: only while the patient attends here today, with the permission (audited where opened).
+            && ($this->canOpenBranch($encounter->branch_id) || app(CrossBranchClinicalAccess::class)->mayView($user, $encounter));
     }
 
     public function start(User $user, Patient $patient): bool
     {
         return $this->inActiveClinic($patient->clinic_id)
             && $this->clinicContext->currentEmployee()?->practitionerProfile !== null
-            // No new consultation once a death is recorded (`PatientCareGuard`).
-            && $patient->status !== PatientStatus::Deceased
+            // No new consultation for a deleted record (`PatientCareGuard`).
+            && $patient->status !== PatientStatus::Deleted
             && $this->patients->writeClinicalData($user, $patient);
     }
 

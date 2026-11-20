@@ -1,17 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ArrowLeft, HeartHandshake, MapPin, Phone, Save, ShieldAlert, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Home, Phone, Save, ShieldAlert, Stethoscope, UserRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
-import { Button } from '@/clinic/ui/Button';
-import { Card } from '@/clinic/ui/Card';
 import { Field, Input, Select } from '@/clinic/ui/controls';
 import { Notice } from '@/clinic/ui/Notice';
-import { PatientAvatar } from './components/patientVisuals';
+import { validPhone } from '@/pages/Clinic/Reception/intake/PatientFields';
+import { BTN, BTN_PRIMARY, FOCUS, IconTile, Pill, day } from './components/patient360/v2/ui';
 
-type FieldState = 'required' | 'optional' | 'hidden';
-
-type EditablePatient = {
+export interface EditablePatient {
   id: number;
   uhid: string | null;
   status: string;
@@ -35,280 +32,380 @@ type EditablePatient = {
   preferred_channel: string;
   emergency_contact_name: string;
   emergency_contact_phone: string;
-  allergies: string[];
-  medical_alerts: string[];
   current_practitioner_name: string | null;
   registered_on: string | null;
-};
+  documents?: { id: number; file_name: string; document_type: string; size_bytes: number | null; created_at: string | null; download_url: string }[];
+}
 
-type EditProps = {
+interface EditProps {
   patient: EditablePatient;
-  clinical: { can_view: boolean; can_edit: boolean };
-  /** The clinic's field settings for this member (`PatientFieldConfigService`). */
-  fieldConfig: Record<string, FieldState>;
-  channels: string[];
-};
+  fieldConfig?: Record<string, string>;
+  channels?: string[];
+  links?: { index: string; show?: string };
+}
 
-/** The form's fields and the setting each follows. */
-const SETTING: Record<string, string> = {
-  last_name: 'last_name',
-  gender: 'gender',
-  date_of_birth: 'date_of_birth',
-  blood_group: 'blood_group',
-  alternate_phone: 'alternate_phone',
-  email: 'email',
-  address: 'address',
-  locality: 'address_locality',
-  city: 'address_city',
-  state: 'address_state',
-  pincode: 'address_pincode',
-  country: 'address_country',
-  emergency_contact_name: 'emergency_contact',
-  emergency_contact_phone: 'emergency_contact',
-};
-
-const EDITABLE = [
-  'first_name', 'middle_name', 'last_name', 'gender', 'date_of_birth', 'age', 'blood_group', 'phone', 'alternate_phone', 'email',
-  'address', 'locality', 'city', 'state', 'pincode', 'country', 'preferred_channel', 'emergency_contact_name', 'emergency_contact_phone',
-] as const;
-
-type FormData = Record<(typeof EDITABLE)[number], string>;
-
-const CHANNEL_LABEL: Record<string, string> = { phone: 'Phone call', sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
-
-/**
- * Patient 360 → Edit: the patient's demographics, contact, address and
- * emergency contact, as `PatientController@edit` sends them and `@update`
- * saves them. The clinic's field settings decide what is shown and required;
- * a field left out keeps its stored value. Allergies and alerts are part of
- * the clinical record and are changed there, so they are shown, not edited.
- */
 export default function PatientEdit(props: EditProps) {
+  const name = [props.patient.first_name, props.patient.last_name].filter(Boolean).join(' ');
+
   return (
-    <ClinicPortalShell title={`Edit ${[props.patient.first_name, props.patient.last_name].filter(Boolean).join(' ')}`}>
+    <ClinicPortalShell title={`Edit ${name}`}>
       <EditForm {...props} />
     </ClinicPortalShell>
   );
 }
 
-function EditForm({ patient, clinical, fieldConfig, channels }: EditProps) {
-  const initial = Object.fromEntries(EDITABLE.map((key) => [key, key === 'age' ? (patient.age_is_estimated && patient.age !== null ? String(patient.age) : '') : String(patient[key] ?? '')])) as FormData;
-  const [data, setData] = useState<FormData>(initial);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const name = [patient.first_name, patient.middle_name, patient.last_name].filter(Boolean).join(' ');
-  const profileUrl = route('clinic.patients.show', patient.id);
+const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-  const state = (field: string): FieldState => (SETTING[field] ? (fieldConfig[SETTING[field]] ?? 'optional') : 'optional');
-  const shown = (field: string) => state(field) !== 'hidden';
-  const isRequired = (field: string) => field === 'first_name' || field === 'phone' || state(field) === 'required';
-  const set = (field: keyof FormData) => (value: string) => {
-    setData((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, [field]: '' }));
-  };
+const GROUP_LOOK: Record<'blue' | 'teal' | 'violet' | 'rose', { band: string; ink: string; edge: string }> = {
+  blue: { band: 'bg-gradient-to-r from-[#EEF5FF] via-white to-white', ink: 'text-cx-blue-ink', edge: 'before:bg-[#2B6FD8]' },
+  teal: { band: 'bg-gradient-to-r from-[#E8FAF6] via-white to-white', ink: 'text-cx-teal-ink', edge: 'before:bg-[#0E9F87]' },
+  violet: { band: 'bg-gradient-to-r from-[#F3EEFF] via-white to-white', ink: 'text-cx-violet-ink', edge: 'before:bg-[#6B48DE]' },
+  rose: { band: 'bg-gradient-to-r from-[#FFF0F1] via-white to-white', ink: 'text-cx-rose-ink', edge: 'before:bg-[#E5484D]' },
+};
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (saving) {
-      return;
-    }
-    // Only the fields this member sees are sent; the rest keep their stored values.
-    const payload: Record<string, string | null> = {};
-    EDITABLE.forEach((field) => {
-      if (field === 'age') {
-        if (shown('date_of_birth') && data.date_of_birth === '' && data.age !== '') {
-          payload.age = data.age;
-        }
-
-        return;
-      }
-      if (field === 'first_name' || field === 'middle_name' || field === 'phone' || field === 'preferred_channel' || shown(field)) {
-        payload[field] = data[field] === '' ? null : data[field];
-      }
-    });
-    setFormError(null);
-    router.put(route('clinic.patients.update', patient.id), payload as never, {
-      preserveScroll: true,
-      onStart: () => setSaving(true),
-      onFinish: () => setSaving(false),
-      onError: (serverErrors) => {
-        setErrors(serverErrors as Record<string, string>);
-        setFormError('Some details need attention.');
-      },
-      onHttpException: () => {
-        setFormError('The changes were not saved. Try again; nothing you entered was lost.');
-
-        return false;
-      },
-      onNetworkError: () => {
-        setFormError('The changes were not saved. Check the connection and try again.');
-
-        return false;
-      },
-    });
-  };
-
-  const text = (field: keyof FormData, label: string, props: { type?: string; inputMode?: 'tel' | 'email' | 'numeric'; autoComplete?: string; maxLength?: number } = {}) =>
-    (field === 'first_name' || field === 'middle_name' || field === 'phone' || shown(field)) && (
-      <Field label={label} htmlFor={`edit-${field}`} required={isRequired(field)} error={errors[field] || undefined}>
-        <Input
-          id={`edit-${field}`}
-          value={data[field]}
-          onChange={(event) => set(field)(event.target.value)}
-          invalid={!!errors[field]}
-          required={isRequired(field)}
-          {...props}
-        />
-      </Field>
-    );
+/** A coloured band of the one form: its heading on the left (stacked on small screens), its fields on a grid. */
+function Group({ icon, tone, title, children }: { icon: LucideIcon; tone: keyof typeof GROUP_LOOK; title: string; children: ReactNode }) {
+  const look = GROUP_LOOK[tone];
 
   return (
-    <div className="mx-auto w-full max-w-[1080px]">
-      <Link
-        href={profileUrl}
-        className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-sm px-2 text-[13.5px] font-semibold text-cx-text-2 hover:bg-white hover:text-cx-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan [@media(pointer:coarse)]:h-11"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Back to {name}
-      </Link>
+    <fieldset className={cn("relative grid gap-x-5 gap-y-3 border-t border-[#EDF1F7] px-5 py-5 first:border-t-0 before:absolute before:inset-y-4 before:left-0 before:w-1 before:rounded-r-full before:content-[''] sm:px-6 xl:grid-cols-[170px_minmax(0,1fr)]", look.band, look.edge)}>
+      <legend className="sr-only">{title}</legend>
+      <p aria-hidden="true" className={cn('flex items-center gap-2.5 text-[13px] font-semibold xl:items-start xl:pt-0.5', look.ink)}>
+        <IconTile icon={icon} tone={tone} size="sm" />
+        <span className="pt-0.5">{title}</span>
+      </p>
+      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
+    </fieldset>
+  );
+}
 
-      <div className="mt-2 flex items-center gap-3.5">
-        <PatientAvatar name={name} size="lg" />
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold leading-7 tracking-[-0.02em] text-cx-text sm:text-[24px]">Edit patient details</h1>
-          <p className="text-[13.5px] text-cx-text-2">
-            {name}
-            {patient.uhid && <span> · UHID {patient.uhid}</span>}
-          </p>
-        </div>
-      </div>
-
-      <form noValidate onSubmit={submit} className="mt-4 grid gap-4">
-        {formError && <Notice tone="danger">{formError}</Notice>}
-
-        <Group title="Identity" icon={UserRound} tone="teal">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {text('first_name', 'First name', { autoComplete: 'given-name', maxLength: 100 })}
-            {text('middle_name', 'Middle name', { autoComplete: 'additional-name', maxLength: 100 })}
-            {text('last_name', 'Last name', { autoComplete: 'family-name', maxLength: 100 })}
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {shown('gender') && (
-              <Field label="Sex" htmlFor="edit-gender" required={isRequired('gender')} error={errors.gender || undefined}>
-                <Select id="edit-gender" value={data.gender} onChange={(event) => set('gender')(event.target.value)} invalid={!!errors.gender} placeholder="Choose" options={[{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: 'other', label: 'Other' }]} />
-              </Field>
-            )}
-            {shown('date_of_birth') && (
-              <Field label="Date of birth" htmlFor="edit-date_of_birth" required={isRequired('date_of_birth')} error={errors.date_of_birth || undefined} hint={data.date_of_birth === '' ? 'Or give an age below.' : undefined}>
-                <Input id="edit-date_of_birth" type="date" value={data.date_of_birth} onChange={(event) => set('date_of_birth')(event.target.value)} invalid={!!errors.date_of_birth} max={new Date().toISOString().slice(0, 10)} />
-              </Field>
-            )}
-            {shown('date_of_birth') && data.date_of_birth === '' && (
-              <Field label="Age (years)" htmlFor="edit-age" error={errors.age || undefined}>
-                <Input id="edit-age" inputMode="numeric" value={data.age} onChange={(event) => set('age')(event.target.value.replace(/\D/g, '').slice(0, 3))} invalid={!!errors.age} />
-              </Field>
-            )}
-            {shown('blood_group') && (
-              <Field label="Blood group" htmlFor="edit-blood_group" required={isRequired('blood_group')} error={errors.blood_group || undefined}>
-                <Select id="edit-blood_group" value={data.blood_group} onChange={(event) => set('blood_group')(event.target.value)} invalid={!!errors.blood_group} placeholder="Not recorded" options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => ({ value: group, label: group }))} />
-              </Field>
-            )}
-          </div>
-        </Group>
-
-        <Group title="Contact" icon={Phone} tone="blue">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {text('phone', 'Mobile', { type: 'tel', inputMode: 'tel', autoComplete: 'tel', maxLength: 20 })}
-            {text('alternate_phone', 'Alternate mobile', { type: 'tel', inputMode: 'tel', maxLength: 20 })}
-            {text('email', 'Email', { type: 'email', inputMode: 'email', autoComplete: 'email', maxLength: 255 })}
-            <Field label="Preferred contact" htmlFor="edit-preferred_channel" error={errors.preferred_channel || undefined}>
-              <Select id="edit-preferred_channel" value={data.preferred_channel} onChange={(event) => set('preferred_channel')(event.target.value)} placeholder="No preference" options={channels.map((channel) => ({ value: channel, label: CHANNEL_LABEL[channel] ?? channel }))} />
-            </Field>
-          </div>
-        </Group>
-
-        {(['address', 'locality', 'city', 'state', 'pincode', 'country'] as const).some(shown) && (
-          <Group title="Address" icon={MapPin} tone="violet">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {text('address', 'Address', { autoComplete: 'street-address', maxLength: 500 })}
-              {text('locality', 'Locality', { maxLength: 120 })}
-            </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {text('city', 'City', { autoComplete: 'address-level2', maxLength: 100 })}
-              {text('state', 'State', { autoComplete: 'address-level1', maxLength: 100 })}
-              {text('pincode', 'PIN code', { inputMode: 'numeric', autoComplete: 'postal-code', maxLength: 10 })}
-              {text('country', 'Country', { autoComplete: 'country-name', maxLength: 80 })}
-            </div>
-          </Group>
-        )}
-
-        {shown('emergency_contact_name') && (
-          <Group title="Emergency contact" icon={HeartHandshake} tone="amber">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {text('emergency_contact_name', 'Name', { maxLength: 100 })}
-              {text('emergency_contact_phone', 'Mobile', { type: 'tel', inputMode: 'tel', maxLength: 20 })}
-            </div>
-          </Group>
-        )}
-
-        {clinical.can_view && (
-          <Group title="Medical safety" icon={ShieldAlert} tone="rose">
-            <p className="text-[13px] text-cx-text-2">Allergies and alerts are part of the clinical record and are changed there.</p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {patient.allergies.length + patient.medical_alerts.length === 0 ? (
-                <span className="text-[13.5px] text-cx-text-2">None recorded</span>
-              ) : (
-                <>
-                  {patient.allergies.map((allergy) => (
-                    <span key={`a-${allergy}`} className="inline-flex min-h-7 items-center rounded-full bg-cx-rose-bg px-2.5 py-0.5 text-[12.5px] font-semibold text-cx-rose-ink">
-                      {allergy}
-                    </span>
-                  ))}
-                  {patient.medical_alerts.map((alert) => (
-                    <span key={`m-${alert}`} className="inline-flex min-h-7 items-center rounded-full bg-cx-amber-bg px-2.5 py-0.5 text-[12.5px] font-semibold text-cx-amber-ink">
-                      {alert}
-                    </span>
-                  ))}
-                </>
-              )}
-            </div>
-          </Group>
-        )}
-
-        <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-cx-line bg-white/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:rounded-2xl sm:border sm:shadow-cx-card">
-          <Link href={profileUrl} className="mr-auto inline-flex h-10 items-center rounded-[10px] px-3 text-[14px] font-semibold text-cx-text-2 hover:bg-cx-slate-bg hover:text-cx-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan max-sm:h-11">
-            Cancel
-          </Link>
-          <Button type="submit" tone="primary" icon={Save} loading={saving} loadingLabel="Saving…" disabled={saving}>
-            Save changes
-          </Button>
-        </div>
-      </form>
+function Segmented({ value, options, onChange, label, invalid }: { value: string; options: { value: string; label: string }[]; onChange: (value: string) => void; label: string; invalid?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label={label} aria-invalid={invalid || undefined} className={cn('flex h-11 w-full rounded-xl bg-[#F1F5FA] p-1', invalid && 'ring-1 ring-cx-rose-ink')}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={cn('flex-1 rounded-lg text-[13px] font-semibold transition-colors', FOCUS, value === option.value ? 'bg-white text-cx-nav-ink shadow-[0_1px_3px_rgba(15,23,42,0.12)]' : 'text-cx-text-2 hover:text-cx-nav-ink')}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-const GROUP_TILE = {
-  teal: 'bg-cx-m-teal-bg text-cx-m-teal',
-  blue: 'bg-cx-m-blue-bg text-cx-m-blue',
-  violet: 'bg-cx-m-purple-bg text-cx-m-purple',
-  amber: 'bg-cx-m-orange-bg text-cx-m-orange',
-  rose: 'bg-cx-rose-bg text-cx-rose-ink',
-} as const;
+/**
+ * Editing a patient's details (not their clinical record or documents —
+ * those are kept in Patient 360): one compact form in coloured bands,
+ * fields side by side, every clinic field setting (hidden, required)
+ * respected. Saving returns to Patient 360.
+ */
+function EditForm({ patient, fieldConfig = {}, channels = [], links }: EditProps) {
+  const profileUrl = links?.show ?? route('clinic.patients.show', patient.id);
+  const shown = (field: string) => fieldConfig[field] !== 'hidden';
+  const required = (field: string) => fieldConfig[field] === 'required';
 
-function Group({ title, icon: Icon, tone, children }: { title: string; icon: typeof UserRound; tone: keyof typeof GROUP_TILE; children: ReactNode }) {
-  const id = `edit-${title.toLowerCase().replace(/\W+/g, '-')}`;
+  const initial = useMemo(
+    () => ({
+      first_name: patient.first_name ?? '',
+      middle_name: patient.middle_name ?? '',
+      last_name: patient.last_name ?? '',
+      gender: patient.gender || '',
+      date_of_birth: patient.date_of_birth ?? '',
+      age_known: !(patient.age_is_estimated && patient.age !== null),
+      age: patient.age_is_estimated && patient.age !== null ? String(patient.age) : '',
+      blood_group: patient.blood_group ?? '',
+      phone: patient.phone ?? '',
+      alternate_phone: patient.alternate_phone ?? '',
+      email: patient.email ?? '',
+      preferred_channel: patient.preferred_channel ?? '',
+      address: patient.address ?? '',
+      locality: patient.locality ?? '',
+      city: patient.city ?? '',
+      state: patient.state ?? '',
+      pincode: patient.pincode ?? '',
+      country: patient.country ?? '',
+      emergency_contact_name: patient.emergency_contact_name ?? '',
+      emergency_contact_phone: patient.emergency_contact_phone ?? '',
+    }),
+    [patient],
+  );
+  const [form, setForm] = useState(initial);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const leaving = useRef(false);
+
+  const set = <K extends keyof typeof initial>(field: K, value: (typeof initial)[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, [field]: '' }));
+  };
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+
+  useEffect(() => {
+    if (!dirty) {
+      return;
+    }
+    const removeBefore = router.on('before', (event) => {
+      if (leaving.current || event.detail.visit.method !== 'get') {
+        return;
+      }
+      if (!window.confirm('Leave without saving? Your changes will be lost.')) {
+        event.preventDefault();
+      }
+    });
+    const onUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', onUnload);
+
+    return () => {
+      removeBefore();
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [dirty]);
+
+  const validate = (): Record<string, string> => {
+    const found: Record<string, string> = {};
+    if (!form.first_name.trim()) {
+      found.first_name = 'Enter the first name.';
+    }
+    if (required('last_name') && !form.last_name.trim()) {
+      found.last_name = 'Enter the last name.';
+    }
+    if (required('gender') && !form.gender) {
+      found.gender = 'Choose a gender.';
+    }
+    if (shown('date_of_birth')) {
+      if (!form.age_known) {
+        const age = Number(form.age);
+        if (form.age === '' || Number.isNaN(age) || age < 0 || age > 120) {
+          found.age = 'Enter an age from 0 to 120.';
+        }
+      } else if (required('date_of_birth') && !form.date_of_birth) {
+        found.date_of_birth = 'Enter the date of birth.';
+      }
+    }
+    if (!form.phone.trim()) {
+      found.phone = 'Enter the mobile number.';
+    } else if (!validPhone(form.phone)) {
+      found.phone = 'Enter a valid mobile number.';
+    }
+    for (const field of ['alternate_phone', 'emergency_contact_phone'] as const) {
+      if (form[field].trim() && !validPhone(form[field])) {
+        found[field] = 'Enter a valid number.';
+      }
+    }
+    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      found.email = 'Enter a valid email address.';
+    }
+
+    return found;
+  };
+
+  const payload = (): Record<string, unknown> => {
+    const data: Record<string, unknown> = {
+      first_name: form.first_name.trim(),
+      middle_name: form.middle_name.trim() || null,
+      phone: form.phone.trim(),
+      preferred_channel: form.preferred_channel || null,
+    };
+    // A field this clinic hides is never sent, so its stored value is kept.
+    const optional = (field: keyof typeof initial, configKey: string = field) => {
+      if (shown(configKey)) {
+        data[field] = String(form[field]).trim() || null;
+      }
+    };
+    optional('last_name');
+    optional('gender');
+    optional('blood_group');
+    optional('alternate_phone');
+    optional('email');
+    optional('address');
+    optional('locality', 'address_locality');
+    optional('city', 'address_city');
+    optional('state', 'address_state');
+    optional('pincode', 'address_pincode');
+    optional('country', 'address_country');
+    optional('emergency_contact_name', 'emergency_contact');
+    optional('emergency_contact_phone', 'emergency_contact');
+    if (shown('date_of_birth')) {
+      data.date_of_birth = form.age_known ? form.date_of_birth || null : null;
+      if (!form.age_known) {
+        data.age = Number(form.age);
+      }
+    }
+
+    return data;
+  };
+
+  const fail = (message: string, found: Record<string, string> = {}) => {
+    leaving.current = false;
+    setSaving(false);
+    setErrors(found);
+    setProblem(message);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>('main [aria-invalid="true"], main [role="alert"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  };
+
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault();
+    if (saving) {
+      return;
+    }
+    const found = validate();
+    if (Object.keys(found).length > 0) {
+      fail('Some details need attention.', found);
+
+      return;
+    }
+    setProblem(null);
+    setSaving(true);
+    leaving.current = true;
+    router.put(route('clinic.patients.update', patient.id), payload() as never, {
+      preserveScroll: true,
+      onError: (errs) => fail('Some details need attention.', errs as Record<string, string>),
+      onFinish: () => setSaving(false),
+      onNetworkError: () => {
+        fail('No connection: the details were not saved. Try again.');
+
+        return false;
+      },
+    });
+  };
+
+  const err = (field: string) => errors[field] || undefined;
+  const text = (key: keyof typeof initial, label: string, options: { config?: string; max?: number; type?: string; inputMode?: 'tel' | 'numeric' | 'email'; isRequired?: boolean; wide?: boolean } = {}) => {
+    const config = options.config ?? key;
+    if (!shown(config)) {
+      return null;
+    }
+
+    return (
+      <div className={cn(options.wide && 'sm:col-span-2')}>
+        <Field label={label} htmlFor={key} required={options.isRequired ?? required(config)} error={err(key)}>
+          <Input id={key} type={options.type ?? 'text'} inputMode={options.inputMode} value={String(form[key])} maxLength={options.max ?? 100} invalid={!!errors[key]} onChange={(e) => set(key, e.target.value as never)} />
+        </Field>
+      </div>
+    );
+  };
+  const fullName = [form.first_name, form.middle_name, form.last_name].filter((part) => part.trim()).join(' ') || 'Patient';
+  const actions = (
+    <>
+      <Link href={profileUrl} className={BTN}>
+        Cancel
+      </Link>
+      <button type="submit" className={BTN_PRIMARY} disabled={saving || !dirty}>
+        <Save className="h-4 w-4" aria-hidden="true" />
+        {saving ? 'Saving…' : 'Save changes'}
+      </button>
+    </>
+  );
 
   return (
-    <Card aria-labelledby={id} className="p-4 sm:p-5">
-      <h2 id={id} className="mb-4 flex items-center gap-3 text-[16px] font-semibold text-cx-text">
-        <span className={cn('grid h-9 w-9 place-items-center rounded-[11px]', GROUP_TILE[tone])} aria-hidden="true">
-          <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
-        </span>
-        {title}
-      </h2>
-      {children}
-    </Card>
+    <form noValidate onSubmit={submit} className="mx-auto w-full max-w-[1320px] space-y-4 pb-24 lg:pb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href={profileUrl} aria-label="Back to patient" className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-cx-text-2 shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:text-cx-nav-ink', FOCUS)}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </Link>
+          <div className="min-w-0">
+            <h1 className="truncate text-[20px] font-semibold leading-7 tracking-[-0.02em] text-[#1D2E4A]" title={fullName}>
+              Edit {fullName}
+            </h1>
+            <p className="flex flex-wrap items-center gap-1.5">
+              {patient.uhid && <span className="rounded-full bg-white px-2.5 py-0.5 font-mono text-[12px] font-semibold text-cx-blue-ink">{patient.uhid}</span>}
+              {patient.registered_on && (
+                <Pill tone="slate" className="bg-white">
+                  <CalendarDays className="h-3 w-3" aria-hidden="true" /> Registered {day(patient.registered_on)}
+                </Pill>
+              )}
+              {patient.current_practitioner_name && (
+                <Pill tone="teal" className="bg-white">
+                  <Stethoscope className="h-3 w-3" aria-hidden="true" /> {patient.current_practitioner_name}
+                </Pill>
+              )}
+              <span className="text-[12px] text-cx-text-3">{dirty ? '· Unsaved changes' : ''}</span>
+            </p>
+          </div>
+        </div>
+        <div className="hidden items-center gap-2 lg:flex">{actions}</div>
+      </div>
+
+      {problem && (
+        <div role="alert">
+          <Notice tone="danger">{problem}</Notice>
+        </div>
+      )}
+
+      <div className="overflow-clip rounded-[22px] border border-white/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_28px_-18px_rgba(30,50,110,0.28)]">
+        <Group icon={UserRound} tone="blue" title="Personal">
+          {text('first_name', 'First name', { isRequired: true })}
+          {text('middle_name', 'Middle name', { config: 'middle_name' })}
+          {text('last_name', 'Last name')}
+          {shown('gender') && (
+            <Field label="Gender" htmlFor="gender" required={required('gender')} error={err('gender')}>
+              <Segmented label="Gender" invalid={!!errors.gender} value={form.gender} onChange={(value) => set('gender', value)} options={[{ value: 'female', label: 'Female' }, { value: 'male', label: 'Male' }, { value: 'other', label: 'Other' }]} />
+            </Field>
+          )}
+          {shown('date_of_birth') && (
+            <>
+              <Field label="Age from" htmlFor="age_mode">
+                <Segmented label="Age from" value={form.age_known ? 'dob' : 'age'} onChange={(value) => set('age_known', value === 'dob')} options={[{ value: 'dob', label: 'Birth date' }, { value: 'age', label: 'Age only' }]} />
+              </Field>
+              {form.age_known ? (
+                <Field label="Date of birth" htmlFor="date_of_birth" required={required('date_of_birth')} error={err('date_of_birth')}>
+                  <Input id="date_of_birth" type="date" value={form.date_of_birth} max={new Date().toISOString().slice(0, 10)} invalid={!!errors.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} />
+                </Field>
+              ) : (
+                <Field label="Age (years)" htmlFor="age" required error={err('age')}>
+                  <Input id="age" type="number" inputMode="numeric" min={0} max={120} value={form.age} invalid={!!errors.age} onChange={(e) => set('age', e.target.value)} />
+                </Field>
+              )}
+            </>
+          )}
+          {shown('blood_group') && (
+            <Field label="Blood group" htmlFor="blood_group">
+              <Select id="blood_group" value={form.blood_group} placeholder="Not known" onChange={(e) => set('blood_group', e.target.value)} options={BLOOD.map((value) => ({ value, label: value }))} />
+            </Field>
+          )}
+        </Group>
+
+        <Group icon={Phone} tone="teal" title="Contact">
+          {text('phone', 'Mobile number', { isRequired: true, type: 'tel', inputMode: 'tel', max: 20 })}
+          {text('alternate_phone', 'Alternate number', { type: 'tel', inputMode: 'tel', max: 20 })}
+          {text('email', 'Email', { type: 'email', inputMode: 'email', max: 255 })}
+          {channels.length > 0 && (
+            <Field label="Preferred channel" htmlFor="preferred_channel">
+              <Select id="preferred_channel" value={form.preferred_channel} placeholder="No preference" onChange={(e) => set('preferred_channel', e.target.value)} options={channels.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }))} />
+            </Field>
+          )}
+        </Group>
+
+        {shown('address') && (
+          <Group icon={Home} tone="violet" title="Address">
+            {text('address', 'Address', { max: 500, wide: true })}
+            {text('locality', 'Locality / area', { config: 'address_locality', max: 120 })}
+            {text('city', 'City', { config: 'address_city' })}
+            {text('state', 'State', { config: 'address_state' })}
+            {text('pincode', 'PIN code', { config: 'address_pincode', max: 10, inputMode: 'numeric' })}
+            {text('country', 'Country', { config: 'address_country', max: 80 })}
+          </Group>
+        )}
+
+        {shown('emergency_contact') && (
+          <Group icon={ShieldAlert} tone="rose" title="Emergency contact">
+            {text('emergency_contact_name', 'Contact name', { config: 'emergency_contact' })}
+            {text('emergency_contact_phone', 'Contact phone', { config: 'emergency_contact', type: 'tel', inputMode: 'tel', max: 20, isRequired: false })}
+          </Group>
+        )}
+
+      </div>
+
+      <p className="px-1 text-[12px] text-cx-text-3">Medical history, documents, the assigned doctor and the patient's status are kept in Patient 360. The UHID never changes.</p>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-3 border-t border-[#E6EBF1] bg-white/95 px-4 py-3 backdrop-blur lg:hidden">{actions}</div>
+    </form>
   );
 }

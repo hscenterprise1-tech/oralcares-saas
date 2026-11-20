@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\PatientBranchAccess;
+use App\Services\Physio\SessionPackages;
 use App\Support\Specialty\SpecialtyRegistry;
 use Illuminate\Support\Collection;
 
@@ -79,7 +80,7 @@ class ConsultationCare
             ->groupBy('patient_treatment_id')->selectRaw('patient_treatment_id, max(session_number) as last')->pluck('last', 'patient_treatment_id');
 
         $canExecute = $editable && $user->hasClinicPermission(ClinicPermission::TreatmentExecute) && $user->hasClinicPermission(ClinicPermission::ClinicalEdit);
-        $canSell = $user->hasClinicPermission(ClinicPermission::BillingCreate);
+        $canSell = SessionPackages::maySell($user);
         // Treatment work is done by a practitioner of its specialty (as TreatmentAccess enforces): a dentist sees a physiotherapy card, not its session buttons.
         $practised = $this->clinicContext->currentEmployee()?->practitionerProfile?->specialtyKeys() ?? [];
 

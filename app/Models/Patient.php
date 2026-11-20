@@ -49,7 +49,7 @@ class Patient extends Model
             'status' => PatientStatus::class,
             'registration_type' => VisitRegistrationType::class,
             'date_of_birth' => 'date',
-            // Set only by the governed death actions (`RecordDeath`, `CorrectDeath`); never mass-assigned.
+            // Left from the retired deceased status (removed 2026-11-02); kept empty, never written.
             'date_of_death' => 'date',
             'death_recorded_at' => 'datetime',
         ];
@@ -217,6 +217,16 @@ class Patient extends Model
         return $this->hasMany(CaseNumber::class);
     }
 
+    public function cases(): HasMany
+    {
+        return $this->hasMany(PatientCase::class);
+    }
+
+    public function clinicalAccessAudits(): HasMany
+    {
+        return $this->hasMany(PatientClinicalAccessAudit::class);
+    }
+
     /** Current safety alerts; a removed one is kept, resolved (`resolved_at`), and is not current. */
     public function alerts(): HasMany
     {
@@ -354,12 +364,20 @@ class Patient extends Model
         $words = array_values(array_filter(preg_split('/\s+/', $search) ?: [], fn (string $word) => $word !== ''));
         $whole = self::escapeLike($search);
 
-        // A number (a phone or the digits of an ID) is looked up only in the indexed
-        // phone and ID columns; text only in names and the ID. Never all six at once.
+        // A number (a phone or the digits of an ID) is looked up in indexed
+        // phone and ID columns, as well as case numbers.
         if (preg_match('/^[\d\s+()\-]+$/', $search) === 1) {
             return $query->where(fn ($sub) => $sub->where('phone', 'like', "{$whole}%")
                 ->orWhere('alternate_phone', 'like', "{$whole}%")
-                ->orWhere('uhid', 'like', "{$whole}%"));
+                ->orWhere('uhid', 'like', "{$whole}%")
+                ->orWhereExists(fn ($cases) => $cases->selectRaw('1')->from('patient_cases')
+                    ->whereColumn('patient_cases.patient_id', 'patients.id')
+                    ->whereColumn('patient_cases.clinic_id', 'patients.clinic_id')
+                    ->where('patient_cases.case_number', 'like', "{$whole}%"))
+                ->orWhereExists(fn ($cases) => $cases->selectRaw('1')->from('case_numbers')
+                    ->whereColumn('case_numbers.patient_id', 'patients.id')
+                    ->whereColumn('case_numbers.clinic_id', 'patients.clinic_id')
+                    ->where('case_numbers.case_number', 'like', "{$whole}%")));
         }
 
         // Names: the first word typed is a first or last name (both indexed with clinic_id), which is
@@ -378,7 +396,15 @@ class Patient extends Model
                 }
             });
 
-            $sub->orWhere('uhid', 'like', "{$whole}%");
+            $sub->orWhere('uhid', 'like', "{$whole}%")
+                ->orWhereExists(fn ($cases) => $cases->selectRaw('1')->from('patient_cases')
+                    ->whereColumn('patient_cases.patient_id', 'patients.id')
+                    ->whereColumn('patient_cases.clinic_id', 'patients.clinic_id')
+                    ->where('patient_cases.case_number', 'like', "{$whole}%"))
+                ->orWhereExists(fn ($cases) => $cases->selectRaw('1')->from('case_numbers')
+                    ->whereColumn('case_numbers.patient_id', 'patients.id')
+                    ->whereColumn('case_numbers.clinic_id', 'patients.clinic_id')
+                    ->where('case_numbers.case_number', 'like', "{$whole}%"));
         });
     }
 

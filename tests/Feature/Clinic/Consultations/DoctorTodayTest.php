@@ -64,11 +64,12 @@ test('a patient Reception checks in appears on Today with why they came; Start v
         ->has('today.in_consultation', 1)
         ->where('today.in_consultation.0.encounter.id', $encounter->id));
 
+    // A physiotherapy visit opens the physio consultation, with why the patient came; no dental chart.
     ($this->asDoctor)()->get("/clinic/consultations/{$encounter->id}")->assertInertia(fn (Assert $page) => $page
+        ->component('ClinicPortal/Consultations/Physio', false)
         ->where('visit.reason', 'Knee pain')
         ->where('visit.specialty', 'Physiotherapy')
-        // Only the visit's specialty's parts: the physiotherapy record, not the dental chart.
-        ->where('dental', null)
+        ->missing('dental')
         ->whereNot('physio', null));
 
     $this->actingAs($this->doctorUser);

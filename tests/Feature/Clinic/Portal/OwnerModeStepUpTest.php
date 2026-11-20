@@ -67,10 +67,11 @@ test('the owner without Owner Mode is refused a refund, and the refusal is recor
         ->assertForbidden()->assertSee(OwnerMode::ACTION_REFUSAL);
 
     // In Doctor Mode the owner holds a doctor's permissions, so the route itself offers Owner Mode.
+    // A doctor holds only their own fees (`billing.view_own_fees`), so the billing area's own gate refuses first.
     expect(($this->refunds)())->toBe(0)
         ->and(($this->refused)('owner_mode_inactive'))->toBe(1)
         ->and(SecurityAuditLog::query()->where('event', 'owner_mode.action_refused')->sole()->context)
-        ->toMatchArray(['action' => 'clinic.billing.refunds.store', 'permission' => 'refund.process', 'tier' => 'standard']);
+        ->toMatchArray(['action' => 'clinic.billing.refunds.store', 'permission' => 'billing.view', 'tier' => 'standard']);
 });
 
 test('a wrong password leaves Owner Mode off and the action refused', function () {

@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\QueueStateMachine;
+use App\Services\Reception\DoctorRoster;
 use App\Services\Treatment\TreatmentReadModel;
 use App\Support\ClinicClock;
 
@@ -40,10 +41,11 @@ class PhysioCareSummary
         private ClinicSpecialties $specialties,
         private PatientBranchAccess $branchAccess,
         private TreatmentReadModel $treatments,
+        private DoctorRoster $roster,
     ) {}
 
     /**
-     * @return array{treatments: list<array<string, mixed>>, amount_due: ?float, confirm: ?array<string, mixed>}|null
+     * @return array{treatments: list<array<string, mixed>>, amount_due: ?float, confirm: ?array<string, mixed>, therapists: list<array{id: int, name: string}>, start_url: ?string}|null
      */
     public function forPatient(Patient $patient, User $user, ?Branch $branch): ?array
     {
@@ -85,8 +87,29 @@ class PhysioCareSummary
                     ])
                     ->filter(fn (array $package) => $package['remaining'] > 0)->values()->all(),
             ])->values()->all(),
-            'amount_due' => $user->hasClinicPermission(ClinicPermission::BillingView) ? $this->amountDue($patient, $branchIds) : null,
+            // What this patient owes: for the ledger's readers and for the desk that collects it (not clinic-wide figures).
+            'amount_due' => $user->hasClinicPermission(ClinicPermission::BillingView) || $user->hasClinicPermission(ClinicPermission::PaymentCollect) ? $this->amountDue($patient, $branchIds) : null,
             'confirm' => $this->confirmation($patient, $user, $branch),
+            // The desk runs physiotherapy for therapists who need not sign in: who can give it here, and where a programme starts.
+            ...$this->desk($clinic, $patient, $user, $branch),
+        ];
+    }
+
+    /**
+     * @return array{therapists: list<array{id: int, name: string}>, start_url: ?string}
+     */
+    private function desk(Clinic $clinic, Patient $patient, User $user, ?Branch $branch): array
+    {
+        if ($branch === null || ! $user->hasClinicPermission(ClinicPermission::PhysioSessionConfirm)) {
+            return ['therapists' => [], 'start_url' => null];
+        }
+
+        return [
+            'therapists' => $this->roster->forBranch($clinic, $branch)
+                ->filter(fn (array $entry) => $entry['shift'] !== 'on_leave' && in_array(self::SPECIALTY, $entry['employee']->practitionerProfile?->specialtyKeys() ?? [], true))
+                ->map(fn (array $entry) => ['id' => $entry['employee']->id, 'name' => $entry['employee']->name])
+                ->values()->all(),
+            'start_url' => route('clinic.reception.physio-programme', $patient->id),
         ];
     }
 
@@ -123,6 +146,7 @@ class PhysioCareSummary
         return $item ? [
             'url' => route('clinic.reception.queue.physio-session', $item->id),
             'therapist' => $item->doctor?->name,
+            'therapist_id' => $item->doctor_id,
         ] : null;
     }
 }

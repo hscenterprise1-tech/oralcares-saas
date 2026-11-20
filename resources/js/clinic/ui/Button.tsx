@@ -11,9 +11,9 @@ const TONE: Record<Tone, string> = {
   // The approved intake's primary (New Case / Repeat Case): one blue across the portal, never black or navy.
   primary: 'bg-[#1769AA] text-white shadow-[0_1px_2px_rgba(23,59,96,0.18)] hover:bg-[#135A93]',
   secondary:
-    'border border-clinic-border bg-clinic-surface text-clinic-ink hover:border-clinic-border-strong hover:bg-clinic-inset',
-  ghost: 'text-clinic-secondary hover:bg-clinic-inset hover:text-clinic-ink',
-  danger: 'bg-clinic-danger text-white hover:brightness-95',
+    'border border-[#D5DDE7] bg-white text-[#173B60] hover:border-[#1769AA]/50 hover:bg-[#F5F8FC]',
+  ghost: 'text-[#475569] hover:bg-[#EEF3F8] hover:text-[#173B60]',
+  danger: 'bg-[#B42318] text-white hover:bg-[#9A1E14]',
 };
 
 /* Every size meets the 44px touch target on touch screens (see `touch`). */
@@ -27,7 +27,7 @@ export function buttonClasses(tone: Tone = 'secondary', size: Size = 'md', class
   return cn(
     'inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold',
     'motion-safe:transition-[background-color,border-color,color,transform] motion-safe:duration-150 motion-safe:active:scale-[0.98]',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal focus-visible:ring-offset-2 focus-visible:ring-offset-clinic-canvas',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1769AA] focus-visible:ring-offset-2 focus-visible:ring-offset-white',
     'disabled:pointer-events-none disabled:opacity-50',
     '[@media(pointer:coarse)]:min-h-11',
     TONE[tone],

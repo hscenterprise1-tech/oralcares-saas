@@ -251,7 +251,7 @@ export function collectionRate(period: MoneyPeriod): number | null {
  * two cards share a row and the full label would wrap and push its figure
  * below its neighbour's.
  */
-function KpiCard({
+export function KpiCard({
   tone,
   icon,
   label,
@@ -261,6 +261,8 @@ function KpiCard({
   value,
   note,
   href,
+  onSelect,
+  active = false,
   style,
   className,
 }: {
@@ -275,6 +277,9 @@ function KpiCard({
   value: string;
   note: ReactNode;
   href: string | null | undefined;
+  /** In place of a link: the card picks something on the page (the Front Desk's lanes), `active` while it is picked. */
+  onSelect?: () => void;
+  active?: boolean;
   style?: CSSProperties;
   className?: string;
 }) {
@@ -306,6 +311,15 @@ function KpiCard({
     </>
   );
   const classes = cn('group relative isolate flex min-w-0 flex-col overflow-hidden rounded-2xl border border-white/70 p-4 shadow-cx-card sm:p-5', className);
+  const lift = 'transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-cx-raised motion-reduce:transition-none motion-reduce:hover:translate-y-0';
+
+  if (onSelect) {
+    return (
+      <button type="button" onClick={onSelect} aria-pressed={active} aria-label={`${description}: ${value}. Show the list`} className={cn(classes, 'text-left', lift, FOCUS, active && 'ring-2 ring-inset ring-cx-nav-ink/15')} style={style}>
+        {body}
+      </button>
+    );
+  }
 
   return href ? (
     <Link
@@ -1244,5 +1258,130 @@ export function Timeline({ trail, empty, status, totalCountsRows = true }: { tra
         </p>
       )}
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------- welcome */
+
+/** The greeting for the hour on this device's clock. */
+function greetingFor(hour: number): string {
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+}
+
+/**
+ * The Command Center's opening card: the clinic it covers, the greeting and
+ * the owner's name, and one line on what waits for them — the count of the
+ * attention list below, nothing invented. The date and time stay the top
+ * bar's, the branch stays in each section's caption, and the money stays in
+ * the cards, so none of them is repeated here.
+ *
+ * Its look is layered, not loud: a cyan-to-violet wash, two soft glows, a
+ * gradient edge, and a quiet line drawing (rings and a pulse trace) filling
+ * the right side, all decorative and hidden from assistive technology. The
+ * greeting follows the hour as the page stays open.
+ */
+export function Welcome({
+  name,
+  clinicName,
+  waiting = null,
+  line,
+  actions,
+}: {
+  name: string | null;
+  clinicName: string | null;
+  waiting?: number | null;
+  /** A page's own status line in place of the attention count (the Front Desk's day). */
+  line?: ReactNode;
+  /** The page's main actions, beside the greeting from a tablet up (the Front Desk's New case, Repeat case, Book). */
+  actions?: ReactNode;
+}) {
+  const [hour, setHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    const timer = window.setInterval(() => setHour(new Date().getHours()), 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+  const first = name?.trim().split(/\s+/)[0] ?? null;
+  const art = useId().replace(/:/g, '');
+
+  return (
+    <header className={cn('relative isolate overflow-hidden rounded-2xl border border-white/80 shadow-cx-card', rise(0).className)}>
+      {/* The layers: the wash, a teal glow top right, a violet glow below it, and the gradient edge on the left. */}
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(118deg,#E2F6F5_0%,#E8F0FF_50%,#EFE9FE_100%)]" aria-hidden="true" />
+      <div className="absolute -right-20 -top-28 -z-10 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(44,198,180,0.26),transparent_68%)]" aria-hidden="true" />
+      <div className="absolute -bottom-36 right-24 -z-10 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(107,72,222,0.18),transparent_68%)]" aria-hidden="true" />
+      <span className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[#2CC6B4] via-[#4F7FEA] to-[#8B6CF0]" aria-hidden="true" />
+
+      <svg viewBox="0 0 420 180" className="pointer-events-none absolute -right-8 top-1/2 -z-10 hidden h-[180px] w-[420px] -translate-y-1/2 md:block" aria-hidden="true">
+        <defs>
+          <linearGradient id={`${art}-line`} x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0" stopColor="#2CC6B4" stopOpacity="0" />
+            <stop offset="0.35" stopColor="#2CC6B4" />
+            <stop offset="0.7" stopColor="#4F7FEA" />
+            <stop offset="1" stopColor="#8B6CF0" />
+          </linearGradient>
+          <radialGradient id={`${art}-core`}>
+            <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.9" />
+            <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="318" cy="90" r="62" fill={`url(#${art}-core)`} />
+        {[34, 58, 82, 106].map((radius, index) => (
+          <circle key={radius} cx="318" cy="90" r={radius} fill="none" stroke={`url(#${art}-line)`} strokeOpacity={0.5 - index * 0.1} strokeWidth="1.25" />
+        ))}
+        <polyline
+          points="40,98 170,98 188,98 200,64 214,128 228,78 240,98 300,98 312,90 324,98 420,98"
+          fill="none"
+          stroke={`url(#${art}-line)`}
+          strokeOpacity="0.7"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="318" cy="90" r="5" fill="#4F7FEA" fillOpacity="0.85" />
+        <circle cx="376" cy="40" r="3" fill="#8B6CF0" fillOpacity="0.6" />
+        <circle cx="250" cy="150" r="2.5" fill="#2CC6B4" fillOpacity="0.7" />
+      </svg>
+
+      <div className={cn('relative px-6 py-5 sm:px-8 sm:py-6', actions ? 'flex flex-col gap-4 md:flex-row md:items-center md:justify-between' : 'max-w-[640px]')}>
+        <div className="min-w-0">
+        {clinicName && (
+          <p className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 text-[12.5px] font-medium text-cx-teal-ink shadow-[inset_0_0_0_1px_rgba(14,163,148,0.16)]">
+            <Building2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span className="truncate">{clinicName}</span>
+          </p>
+        )}
+        <h1 className={cn('text-[25px] font-medium leading-[1.2] tracking-[-0.02em] text-[#2B3A55] sm:text-[28px]', clinicName && 'mt-2.5')}>
+          {greetingFor(hour)}
+          {first ? (
+            <>
+              , <span className="bg-gradient-to-r from-[#0B8478] via-[#2B5FD0] to-[#6B48DE] bg-clip-text font-semibold text-transparent">{first}</span>
+            </>
+          ) : null}
+        </h1>
+        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[14px] leading-6 text-cx-text-2">
+          {line !== undefined ? (
+            line
+          ) : waiting === null ? (
+            'Your clinic at a glance, as it runs today.'
+          ) : waiting === 0 ? (
+            <>
+              <span className="h-2 w-2 rounded-full bg-cx-green-ink/70" aria-hidden="true" />
+              Nothing needs your decision right now.
+            </>
+          ) : (
+            <>
+              <span className="h-2 w-2 rounded-full bg-[#E9821A]" aria-hidden="true" />
+              {waiting} {waiting === 1 ? 'item needs' : 'items need'} your attention.
+              <a href="#attention-title" className={cn('-my-2.5 inline-flex min-h-11 items-center rounded-md font-medium text-cx-primary hover:text-cx-primary-strong', FOCUS)}>
+                Review
+              </a>
+            </>
+          )}
+        </p>
+        </div>
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2.5">{actions}</div>}
+      </div>
+    </header>
   );
 }

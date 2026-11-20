@@ -35,16 +35,31 @@ class ReportController extends Controller
     {
         $clinic = $this->clinicContext->clinic() ?? abort(403);
         $available = $this->reports->available($clinic, $request->user());
+        // Neither the clinic's reports nor a practitioner's own: nothing to open here.
+        abort_if($available === [], 403);
+        $mine = $this->reports->scopedPractitioner($request->user());
         $key = $request->query('report');
         $key = is_string($key) && isset($available[$key]) ? $key : array_key_first($available);
         abort_if($request->filled('report') && $key !== $request->query('report'), 404);
-        $filters = $this->reports->filters($clinic, $request->query());
+        $filters = [...$this->reports->filters($clinic, $request->query(), $mine), 'money' => $this->reports->seesMoney($request->user(), $mine !== null)];
 
         return Inertia::render('ClinicPortal/Reports/Index', [
-            'reports' => collect($available)->map(fn (array $r, string $k) => ['key' => $k, 'group' => $r['group'], 'label' => $r['label'], 'description' => $r['description'], 'filters' => $r['filters']])->values(),
+            'reports' => collect($available)->map(fn (array $r, string $k) => [
+                'key' => $k, 'group' => $r['group'], 'label' => $r['label'], 'description' => $r['description'],
+                // A practitioner's own reports have no practitioner to choose: it is always them.
+                'filters' => $mine !== null ? array_values(array_diff($r['filters'], ['practitioner'])) : $r['filters'],
+            ])->values(),
+            // The current report's own filters, with the choices this clinic has.
+            'facets' => $key ? collect($available[$key]['facets'] ?? [])
+                ->map(fn (string $facet) => ['key' => $facet, 'label' => ClinicReports::FACETS[$facet]['label'], 'all' => ClinicReports::FACETS[$facet]['all'],
+                    'options' => collect($this->reports->facetOptions($clinic, $facet))->map(fn (string $label, string $value) => ['value' => (string) $value, 'label' => $label])->values()])
+                ->filter(fn (array $facet) => $facet['options']->isNotEmpty())->values() : [],
+            // 'clinic' for the clinic's reports, 'mine' for a practitioner's own work.
+            'scope' => $mine !== null ? 'mine' : 'clinic',
             'report' => $key,
             'filters' => $filters,
-            'result' => $key ? Inertia::defer(fn () => $this->reports->build($clinic, $key, $filters)) : null,
+            // Built with the page, so the report shows at once (no loading state).
+            'result' => $key ? fn () => $this->reports->build($clinic, $key, $filters) : null,
             'options' => [
                 'branches' => Branch::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->orderBy('name')->get(['id', 'name']),
                 'practitioners' => ClinicEmployee::query()->where('clinic_id', $clinic->id)->whereHas('practitionerProfile')->orderBy('name')->limit(300)->get(['id', 'name']),
@@ -64,7 +79,10 @@ class ReportController extends Controller
 
         $export = ClinicReportExport::query()->create([
             'clinic_id' => $clinic->id, 'requested_by' => $request->user()->id, 'report' => $key,
-            'filters' => $this->reports->filters($clinic, $request->all()), 'status' => 'queued',
+            'filters' => [
+                ...$this->reports->filters($clinic, $request->all(), $mine = $this->reports->scopedPractitioner($request->user())),
+                'money' => $this->reports->seesMoney($request->user(), $mine !== null),
+            ], 'status' => 'queued',
         ]);
         ExportClinicReport::dispatch($export->id)->afterCommit();
 

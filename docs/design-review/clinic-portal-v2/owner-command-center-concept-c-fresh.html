@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner Command Center · Concept C, The Owner's Sheet — OralCares design review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!--
+  DESIGN REVIEW CONCEPT — NOT PRODUCTION CODE.
+  Owner Command Center, Concept C: "The Owner's Sheet".
+
+  Thesis: one continuous ivory sheet, organised by typography and hairline
+  rules instead of boxes. Its focal spread has three parts read left to right:
+  Position (where the money stands), On your desk (decisions as a stack of
+  slips you leaf through), The floor (today's counts as stacked numerals).
+  Below: an instrument strip of tick meters (plan, logins, security), a real
+  seven-day trail that places audit events at their actual times, and a quiet
+  text index. Colour encodes meaning only: teal = money in, amber = owed,
+  violet = decisions, rose = alerts.
+
+  SHELL: the frozen ClinicPortalShell / Sidebar / TopBar transcription with the
+  owner's real navigation (as in owner-command-center.html). Only <main> is new.
+
+  DATA: default = real OwnerCommandCenter output for the seeded QA clinic on
+  23 Oct 2026. "Illustrative" (from the Design review button, or #illustrative)
+  = placeholder values, flagged on the sheet itself. Anything the backend does
+  not send is shown as "not sent yet", never as zero or an estimate.
+-->
+<style>
+  :root {
+    /* Existing shell tokens (tailwind.config.js `cx`). */
+    --nav-canvas: #F5F8FC; --nav-bg: #EEF5FB; --nav-hover: #E1ECF6; --nav-active: #DDF2F2; --nav-line: #D6E3EF;
+    --nav-teal: #00A8A8; --nav-teal-strong: #007A7B; --nav-ink: #0B1F33; --nav-muted: #4A5D73; --rose-ink-shell: #B42318;
+    /* Dashboard content: ink, and the approved panel's three stops as the only accent family. */
+    --card: #FFFFFF; --line: #E6EAF1; --line-strong: #D5DBE6; --row: #EEF1F6;
+    --ink: #0F172A; --ink-2: #475467; --ink-3: #5F6B7E;
+    --teal: #0EA394; --teal-soft: #DDF5F2; --teal-ink: #0A7368;
+    --blue: #2B86D6; --blue-soft: #E1EFFB; --blue-ink: #1C5E9E;
+    --violet: #6B48DE; --violet-soft: #EEE9FD; --violet-ink: #5232C9;
+    /* Safety and urgency only — never decoration. */
+    --rose: #E5484D; --rose-soft: #FFE8EA; --rose-ink: #B42318; --amber-soft: #FFF2D9; --amber-ink: #8F5200;
+    --grad-schedule: linear-gradient(165deg, #0EA394 0%, #2B86D6 52%, #6B48DE 100%);
+    --grad-primary: linear-gradient(135deg, #2B86D6 0%, #6B48DE 100%);
+    --tint-teal: linear-gradient(150deg, #E8F8F6 0%, #D6F1EC 100%);
+    --tint-blue: linear-gradient(150deg, #EAF3FD 0%, #D9E8F8 100%);
+    --tint-violet: linear-gradient(150deg, #F2EFFE 0%, #E6E0FB 100%);
+    --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -16px rgba(15,23,42,.18);
+    --shadow-raised: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -22px rgba(40,40,120,.32);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--nav-canvas); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .review { margin: 0; background: #0F172A; color: #fff; font-size: 12px; font-weight: 600; padding: 10px 16px; text-align: center; }
+  .review span { color: #C9C1FF; font-weight: 500; }
+
+  /* =================== EXISTING SHELL (transcribed, not redesigned) =================== */
+  .app { display: flex; min-height: 100vh; background: var(--nav-canvas); color: var(--ink); }
+  .side-col { position: sticky; top: 0; height: 100vh; width: 240px; flex-shrink: 0; display: none; }
+  @media (min-width: 1024px) { .side-col { display: block; } }
+  .sidebar { display: flex; height: 100%; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--nav-line); background: var(--nav-bg); color: var(--nav-ink); scrollbar-width: none; }
+  .sb-mark { display: flex; height: 77px; flex-shrink: 0; flex-direction: column; justify-content: center; border-bottom: 1px solid var(--nav-line); padding: 0 24px; }
+  .sb-mark b { font-size: 21px; font-weight: 700; line-height: 1; letter-spacing: -.025em; }
+  .sb-mark small { margin-top: 6px; font-size: 11px; font-weight: 500; letter-spacing: .02em; color: var(--nav-muted); }
+  .sb-nav { flex: 1; padding: 8px 12px 16px; }
+  .sb-sec + .sb-sec { margin-top: 24px; }
+  .sb-label { padding: 0 12px 6px; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--nav-muted); }
+  .sb-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .sb-item { position: relative; display: flex; height: 40px; width: 100%; align-items: center; gap: 12px; border-radius: 6px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--nav-ink); text-decoration: none; }
+  .sb-item:hover { background: var(--nav-hover); }
+  .sb-item .i { color: var(--nav-muted); }
+  .sb-item.current { background: var(--nav-active); font-weight: 600; }
+  .sb-item.current::before { content: ''; position: absolute; top: 8px; bottom: 8px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-teal); }
+  .sb-item.current .i { color: var(--nav-teal-strong); }
+  .sb-item.soon { color: var(--nav-muted); cursor: default; }
+  .sb-item.soon:hover { background: transparent; }
+  .sb-item.soon .i { opacity: .8; }
+  .sb-item .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item .tag { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .025em; color: var(--nav-muted); }
+  .sb-clinic { flex-shrink: 0; border-top: 1px solid var(--nav-line); background: #fff; padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+  .sb-clinic .logo { display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 8px; background: var(--nav-bg); box-shadow: inset 0 0 0 1px var(--nav-line); color: var(--nav-teal-strong); }
+  .sb-clinic p { margin: 0; }
+  .sb-clinic .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--nav-muted); }
+  .sb-clinic .n { margin-top: 2px; font-size: 13px; font-weight: 700; text-transform: uppercase; line-height: 1.3; letter-spacing: .05em; color: var(--nav-ink); }
+
+  /* Drawer below 1024px (Radix dialog in the app; a static toggle here). */
+  .drawer { position: fixed; inset: 0; z-index: 50; display: none; }
+  .drawer.open { display: block; }
+  .drawer .overlay { position: absolute; inset: 0; background: rgba(11,31,51,.35); }
+  .drawer .panel { position: absolute; inset: 0 auto 0 0; width: min(272px, 86vw); box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -18px rgba(15,23,42,.22); }
+  .drawer .close { position: absolute; right: 12px; top: 14px; display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  @media (min-width: 1024px) { .drawer, .drawer.open { display: none; } }
+
+  .col { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--nav-line); background: #fff; }
+  .tb-row { display: flex; height: 76px; align-items: center; gap: 12px; padding: 0 16px; }
+  @media (min-width: 640px) { .tb-row { padding: 0 24px; } }
+  @media (min-width: 1024px) { .tb-row { gap: 16px; padding: 0 32px; } }
+  .tb-menu { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; color: var(--nav-muted); cursor: pointer; }
+  .tb-word { flex-shrink: 0; font-size: 18px; font-weight: 700; line-height: 1; letter-spacing: -.025em; color: var(--nav-ink); }
+  @media (min-width: 1024px) { .tb-menu, .tb-word { display: none; } }
+  .tb-search { position: relative; display: none; min-width: 220px; max-width: 720px; flex: 1; }
+  @media (min-width: 768px) { .tb-search { display: block; } }
+  .tb-search .i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--nav-muted); }
+  .tb-search input { height: 44px; width: 100%; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; padding: 0 56px 0 44px; font: 14px Inter, sans-serif; color: var(--nav-ink); }
+  .tb-search input::placeholder { color: var(--nav-muted); }
+  .tb-search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: none; border: 1px solid var(--nav-line); border-radius: 4px; padding: 2px 6px; font: 11px Inter, sans-serif; color: var(--nav-muted); }
+  @media (min-width: 1024px) { .tb-search kbd { display: block; } }
+  .tb-right { margin-left: auto; display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+  @media (min-width: 640px) { .tb-right { gap: 8px; } }
+  @media (min-width: 1024px) { .tb-right { gap: 12px; } }
+  .tb-clock { display: none; text-align: right; flex-shrink: 0; }
+  .tb-clock p { margin: 0; }
+  .tb-clock .d { font-size: 12px; line-height: 1.25; color: var(--nav-muted); }
+  .tb-clock .t { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--nav-ink); font-variant-numeric: tabular-nums; }
+  .tb-div { width: 1px; height: 32px; flex-shrink: 0; background: var(--nav-line); margin: 0 4px; }
+  .tb-div.xl { display: none; }
+  .tb-div.md { display: none; }
+  @media (min-width: 768px) { .tb-div.md { display: block; } }
+  @media (min-width: 1280px) { .tb-clock, .tb-div.xl { display: block; } }
+  .tb-pair { display: flex; align-items: center; gap: 4px; }
+  .tb-round { position: relative; display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  .tb-round:hover { background: var(--nav-bg); color: var(--nav-ink); }
+  .tb-badge { position: absolute; right: 4px; top: 4px; display: flex; height: 18px; min-width: 18px; align-items: center; justify-content: center; border-radius: 999px; background: var(--rose-ink-shell); padding: 0 4px; font-size: 10.5px; font-weight: 700; color: #fff; }
+  .tb-account { display: flex; align-items: center; gap: 12px; border-radius: 6px; padding: 4px 6px 4px 4px; }
+  .tb-account .av { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; background: var(--nav-ink); font-size: 14px; font-weight: 600; color: #fff; }
+  .tb-account .who, .tb-account .chev { display: none; }
+  .tb-account .who b { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--nav-ink); }
+  .tb-account .who span { display: block; max-width: 150px; font-size: 12.5px; color: var(--nav-muted); }
+  .tb-account .chev { width: 16px; height: 16px; color: var(--nav-muted); }
+  @media (min-width: 1280px) { .tb-account .who, .tb-account .chev { display: block; } }
+  .tb-row2 { border-top: 1px solid var(--nav-line); padding: 10px 16px; }
+  .tb-row2 .tb-search { display: block; max-width: none; min-width: 0; }
+  .tb-row2 .tb-search input { padding-right: 16px; }
+  @media (min-width: 768px) { .tb-row2 { display: none; } }
+  .main { margin: 0 auto; width: 100%; min-width: 0; max-width: 1600px; flex: 1; padding: 20px 16px; }
+  @media (min-width: 640px) { .main { padding: 24px; } }
+  @media (min-width: 1024px) { .main { padding: 24px 32px; } }
+  /* ======================== END OF EXISTING SHELL ======================== */
+
+  /* The owner's plan line under the clinic name in the sidebar footer (Sidebar.tsx ClinicIdentity). */
+  .sb-clinic { display: block; }
+  .sb-clinic .row { display: flex; gap: 12px; align-items: flex-start; }
+  .sb-plan { margin-top: 12px; border-top: 1px solid var(--nav-line); padding-top: 10px; }
+  .sb-plan .p { font-size: 12.5px; font-weight: 600; color: var(--nav-ink); }
+  .sb-plan .l { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--nav-muted); }
+  /* Doctor-owner in Owner Mode: AccountMenu draws a teal ring round the avatar. */
+  .tb-account .av.ring { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--nav-teal); }
+
+
+  /* ======================= CONCEPT C · THE OWNER'S SHEET ======================= */
+  :root {
+    --ivory: #FFFDF8; --ivory-2: #FBF7EE; --paper-line: #ECE5D6; --paper-line-2: #F3EEE3;
+    --navy: #0B1F33; --cyan: #13B5C8; --teal: #0EA394; --teal-ink: #0A7368; --mint: #12A877; --mint-ink: #0B6E4E; --mint-soft: #E2F7EE;
+    --amber: #E8971F; --amber-ink: #8F5200; --amber-soft: #FFF2D9;
+    --violet: #6B48DE; --violet-ink: #5232C9; --violet-soft: #EEE9FD;
+    --rose: #E5484D; --rose-ink: #B42318; --rose-soft: #FFE8EA;
+    --blue: #2B86D6; --blue-ink: #1C5E9E;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid rgba(19,181,200,.45); outline-offset: 2px; }
+  .kicker { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #7A7262; }
+  .soon-t { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8B8577; white-space: nowrap; }
+  .nsy { color: #8B8577; font-style: italic; }
+
+  /* The sheet: one ivory surface, lit from the top corner, ruled with hairlines. */
+  .sheet { position: relative; isolation: isolate; overflow: hidden; border-radius: 28px; background: var(--ivory);
+           box-shadow: 0 0 0 1px rgba(208,196,170,.45), 0 30px 70px -48px rgba(60,50,20,.45), 0 2px 6px rgba(60,50,20,.04); }
+  .sheet::before { content: ''; position: absolute; z-index: -1; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 46% at 6% 0%, rgba(19,181,200,.16), transparent 70%), radial-gradient(42% 40% at 100% 4%, rgba(14,163,148,.10), transparent 70%), radial-gradient(50% 30% at 50% 100%, rgba(107,72,222,.05), transparent 70%); }
+  .ill-flag { display: none; align-items: center; gap: 8px; padding: 10px 20px; background: repeating-linear-gradient(135deg, #FFF2D9 0 12px, #FFEACB 12px 24px); color: var(--amber-ink); font-size: 12.5px; font-weight: 700; border-bottom: 1px solid #F3D9AE; }
+  body.ill .ill-flag { display: flex; }
+  .pad { padding: 20px; }
+  @media (min-width: 768px) { .pad { padding: 28px 32px; } }
+
+  /* Masthead: place and date, the greeting, one sentence that says where things stand, and the actions as type. */
+  .mast { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); border-bottom: 1px solid var(--paper-line); }
+  .mast .doing { margin-left: -12px; }
+  @media (max-width: 639px) { .mast .doing { margin-left: 0; } }
+  .mast .line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .mast .om { display: none; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--violet-soft); color: var(--violet-ink); font-size: 11.5px; font-weight: 700; }
+  body.doc-owner .mast .om { display: inline-flex; }
+  .mast h1 { margin: 10px 0 0; font-size: 30px; line-height: 1.08; letter-spacing: -.035em; font-weight: 500; color: #3A4658; }
+  .mast h1 b { font-weight: 800; color: var(--navy); }
+  .deck { margin: 10px 0 0; max-width: 62ch; font-size: 16px; line-height: 1.5; color: #4A4A45; }
+  .deck b { color: var(--navy); font-weight: 700; }
+  .deck .owed { color: var(--amber-ink); } .deck .desk { color: var(--violet-ink); } .deck .alert { color: var(--rose-ink); }
+  @media (min-width: 768px) { .mast h1 { font-size: 40px; } .deck { font-size: 17px; } }
+  .mine { margin: 10px 0 0; display: none; flex-wrap: wrap; gap: 4px 14px; font-size: 13.5px; color: #4A4A45; }
+  body.doc-owner .mine { display: flex; }
+  .mine b { color: var(--navy); }
+  .mine .who { color: var(--violet-ink); font-weight: 700; }
+  .doing { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; }
+  .doing .grp { display: flex; flex-wrap: wrap; align-items: center; }
+  .doing .grp + .grp { margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--paper-line); }
+  .tact { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--navy); font: 600 13.5px Inter, sans-serif; text-decoration: none; cursor: pointer; transition: background .18s, color .18s; white-space: nowrap; }
+  .tact:hover { background: rgba(19,181,200,.10); color: var(--teal-ink); }
+  .tact .i { width: 16px; height: 16px; color: var(--teal); }
+  .tact.quiet { color: #6B6558; } .tact.quiet .i { color: #9A927F; }
+  @media (max-width: 639px) { .doing .grp + .grp { margin-left: 0; padding-left: 0; border-left: 0; } .doing { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .doing .grp { display: contents; } .tact { justify-content: flex-start; } }
+
+  /* The spread: Position · On your desk · The floor, divided by rules, not boxes. */
+  .spread { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "desk" "pos" "floor"; border-bottom: 1px solid var(--paper-line); }
+  .spread > section { min-width: 0; }
+  .s-pos { grid-area: pos; } .s-desk { grid-area: desk; } .s-floor { grid-area: floor; }
+  .spread > section + section { border-top: 1px solid var(--paper-line); }
+  @media (min-width: 768px) {
+    .spread { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); grid-template-areas: "pos pos" "desk floor"; }
+    .s-floor { border-left: 1px solid var(--paper-line); }
+    .s-desk { border-top: 1px solid var(--paper-line); }
+  }
+  @media (min-width: 1280px) {
+    .spread { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .72fr); grid-template-areas: "pos desk floor"; }
+    .spread > section + section { border-top: 0; border-left: 1px solid var(--paper-line); }
+  }
+  .shead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .shead .more { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; margin: -12px 0; color: var(--teal-ink); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+  .shead .more .i { width: 15px; height: 15px; }
+
+  /* Position. */
+  .big { display: block; margin-top: 14px; font-size: 52px; line-height: .95; font-weight: 800; letter-spacing: -.05em; color: var(--navy); text-decoration: none; }
+  .big .u { background: linear-gradient(transparent 82%, rgba(232,151,31,.32) 82%); }
+  .big:hover .u { background: linear-gradient(transparent 70%, rgba(232,151,31,.42) 70%); }
+  @media (min-width: 768px) { .big { font-size: 68px; } }
+  .bigcap { margin: 8px 0 0; font-size: 13.5px; color: #5C5648; }
+  .bigcap b { color: var(--amber-ink); }
+  .month { margin-top: 22px; }
+  .month .ends { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; font-size: 12.5px; color: #5C5648; }
+  .month .ends b { display: block; font-size: 17px; font-weight: 800; color: var(--navy); }
+  .month .ends .r { text-align: right; }
+  .mbar { position: relative; margin-top: 8px; height: 16px; border-radius: 999px; background: var(--ivory-2); box-shadow: inset 0 0 0 1px var(--paper-line); overflow: hidden; }
+  .mbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: linear-gradient(90deg, var(--teal), var(--cyan)); transform-origin: left; animation: grow 1s var(--ease) both; }
+  .mbar s { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--rose) 0 3px, #F7A6AA 3px 6px); }
+  @keyframes grow { from { transform: scaleX(0); } }
+  .msum { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12.5px; color: #5C5648; }
+  .msum b { color: var(--navy); }
+  .ledger-line { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--paper-line-2); border-bottom: 1px solid var(--paper-line-2); }
+  .ledger-line a, .ledger-line div { display: grid; align-content: center; gap: 2px; min-height: 58px; padding: 8px 10px 8px 0; color: inherit; text-decoration: none; }
+  .ledger-line > * + * { padding-left: 12px; border-left: 1px solid var(--paper-line-2); }
+  .ledger-line small { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8B8577; }
+  .ledger-line b { font-size: 15px; font-weight: 800; color: var(--navy); }
+  .ledger-line a:hover b { color: var(--teal-ink); }
+  .period { margin-top: 14px; display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--ivory-2); box-shadow: inset 0 0 0 1px var(--paper-line); }
+  .period button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: #6B6558; font: 600 13px Inter, sans-serif; cursor: pointer; }
+  .period button[aria-pressed="true"] { background: #fff; color: var(--navy); box-shadow: 0 2px 8px -4px rgba(60,50,20,.35); }
+  .outgo-k { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--paper-line-2); }
+  .outgo { margin: 6px 0 0; padding: 0; list-style: none; }
+  .outgo li { display: flex; align-items: center; gap: 10px; min-height: 44px; border-top: 1px dashed var(--paper-line); font-size: 13.5px; color: #4A4A45; }
+  .outgo li:first-child { border-top: 0; }
+  .outgo a { display: flex; align-items: center; gap: 10px; flex: 1; min-height: 44px; color: inherit; text-decoration: none; }
+  .outgo a:hover { color: var(--teal-ink); }
+  .outgo .amt { margin-left: auto; font-weight: 800; color: var(--navy); }
+  .outgo .tick { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  /* On your desk: the decisions as slips, leafed through one at a time. */
+  .stackwrap { position: relative; margin-top: 18px; padding-bottom: 18px; }
+  .slip { position: relative; display: grid; gap: 8px; padding: 18px 18px 16px 30px; border-radius: 16px; background: #fff;
+          box-shadow: 0 0 0 1px var(--paper-line), 0 18px 34px -24px rgba(60,50,20,.5); transition: transform .35s var(--ease), opacity .35s; }
+  .slip::before { content: ''; position: absolute; left: 12px; top: 14px; bottom: 14px; width: 4px; border-radius: 4px; background: var(--tone, var(--violet)); }
+  .slip::after { content: ''; position: absolute; left: 0; top: 18px; bottom: 18px; width: 6px; background: radial-gradient(circle at 0 50%, var(--ivory) 2.5px, transparent 3px) 0 0 / 6px 10px repeat-y; }
+  .ghost { position: absolute; left: 0; right: 0; top: 0; height: 100%; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px var(--paper-line); }
+  .ghost.g1 { transform: translate(8px, 9px) rotate(1.2deg); opacity: .9; }
+  .ghost.g2 { transform: translate(14px, 17px) rotate(2.2deg); opacity: .7; }
+  .stackwrap:hover .ghost.g1 { transform: translate(12px, 12px) rotate(1.8deg); }
+  .stackwrap:hover .ghost.g2 { transform: translate(22px, 22px) rotate(3.2deg); }
+  .slip .sev { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--tone-ink, var(--violet-ink)); }
+  .slip .sev .i { width: 15px; height: 15px; }
+  .slip h3 { margin: 0; font-size: 22px; line-height: 1.15; font-weight: 800; letter-spacing: -.025em; color: var(--navy); }
+  .slip p { margin: 0; font-size: 13.5px; color: #5C5648; }
+  .slip .amount { font-size: 15px; font-weight: 800; color: var(--navy); }
+  .slip .foot { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .go { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: linear-gradient(135deg, var(--teal), var(--cyan)); color: #fff; font: 700 13.5px Inter, sans-serif; text-decoration: none; box-shadow: 0 12px 22px -14px rgba(14,163,148,.9); transition: transform .18s var(--ease); }
+  .go:hover { transform: translateY(-1px); }
+  .go .i { width: 15px; height: 15px; }
+  .go.dep { background: var(--ivory-2); color: #8B8577; box-shadow: inset 0 0 0 1px var(--paper-line); cursor: not-allowed; transform: none; }
+  .leaf { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .leaf[hidden] { display: none; }
+  .leaf .dots { display: flex; gap: 6px; }
+  .leaf .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--paper-line); }
+  .leaf .dots i.on { background: var(--violet); }
+  .leaf .btns { display: flex; gap: 4px; }
+  .leafbtn { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--ivory-2); box-shadow: inset 0 0 0 1px var(--paper-line); color: var(--navy); cursor: pointer; }
+  .leafbtn:hover { background: #fff; }
+  .leafbtn:disabled { color: #C9C2B2; cursor: default; background: transparent; }
+  .leafbtn .i { width: 18px; height: 18px; }
+  .clear { margin-top: 18px; display: grid; gap: 6px; padding: 22px; border-radius: 16px; border: 1.5px dashed #BFE6D6; color: var(--mint-ink); }
+  .clear b { font-size: 20px; letter-spacing: -.02em; }
+  .rule-note { margin: 10px 0 0; font-size: 11.5px; color: #8B8577; }
+
+  /* The floor: today's counts stacked, heaviest first. */
+  .floorlist { list-style: none; margin: 14px 0 0; padding: 0; }
+  .floorlist li { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; gap: 10px; padding: 10px 0; border-top: 1px solid var(--paper-line-2); }
+  .floorlist li:first-child { border-top: 0; }
+  .floorlist .n { font-size: 34px; line-height: 1; font-weight: 800; letter-spacing: -.04em; color: var(--c, var(--navy)); }
+  .floorlist .l b { display: block; font-size: 13.5px; font-weight: 700; color: var(--navy); }
+  .floorlist .l small { font-size: 12px; color: #8B8577; }
+  .floorlist li.ns .n { font-size: 22px; color: #B5AE9E; }
+  .floorlist a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--teal-ink); }
+  @media (max-width: 767px) {
+    .floorlist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+    .floorlist li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .floorlist li:nth-child(2) { border-top: 0; }
+  }
+  .floorstate { margin: 10px 0 0; font-size: 13px; font-weight: 600; }
+  .floorstate.calm { color: var(--mint-ink); } .floorstate.busy { color: var(--rose-ink); }
+
+  /* Instrument strip: plan, logins and security as tick meters, not cards. */
+  .instr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--paper-line); }
+  .instr > div { min-width: 0; padding: 16px 20px; border-top: 1px solid var(--paper-line-2); }
+  .instr > div:nth-child(odd) { border-right: 1px solid var(--paper-line-2); }
+  .instr > div:nth-child(-n+2) { border-top: 0; }
+  @media (max-width: 1023px) { .instr > div:last-child:nth-child(odd) { grid-column: 1 / -1; border-right: 0; } }
+  @media (min-width: 1024px) {
+    .instr { grid-template-columns: 1.35fr repeat(var(--cells, 4), minmax(0, 1fr)); }
+    .instr > div { border-top: 0; border-right: 0; padding: 18px 24px; }
+    .instr > div + div { border-left: 1px solid var(--paper-line-2); }
+    .instr > div:nth-child(odd) { border-right: 0; }
+  }
+  .instr .k { display: block; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #8B8577; }
+  .instr .v { margin-top: 6px; font-size: 24px; line-height: 1; font-weight: 800; letter-spacing: -.03em; color: var(--navy); }
+  .instr .v small { font-size: 13px; font-weight: 600; letter-spacing: 0; color: #8B8577; }
+  .instr .s { margin-top: 6px; font-size: 12px; color: #6B6558; line-height: 1.35; }
+  .ticks { margin-top: 10px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+  .ticks i { height: 10px; border-radius: 2px; background: #EFE9DC; }
+  .ticks i.f { background: var(--cyan); } .ticks.warn i.f { background: var(--amber); } .ticks.full i.f { background: var(--rose); }
+  .ticks.none i { background: transparent; box-shadow: inset 0 0 0 1px #DCD4C2; }
+  .planstate { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; font-weight: 700; }
+  .planstate .i { width: 15px; height: 15px; }
+  .planstate.none { color: var(--amber-ink); } .planstate.ok { color: var(--mint-ink); }
+
+  /* This week: the audit trail drawn at its real times. */
+  .trail { border-bottom: 1px solid var(--paper-line); }
+  .axis { position: relative; margin-top: 20px; }
+  .lane { position: relative; height: 40px; border-top: 1px dashed var(--paper-line); }
+  .lane:last-of-type { border-bottom: 1px dashed var(--paper-line); }
+  .lane .lname { position: absolute; left: 0; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #8B8577; background: var(--ivory); padding-right: 8px; z-index: 1; }
+  .lane .plot { position: absolute; left: 112px; right: 6px; top: 0; bottom: 0; }
+  .mark { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px var(--ivory), 0 0 0 4px rgba(43,134,214,.35); animation: pop .5s var(--ease) both; }
+  .mark.alert { background: var(--rose); box-shadow: 0 0 0 3px var(--ivory), 0 0 0 4px rgba(229,72,77,.35); }
+  .mark.act { background: var(--violet); box-shadow: 0 0 0 3px var(--ivory), 0 0 0 4px rgba(107,72,222,.3); }
+  @keyframes pop { from { transform: scale(0); } }
+  .days { position: relative; margin-left: 112px; margin-right: 6px; height: 22px; }
+  .days span { position: absolute; top: 4px; transform: translateX(-50%); font-size: 11px; font-weight: 600; color: #8B8577; white-space: nowrap; }
+  .days span.today { color: var(--teal-ink); font-weight: 800; }
+  @media (max-width: 479px) { .lane .plot, .days { left: 0; margin-left: 0; } .lane { height: 52px; } .lane .lname { top: 4px; transform: none; font-size: 10px; } .lane .plot { top: 18px; } .days span:not(.edge) { display: none; } }
+  .trail-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 0; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .trail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; } }
+  .trail-list li { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--paper-line-2); font-size: 13px; color: var(--navy); }
+  .trail-list li .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--blue); }
+  .trail-list li.alert .dot { background: var(--rose); } .trail-list li.act .dot { background: var(--violet); }
+  .trail-list li .w { flex: 1; min-width: 0; } .trail-list li small { color: #8B8577; }
+  .trail-list li time { font-size: 12px; color: #8B8577; white-space: nowrap; }
+
+  /* Branches: one comparison chart (sent only for a clinic with several). */
+  .branches { border-bottom: 1px solid var(--paper-line); }
+  body:not(.multi) .branches { display: none; }
+  .bchart { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 4px; }
+  .bchart li { display: grid; grid-template-columns: minmax(96px, 1.1fr) minmax(0, 3fr) auto; align-items: center; gap: 12px; min-height: 48px; border-top: 1px solid var(--paper-line-2); }
+  .bchart li:first-child { border-top: 0; }
+  .bchart b { font-size: 14px; color: var(--navy); }
+  .bchart .bars { display: grid; gap: 4px; }
+  .bchart .bars i { display: block; height: 7px; border-radius: 7px; transform-origin: left; animation: grow .9s var(--ease) both; }
+  .bchart .bars i.a { background: linear-gradient(90deg, #8DBEEB, var(--blue)); }
+  .bchart .bars i.c { background: linear-gradient(90deg, var(--teal), var(--cyan)); }
+  .bchart .fig { text-align: right; font-size: 12.5px; color: #6B6558; white-space: nowrap; }
+  .bchart .fig b { font-size: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: #6B6558; }
+  .legend i { display: inline-block; width: 14px; height: 6px; border-radius: 6px; margin-right: 6px; vertical-align: middle; }
+
+  /* Index: the owner's other work as a quiet list of type. */
+  .index { display: grid; gap: 18px 28px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 1024px) { .index { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .index h3 { margin: 0 0 4px; }
+  .index ul { list-style: none; margin: 0; padding: 0; }
+  .index li a, .index li span.dep { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--paper-line-2); color: var(--navy); font-size: 14px; font-weight: 600; text-decoration: none; transition: color .18s, padding .18s; }
+  .index li a .i { width: 15px; height: 15px; color: var(--teal); }
+  .index li a:hover { color: var(--teal-ink); padding-left: 4px; }
+  .index li span.dep { color: #9A927F; cursor: not-allowed; }
+
+  .rise { animation: rise .55s var(--ease) both; }
+  .d1 { animation-delay: .05s; } .d2 { animation-delay: .12s; } .d3 { animation-delay: .19s; } .d4 { animation-delay: .26s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* Design review controls: out of the owner's view, behind one small button. */
+  /* Review layer only: room at the foot so its floating button never sits over the sheet's last line. */
+  .rv-space { height: 80px; }
+  .rv { position: fixed; right: 16px; bottom: 16px; z-index: 40; max-width: min(420px, calc(100vw - 32px)); font-size: 12.5px; }
+  .rv summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 999px; background: #0F172A; color: #fff; font-weight: 700; cursor: pointer; box-shadow: 0 10px 24px -12px rgba(15,23,42,.6); float: right; }
+  .rv summary::-webkit-details-marker { display: none; }
+  .rv .body { clear: both; margin-bottom: 8px; padding: 14px; text-align: left; font-size: 12.5px; font-weight: 500; border-radius: 16px; background: #0F172A; color: #D5D9E3; display: grid; gap: 10px; box-shadow: 0 20px 40px -20px rgba(15,23,42,.7); }
+  .rv[open] { display: flex; flex-direction: column-reverse; align-items: flex-end; }
+  .rv .sw { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .rv .sw button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: #E6E3FF; font: 600 12px Inter, sans-serif; cursor: pointer; }
+  .rv .sw button[aria-pressed="true"] { background: #fff; color: #0F172A; }
+  .rv ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+  .rv b { color: #fff; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 17.5v-11"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+  <symbol id="i-fu" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-buoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M10 12h4M10 8h4M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
+  <symbol id="i-steth" viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-userplus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-usersearch" viewBox="0 0 24 24"><circle cx="10" cy="8" r="5"/><path d="M2 21a8 8 0 0 1 10.434-7.62"/><circle cx="18" cy="18" r="3"/><path d="m22 22-1.9-1.9"/></symbol>
+  <symbol id="i-calplus" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 10h18M16 19h6M19 16v6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M9.94 14.06 4 20M14.06 9.94 20 4M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+</defs></svg>
+
+
+<!-- The sidebar as the app renders it for a clinic owner today (ClinicNavigation × ClinicFrontend::AVAILABLE), with the owner's plan line. -->
+<template id="sidebar-tpl">
+  <div class="sidebar">
+    <div class="sb-mark"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav class="sb-nav" aria-label="Main">
+      <div class="sb-sec"><p class="sb-label">Main</p><ul>
+        <li><a class="sb-item current" href="#" aria-current="page"><svg class="i"><use href="#i-dash"/></svg><span class="lbl">Dashboard</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-cal"/></svg><span class="lbl">Appointments</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Patients</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Queue: coming soon"><svg class="i"><use href="#i-hour"/></svg><span class="lbl">Queue</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-receipt"/></svg><span class="lbl">Billing</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Reports: coming soon"><svg class="i"><use href="#i-chart"/></svg><span class="lbl">Reports</span><span class="tag">Soon</span></span></li>
+      </ul></div>
+      <div class="sb-sec"><p class="sb-label">Additional</p><ul>
+        <li><span class="sb-item soon" aria-disabled="true" title="Follow-ups: coming soon"><svg class="i"><use href="#i-fu"/></svg><span class="lbl">Follow-ups</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-bell"/></svg><span class="lbl">Notifications</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-buoy"/></svg><span class="lbl">Support</span></a></li>
+      </ul></div>
+    </nav>
+    <section class="sb-clinic" aria-label="Clinic">
+      <div class="row"><span class="logo"><svg class="i"><use href="#i-building"/></svg></span><div><p class="k">Clinic</p><p class="n" data-f="clinic">Smile Studio (browser test)</p></div></div>
+      <div class="sb-plan"><p class="p" data-f="planName">Plan</p><p class="l" data-f="planLine">No subscription on record</p></div>
+    </section>
+  </div>
+</template>
+
+<div class="app">
+  <aside class="side-col" id="side-col"></aside>
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation">
+    <div class="overlay" data-close></div>
+    <div class="panel" id="drawer-panel"><button class="close" aria-label="Close navigation" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+  </div>
+
+  <div class="col">
+    <header class="topbar">
+      <div class="tb-row">
+        <button class="tb-menu" id="open-menu" aria-label="Open navigation" aria-haspopup="dialog"><svg class="i"><use href="#i-menu"/></svg></button>
+        <span class="tb-word" aria-hidden="true">OralCares</span>
+        <div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search patients, pages, appointments and support…" aria-label="Search"><kbd>Ctrl K</kbd></div>
+        <div class="tb-right">
+          <div class="tb-clock"><p class="d">Fri, 23 Oct 2026</p><p class="t">11:03 am</p></div>
+          <span class="tb-div xl" aria-hidden="true"></span>
+          <div class="tb-pair">
+            <a class="tb-round" href="#" aria-label="Support" title="Support"><svg class="i"><use href="#i-buoy"/></svg></a>
+            <button class="tb-round" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+          </div>
+          <span class="tb-div md" aria-hidden="true"></span>
+          <div class="tb-account"><span class="av" id="avatar" aria-hidden="true" data-f="initials">PO</span><span class="who"><b data-f="userName">P360 Owner</b><span data-f="userRole">Clinic Owner</span></span><svg class="i chev"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+      <div class="tb-row2"><div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search pages and more…" aria-label="Search"></div></div>
+    </header>
+
+    <main class="main" id="main">
+      <article class="sheet rise d1" aria-label="Owner Command Center">
+        <p class="ill-flag" role="note"><svg class="i" style="width:16px;height:16px"><use href="#i-alert"/></svg>Illustrative data — placeholder figures for design review, not this clinic's records</p>
+
+        <!-- Masthead -->
+        <header class="mast pad">
+          <div>
+            <p class="line"><span class="kicker" data-f="place">Smile Studio · Main Branch</span><span class="kicker">Friday, 23 October</span><span class="om">Owner Mode on</span></p>
+            <h1>Good morning, <b data-f="firstName">P360</b>.</h1>
+            <p class="deck" id="deck"></p>
+            <p class="mine"><span class="who">Your own patients</span><span><b class="num" data-f="mineWaiting">3</b> waiting for you</span><span><b class="num" data-f="mineSeen">5</b> seen</span><span><b class="num" data-f="mineNotes">1</b> note to finish</span><span class="soon-t">Doctor Today · Soon</span></p>
+          </div>
+          <nav class="doing" aria-label="Quick actions">
+            <span class="grp">
+              <button class="tact" type="button"><svg class="i"><use href="#i-userplus"/></svg>New Case</button>
+              <button class="tact" type="button"><svg class="i"><use href="#i-usersearch"/></svg>Repeat Case</button>
+              <a class="tact" href="#"><svg class="i"><use href="#i-calplus"/></svg>Book</a>
+              <a class="tact" href="#"><svg class="i"><use href="#i-receipt"/></svg>Billing</a>
+            </span>
+            <span class="grp">
+              <button class="tact quiet" type="button" title="Choose what staff dashboards show"><svg class="i"><use href="#i-sliders"/></svg>Staff dashboards</button>
+              <button class="tact quiet" type="button" aria-label="Refresh figures"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button>
+            </span>
+          </nav>
+        </header>
+
+        <!-- The spread -->
+        <div class="spread">
+          <section class="s-pos pad rise d2" aria-labelledby="pos-k">
+            <div class="shead"><p class="kicker" id="pos-k">Position</p><a class="more" href="#">Financial summary<svg class="i"><use href="#i-arrow"/></svg></a></div>
+            <a class="big num" href="#" aria-describedby="big-cap"><span class="u" data-f="outstanding">₹8,300</span></a>
+            <p class="bigcap" id="big-cap"><b>Still due</b> on open bills, all dates · <span data-f="scope">Main Branch</span></p>
+            <div class="month" aria-label="This month">
+              <div class="ends"><span><small>Collected this month</small><b class="num" data-f="colMonth">₹7,500</b></span><span class="r"><small>Billed this month</small><b class="num" data-f="billedMonth">₹15,800</b></span></div>
+              <div class="mbar" role="img" data-aria="mbar"><i data-w="col"></i><s data-w="ref"></s></div>
+              <p class="msum"><span><b class="num" data-f="rate">47%</b> of billing collected</span><span><b class="num" data-f="refMonth">₹500</b> refunded</span><span>net <b class="num" data-f="netMonth">₹7,000</b></span></p>
+            </div>
+            <div class="period" role="group" aria-label="Figures for"><button type="button" data-period="today" aria-pressed="true">Today</button><button type="button" data-period="month" aria-pressed="false">This month</button></div>
+            <div class="ledger-line">
+              <a href="#"><small>Billed</small><b class="num" data-f="pBilled">₹15,800</b></a>
+              <a href="#"><small>Collected</small><b class="num" data-f="pCol">₹7,500</b></a>
+              <a href="#"><small>Refunded</small><b class="num" data-f="pRef">₹500</b></a>
+            </div>
+            <p class="msum" style="margin-top:8px"><span>Discounts <b class="num" data-f="pDisc">₹0</b></span><a href="#" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;min-height:44px;margin:-12px 0">Adjusted&nbsp;<b class="num" data-f="pAdj">₹0</b></a></p>
+          </section>
+
+          <section class="s-desk pad rise d2" aria-labelledby="desk-k">
+            <div class="shead"><p class="kicker" id="desk-k">On your desk</p><span class="soon-t" data-f="deskCount"></span></div>
+            <div id="desk"></div>
+            <div class="outgo-k"><div class="shead"><p class="kicker" id="out-k">Waiting to go out</p><a class="more" href="#">Expenses<svg class="i"><use href="#i-arrow"/></svg></a></div>
+            <ul class="outgo" aria-labelledby="out-k">
+              <li><a href="#"><span class="tick" style="background:var(--amber)"></span>To decide · <span class="num" data-f="decN">2</span><span class="amt num" data-f="decAmt">₹41,200</span></a></li>
+              <li><a href="#"><span class="tick" style="background:var(--blue)"></span>Approved, to pay · <span class="num" data-f="payN">0</span><span class="amt num" data-f="payAmt">₹0</span></a></li>
+              <li><span class="tick" style="background:#DCD4C2"></span>Paid out this month<span class="amt nsy" style="font-weight:600">not sent yet</span></li>
+            </ul></div>
+          </section>
+
+          <section class="s-floor pad rise d3" aria-labelledby="floor-k">
+            <div class="shead"><p class="kicker" id="floor-k">The floor, now</p><span class="soon-t">Queue · Soon</span></div>
+            <p class="floorstate" id="floorstate"></p>
+            <ul class="floorlist" id="floor"></ul>
+          </section>
+        </div>
+
+        <!-- Instrument strip -->
+        <div class="instr rise d3" id="instr" aria-label="Plan, logins and security"></div>
+
+        <!-- Branches (several only) -->
+        <section class="branches pad rise d3" aria-labelledby="br-k">
+          <div class="shead"><p class="kicker" id="br-k">Branches today</p><span class="soon-t">Branch pages · Soon</span></div>
+          <p class="legend" style="margin:8px 0 0"><span><i style="background:var(--blue)"></i>Appointments</span><span><i style="background:var(--cyan)"></i>Collected</span></p>
+          <ul class="bchart" id="bchart"></ul>
+        </section>
+
+        <!-- This week -->
+        <section class="trail pad rise d4" aria-labelledby="trail-k">
+          <div class="shead"><p class="kicker" id="trail-k">This week · from the audit trail</p><span class="soon-t" data-f="failLine"></span></div>
+          <div class="axis" aria-hidden="true">
+            <div class="lane"><span class="lname">Sign-in</span><div class="plot" id="laneSec"></div></div>
+            <div class="lane"><span class="lname">Sensitive</span><div class="plot" id="laneAct"></div></div>
+            <div class="days" id="days"></div>
+          </div>
+          <ul class="trail-list" id="trailList"></ul>
+        </section>
+
+        <!-- Index -->
+        <nav class="pad rise d4" aria-label="Go to">
+          <div class="index">
+            <div><h3 class="kicker">Patients</h3><ul>
+              <li><a href="#">Patient directory<svg class="i"><use href="#i-arrow"/></svg></a></li>
+              <li><a href="#">Appointments<svg class="i"><use href="#i-arrow"/></svg></a></li>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Follow-ups<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+            <div><h3 class="kicker">Money</h3><ul>
+              <li><a href="#">Bills &amp; collections<svg class="i"><use href="#i-arrow"/></svg></a></li>
+              <li><a href="#">Expenses<svg class="i"><use href="#i-arrow"/></svg></a></li>
+              <li><a href="#">Financial summary<svg class="i"><use href="#i-arrow"/></svg></a></li>
+            </ul></div>
+            <div><h3 class="kicker">People</h3><ul>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Staff &amp; logins<span class="soon-t">Soon</span></span></li>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Payroll<span class="soon-t">Soon</span></span></li>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Approvals<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+            <div><h3 class="kicker">Clinic</h3><ul>
+              <li><a href="#">Settings · patient form<svg class="i"><use href="#i-arrow"/></svg></a></li>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Branches<span class="soon-t">Soon</span></span></li>
+              <li><span class="dep" aria-disabled="true" title="Coming soon">Reports<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+          </div>
+        </nav>
+      </article>
+      <div class="rv-space" aria-hidden="true"></div>
+    </main>
+  </div>
+</div>
+
+<!-- Design review only: data switch and notes, out of the owner's view. -->
+<details class="rv">
+  <summary>Design review</summary>
+  <div class="review body">
+    <b>Concept C · The Owner's Sheet</b>
+    <div class="sw" role="group" aria-label="Data shown"><button type="button" data-data="qa" aria-pressed="true">QA snapshot (real)</button><button type="button" data-data="ill" aria-pressed="false">Illustrative</button></div>
+    <div class="sw" role="group" aria-label="Who is signed in"><button type="button" data-who="owner" aria-pressed="true">Owner</button><button type="button" data-who="doc" aria-pressed="false">Doctor-owner in Owner Mode</button></div>
+    <ul>
+      <li><b>Real</b>: the live Command Center's figures for the seeded QA clinic on 23 Oct 2026 at 11:03.</li>
+      <li><b>Calculated</b>: collection rate = collected ÷ billed; net = collected − refunded; the masthead sentence and the desk order (alert, overdue, pending; then count) — fixed rules, not AI.</li>
+      <li><b>Not sent yet</b>: completed consultations; expenses paid out this month.</li>
+      <li><b>Soon</b>: pages not built — Queue, Staff, Payroll, Approvals, Branches, Reports, Follow-ups, WhatsApp, Doctor Today.</li>
+    </ul>
+  </div>
+</details>
+
+<script>
+  // ---------------------------------------------------------------------------
+  // DATA. Two sets in the shapes OwnerCommandCenter sends today.
+  //  qa  — REAL read-model output the live Command Center showed for the seeded
+  //        QA clinic (Smile Studio, browser test) on 23 Oct 2026 at 11:03.
+  //  ill — ILLUSTRATIVE placeholder values in the same shapes. Never real.
+  // `null` means the backend does not send this yet: the page says "unavailable".
+  // ---------------------------------------------------------------------------
+  const DATA = {
+    qa: {
+      src: 'QA snapshot', srcClass: 'real', clinic: 'Smile Studio (browser test)', short: 'Smile Studio', scope: 'Main Branch', multi: false,
+      planName: 'Plan', planLine: 'No subscription on record',
+      today: { appts: 0, patients: 0, waiting: 0, withDoc: 0, completed: null },
+      money: { outstanding: 8300, today: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 }, month: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 } },
+      spend: { dec: [2, 41200], pay: [0, 0], paidMonth: null },
+      decisions: [ { key: 'expenses_to_decide', sev: 'pending', tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 2, amount: 41200, page: 'Expenses', built: true, verb: 'Decide' } ],
+      plan: null,
+      seats: [ { key: 'doctors', label: 'Doctor logins', used: 1, allowed: null }, { key: 'logins', label: 'All logins', used: 5, allowed: null }, { key: 'branches', label: 'Branches', used: 1, allowed: null } ],
+      noLogin: 0, onLeave: 0,
+      security: { failed: 0, items: [ ['Owner Mode entered', null, '23 Oct, 12:43 AM', false], ['Owner Mode entered', null, '22 Oct, 12:39 PM', false] ] },
+      activity: [ ['Refund recorded', null, '23 Oct, 01:36 AM', false] ],
+      branches: [],
+      mine: null,
+    },
+    ill: {
+      src: 'Illustrative', srcClass: 'ph', clinic: 'Smile Studio', short: 'Smile Studio', scope: 'All branches', multi: true,
+      planName: 'Dental Growth', planLine: 'Renews 14 Jan 2027',
+      today: { appts: 46, patients: 38, waiting: 7, withDoc: 4, completed: null },
+      money: { outstanding: 184600, today: { billed: 96400, col: 71250, ref: 2500, disc: 3800, adj: 1200 }, month: { billed: 1842300, col: 1516900, ref: 18400, disc: 61200, adj: 9800 } },
+      spend: { dec: [3, 58900], pay: [2, 22400], paidMonth: null },
+      decisions: [
+        { key: 'long_waits', sev: 'overdue', tone: 'rose', icon: 'hour', primary: 'Long waits', secondary: 'Waiting over 30 min', count: 2, page: 'Queue', built: false, verb: 'See' },
+        { key: 'doctor_overload', sev: 'alert', tone: 'rose', icon: 'steth', primary: 'Doctors with a long queue', secondary: '5 or more waiting', count: 1, page: 'Queue', built: false, verb: 'Rebalance' },
+        { key: 'expenses_to_decide', sev: 'pending', tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 3, amount: 58900, page: 'Expenses', built: true, verb: 'Decide' },
+        { key: 'expenses_to_pay', sev: 'pending', tone: 'blue', icon: 'wallet', primary: 'Expenses to pay', secondary: 'Approved, not yet paid', count: 2, amount: 22400, page: 'Expenses', built: true, verb: 'Pay' },
+        { key: 'approvals', sev: 'pending', tone: 'violet', icon: 'shield', primary: 'Approvals waiting', secondary: 'Requests that need your decision', count: 1, page: 'Approvals', built: false, verb: 'Review' },
+        { key: 'payroll_to_finalise', sev: 'pending', tone: 'violet', icon: 'bank', primary: 'Payroll to finalise', secondary: 'A month is open, not yet finalised', count: 1, page: 'Payroll', built: false, verb: 'Finalise' },
+        { key: 'messages_failed', sev: 'overdue', tone: 'rose', icon: 'msg', primary: 'Messages not delivered', secondary: 'WhatsApp, last 7 days', count: 4, page: 'WhatsApp', built: false, verb: 'Check' },
+      ],
+      plan: { name: 'Dental Growth', status: 'Active', ends: '14 Jan 2027' },
+      seats: [ { key: 'doctors', label: 'Doctor logins', used: 6, allowed: 8 }, { key: 'staff', label: 'Staff logins', used: 11, allowed: 12 }, { key: 'logins', label: 'All logins', used: 17, allowed: 20 }, { key: 'branches', label: 'Branches', used: 3, allowed: 3 } ],
+      noLogin: 2, onLeave: 1,
+      security: { failed: 2, items: [ ['Wrong password at sign-in', null, '23 Oct, 09:12 AM', true], ['Owner Mode: wrong password', null, '22 Oct, 06:40 PM', true], ['Owner Mode entered', null, '22 Oct, 06:41 PM', false] ] },
+      activity: [ ['Refund recorded', 'Meena (Billing)', '23 Oct, 10:20 AM', false], ['Expense approved', 'Ravi Kapoor', '22 Oct, 05:02 PM', false], ['Staff roles changed', 'Ravi Kapoor', '21 Oct, 11:45 AM', false] ],
+      branches: [ { name: 'Indiranagar', appts: 21, visits: 18, col: 38400 }, { name: 'Koramangala', appts: 16, visits: 13, col: 24850 }, { name: 'Whitefield', appts: 9, visits: 7, col: 8000 } ],
+      mine: { waiting: 3, seen: 5, notes: 1 },
+    },
+  };
+  const WHO = {
+    owner: { qa: ['P360 Owner', 'PO', 'Clinic Owner', 'P360'], ill: ['Ravi Kapoor', 'RK', 'Clinic Owner', 'Ravi'] },
+    doc: { qa: ['P360 Owner', 'PO', 'Clinic Owner · Owner Mode', 'P360'], ill: ['Dr. Anil Kapoor', 'AK', 'Clinic Owner · Owner Mode', 'Dr. Kapoor'] },
+  };
+  // The one fixed ranking used for "what needs you first": alert, then overdue, then pending; then the larger count.
+  // A deterministic rule over live counts — not AI, not a recommendation engine.
+  const SEVERITY = { alert: 0, overdue: 1, pending: 2 };
+  const ranked = (items) => [...items].sort((a, b) => (SEVERITY[a.sev] - SEVERITY[b.sev]) || (b.count - a.count));
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  // How each open item reads as an action, from its key and count.
+  const ACT = {
+    expenses_to_decide: (n) => `Decide ${plural(n, 'expense', 'expenses')}`,
+    expenses_to_pay: (n) => `Pay ${plural(n, 'approved expense', 'approved expenses')}`,
+    long_waits: (n) => `See ${plural(n, 'long wait', 'long waits')}`,
+    unassigned: (n) => `Assign ${plural(n, 'waiting patient', 'waiting patients')}`,
+    doctor_overload: (n) => `Rebalance ${plural(n, 'doctor queue', 'doctor queues')}`,
+    approvals: (n) => `Review ${plural(n, 'approval request', 'approval requests')}`,
+    payroll_to_finalise: (n) => `Finalise ${plural(n, 'payroll month', 'payroll months')}`,
+    messages_failed: (n) => `Check ${plural(n, 'undelivered message', 'undelivered messages')}`,
+  };
+  const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const set = (k, v) => document.querySelectorAll(`[data-f="${k}"]`).forEach((el) => { el.textContent = v; });
+  const state = { data: location.hash.includes('illustrative') ? 'ill' : 'qa', who: location.hash.includes('doctor-owner') ? 'doc' : 'owner' };
+
+  // Mockup only: place the sidebar (desktop column and the phone/tablet drawer), as the shell does.
+  const tpl = document.getElementById('sidebar-tpl');
+  document.getElementById('side-col').appendChild(tpl.content.cloneNode(true));
+  document.getElementById('drawer-panel').prepend(tpl.content.cloneNode(true));
+  const drawer = document.getElementById('drawer');
+  document.getElementById('open-menu').addEventListener('click', () => drawer.classList.add('open'));
+  drawer.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => drawer.classList.remove('open')));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') drawer.classList.remove('open'); });
+
+  function renderShell(d) {
+    const [userName, initials, role, first] = WHO[state.who][state.data];
+    document.body.classList.toggle('multi', d.multi);
+    document.body.classList.toggle('doc-owner', state.who === 'doc');
+    document.getElementById('avatar').classList.toggle('ring', state.who === 'doc');
+    set('clinic', d.clinic); set('planName', d.planName); set('planLine', d.planLine);
+    set('userName', userName); set('initials', initials); set('userRole', role); set('firstName', first);
+    document.querySelectorAll('[data-f="srcTag"]').forEach((tag) => { tag.textContent = d.src; tag.className = `src ${d.srcClass}`; });
+    document.querySelectorAll('.review [data-data]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.data === state.data)));
+    document.querySelectorAll('.review [data-who]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.who === state.who)));
+  }
+  function wireReview(render) {
+    document.querySelectorAll('.review [data-data]').forEach((b) => b.addEventListener('click', () => { state.data = b.dataset.data; render(); }));
+    document.querySelectorAll('.review [data-who]').forEach((b) => b.addEventListener('click', () => { state.who = b.dataset.who; render(); }));
+  }
+  function lockUnbuilt() {
+    document.querySelectorAll('.dep, [aria-disabled="true"]').forEach((el) => { el.setAttribute('tabindex', '-1'); el.setAttribute('aria-disabled', 'true'); });
+  }
+  let period = 'today';
+  let slip = 0;
+  const NOW = new Date(2026, 9, 23, 11, 3);
+  const WEEK = 7 * 24 * 3600 * 1000;
+  const when = (s) => new Date(s.replace(',', ' 2026'));
+  const SEV_WORD = { alert: 'Alert', overdue: 'Overdue', pending: 'Waiting' };
+  const TONE = { rose: ['var(--rose)', 'var(--rose-ink)'], amber: ['var(--amber)', 'var(--amber-ink)'], blue: ['var(--blue)', 'var(--blue-ink)'], violet: ['var(--violet)', 'var(--violet-ink)'], mint: ['var(--mint)', 'var(--mint-ink)'] };
+
+  function render() {
+    const d = DATA[state.data];
+    renderShell(d);
+    document.body.classList.toggle('ill', state.data === 'ill');
+    set('place', `${d.short} · ${d.scope}`); set('scope', d.scope);
+    if (d.mine) { set('mineWaiting', d.mine.waiting); set('mineSeen', d.mine.seen); set('mineNotes', d.mine.notes); }
+    const items = ranked(d.decisions);
+    const n = items.reduce((s, x) => s + x.count, 0);
+    const m = d.money; const mon = m.month;
+    const rate = mon.billed ? Math.round((mon.col / mon.billed) * 100) : 0;
+    const t = d.today;
+
+    // The masthead sentence: three clauses from the figures, in a fixed order.
+    const parts = [
+      `<b class="owed">${inr(m.outstanding)}</b> is still due on open bills`,
+      n ? `<b class="desk">${plural(n, 'item waits', 'items wait')}</b> on your desk` : 'your desk is clear',
+      t.patients ? `<b>${t.patients}</b> patients have checked in with <b>${t.waiting}</b> waiting` : 'the floor is quiet so far',
+    ];
+    const tail = d.security.failed ? ` <b class="alert">${plural(d.security.failed, 'sign-in check', 'sign-in checks')}</b> failed this week.` : '';
+    document.getElementById('deck').innerHTML = `${parts[0]}, ${parts[1]}, and ${parts[2]}.${tail}`;
+
+    // Position.
+    set('outstanding', inr(m.outstanding));
+    set('colMonth', inr(mon.col)); set('billedMonth', inr(mon.billed)); set('rate', `${rate}%`); set('refMonth', inr(mon.ref)); set('netMonth', inr(mon.col - mon.ref));
+    const scale = Math.max(1, mon.billed, mon.col);
+    const colEl = document.querySelector('[data-w="col"]'); colEl.style.width = `${(mon.col / scale) * 100}%`;
+    const refEl = document.querySelector('[data-w="ref"]'); refEl.style.left = `${((mon.col - mon.ref) / scale) * 100}%`; refEl.style.width = `${Math.max(mon.ref ? .6 : 0, (mon.ref / scale) * 100)}%`;
+    document.querySelector('[data-aria="mbar"]').setAttribute('aria-label', `This month: ${inr(mon.col)} collected of ${inr(mon.billed)} billed, ${inr(mon.ref)} refunded`);
+    const p = m[period];
+    set('pBilled', inr(p.billed)); set('pCol', inr(p.col)); set('pRef', inr(p.ref)); set('pDisc', inr(p.disc)); set('pAdj', inr(p.adj));
+    document.querySelectorAll('[data-period]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.period === period)));
+    set('decN', d.spend.dec[0]); set('decAmt', inr(d.spend.dec[1])); set('payN', d.spend.pay[0]); set('payAmt', inr(d.spend.pay[1]));
+
+    // On your desk: one slip at a time, the rest stacked behind it.
+    slip = Math.min(slip, Math.max(0, items.length - 1));
+    set('deskCount', items.length > 1 ? `${slip + 1} of ${items.length}` : '');
+    const desk = document.getElementById('desk');
+    if (!items.length) {
+      desk.innerHTML = '<div class="clear"><b>Your desk is clear</b><span>Expenses, approvals, payroll and queue problems land here as they happen.</span></div>';
+    } else {
+      const x = items[slip]; const [tone, ink] = TONE[x.tone];
+      const behind = Math.min(2, items.length - 1 - slip);
+      const action = x.built
+        ? `<a class="go" href="#">Open ${esc(x.page.toLowerCase())}<svg class="i"><use href="#i-arrow"/></svg></a>`
+        : `<span class="go dep" aria-disabled="true" title="Coming soon: the ${esc(x.page)} page">${esc(x.page)} · Soon</span>`;
+      desk.innerHTML = `<div class="stackwrap">${behind >= 2 ? '<span class="ghost g2" aria-hidden="true"></span>' : ''}${behind >= 1 ? '<span class="ghost g1" aria-hidden="true"></span>' : ''}
+        <div class="slip" style="--tone:${tone};--tone-ink:${ink}" aria-live="polite">
+          <span class="sev"><svg class="i"><use href="#i-${x.icon}"/></svg>${SEV_WORD[x.sev]}</span>
+          <h3>${esc(ACT[x.key](x.count))}</h3>
+          <p>${esc(x.secondary)}</p>
+          <div class="foot">${x.amount ? `<span class="amount num">${inr(x.amount)}</span>` : '<span></span>'}${action}</div>
+        </div></div>
+        <div class="leaf"${items.length < 2 ? ' hidden' : ''}><span class="dots" aria-hidden="true">${items.map((_, i) => `<i class="${i === slip ? 'on' : ''}"></i>`).join('')}</span>
+          <span class="btns"><button class="leafbtn" type="button" data-leaf="-1" aria-label="Previous decision" ${slip === 0 ? 'disabled' : ''}><svg class="i"><use href="#i-left"/></svg></button><button class="leafbtn" type="button" data-leaf="1" aria-label="Next decision" ${slip >= items.length - 1 ? 'disabled' : ''}><svg class="i"><use href="#i-right"/></svg></button></span></div>
+        <p class="rule-note">Most urgent first: alerts, then overdue, then waiting.</p>`;
+      desk.querySelectorAll('[data-leaf]').forEach((b) => b.addEventListener('click', () => { slip += Number(b.dataset.leaf); render(); }));
+    }
+
+    // The floor.
+    const queue = items.filter((x) => ['long_waits', 'unassigned', 'doctor_overload'].includes(x.key));
+    const fs = document.getElementById('floorstate');
+    fs.className = `floorstate ${queue.length ? 'busy' : 'calm'}`;
+    const FLOOR = { long_waits: ['long wait', 'long waits'], unassigned: ['patient without a doctor', 'patients without a doctor'], doctor_overload: ['doctor with a long queue', 'doctors with a long queue'] };
+    fs.textContent = queue.length ? queue.map((x) => plural(x.count, ...FLOOR[x.key])).join(' · ') : 'No queue bottlenecks right now';
+    const row = (nv, label, sub, color, link) => `<li class="${nv === null ? 'ns' : ''}"><span class="n num" style="--c:${color}">${nv === null ? '—' : nv}</span><span class="l"><b>${label}</b><small>${sub}</small>${link || ''}</span></li>`;
+    document.getElementById('floor').innerHTML = row(t.appts, 'Booked', 'appointments today', 'var(--blue)', '<br><a href="#">Calendar<svg class="i" style="width:14px;height:14px"><use href="#i-arrow"/></svg></a>')
+      + row(t.patients, 'Checked in', 'patients today', 'var(--teal)') + row(t.waiting, 'Waiting', 'in the queue', 'var(--mint)') + row(t.withDoc, 'With a doctor', 'in consultation', 'var(--violet)')
+      + row(null, 'Completed', 'not sent yet', '#B5AE9E') + `<li class="ns"><span class="n num" style="--c:var(--navy);font-size:22px">${d.onLeave}</span><span class="l"><b>On leave today</b><small>${plural(d.noLogin, 'profile', 'profiles')} without a login</small></span></li>`;
+
+    // Instrument strip.
+    const ticks = (used, allowed) => { if (allowed === null) return '<span class="ticks none" aria-hidden="true">' + '<i></i>'.repeat(10) + '</span>'; const f = Math.min(10, Math.round((used / allowed) * 10)); const cls = used >= allowed ? 'full' : used / allowed >= .85 ? 'warn' : ''; return `<span class="ticks ${cls}" aria-hidden="true">${Array.from({ length: 10 }, (_, i) => `<i class="${i < f ? 'f' : ''}"></i>`).join('')}</span>`; };
+    const instr = document.getElementById('instr');
+    instr.style.setProperty('--cells', d.seats.length + 1);
+    instr.innerHTML = `<div><span class="k">Plan</span><div class="planstate ${d.plan ? 'ok' : 'none'}"><svg class="i"><use href="#i-${d.plan ? 'check' : 'alert'}"/></svg>${d.plan ? esc(d.plan.name) : 'No active plan on record'}</div><p class="s">${d.plan ? `${esc(d.plan.status)} · renews ${esc(d.plan.ends)}` : 'Limits can\'t be checked until OralCares records your plan.'}</p></div>`
+      + d.seats.map((s) => `<div><span class="k">${esc(s.label)}</span><div class="v num">${s.used}${s.allowed !== null ? ` <small>of ${s.allowed}</small>` : ''}</div>${ticks(s.used, s.allowed)}<p class="s">${s.allowed === null ? 'No limit on record' : s.used >= s.allowed ? 'Full' : s.used / s.allowed >= .85 ? 'Nearly full' : 'Within the plan'}</p></div>`).join('')
+      + `<div><span class="k">Security · 7 days</span><div class="v num" style="color:${d.security.failed ? 'var(--rose-ink)' : 'var(--mint-ink)'}">${d.security.failed}</div><p class="s">${d.security.failed ? 'failed sign-in or Owner Mode checks' : 'failed checks'}</p></div>`;
+
+    // Branches.
+    const maxA = Math.max(1, ...d.branches.map((b) => b.appts)); const maxC = Math.max(1, ...d.branches.map((b) => b.col));
+    document.getElementById('bchart').innerHTML = d.branches.map((b) => `<li><b>${esc(b.name)}</b><span class="bars"><i class="a" style="width:${(b.appts / maxA) * 100}%"></i><i class="c" style="width:${(b.col / maxC) * 100}%"></i></span><span class="fig"><b class="num">${b.appts}</b> appts · <b class="num">${inr(b.col)}</b></span></li>`).join('');
+
+    // This week, at real times.
+    const start = NOW.getTime() - WEEK;
+    const pos = (s) => Math.min(100, Math.max(0, ((when(s).getTime() - start) / WEEK) * 100));
+    document.getElementById('laneSec').innerHTML = d.security.items.map(([p1, , time, alert]) => `<span class="mark${alert ? ' alert' : ''}" style="left:${pos(time)}%" title="${esc(p1)} · ${esc(time)}"></span>`).join('');
+    document.getElementById('laneAct').innerHTML = d.activity.map(([p1, , time]) => `<span class="mark act" style="left:${pos(time)}%" title="${esc(p1)} · ${esc(time)}"></span>`).join('');
+    const days = [];
+    for (let i = 6; i >= 0; i--) { const dt = new Date(2026, 9, 23 - i); const left = ((dt.getTime() - start) / WEEK) * 100; if (left >= 0) days.push(`<span class="${i === 0 ? 'today edge' : i === 6 ? 'edge' : ''}" style="left:${left}%">${i === 0 ? 'Today' : dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>`); }
+    document.getElementById('days').innerHTML = days.join('');
+    set('failLine', d.security.failed ? `${plural(d.security.failed, 'failed check', 'failed checks')}` : 'No failed checks');
+    const events = [...d.security.items.map((e) => [...e, 'sec']), ...d.activity.map((e) => [...e, 'act'])].sort((a, b) => when(b[2]) - when(a[2]));
+    document.getElementById('trailList').innerHTML = events.map(([p1, who, time, alert, kind]) => `<li class="${alert ? 'alert' : kind === 'act' ? 'act' : ''}"><span class="dot"></span><span class="w">${esc(p1)}${who ? ` <small>· ${esc(who)}</small>` : ''}</span><time>${esc(time)}</time></li>`).join('');
+
+    lockUnbuilt();
+  }
+  document.querySelectorAll('[data-period]').forEach((b) => b.addEventListener('click', () => { period = b.dataset.period; render(); }));
+  wireReview(() => { slip = 0; render(); });
+  render();
+</script>
+</body>
+</html>

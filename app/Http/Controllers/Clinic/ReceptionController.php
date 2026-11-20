@@ -27,6 +27,7 @@ use App\Services\Patient\PatientBranchAccess;
 use App\Services\PatientFieldConfigService;
 use App\Services\PaymentService;
 use App\Services\Physio\PhysioCareSummary;
+use App\Services\Physio\PhysioCatalogue;
 use App\Services\Physio\PhysioRecord;
 use App\Services\QueueStateMachine;
 use App\Services\Reception\DoctorQueue;
@@ -38,6 +39,7 @@ use App\Services\Reception\QueueCorrections;
 use App\Services\Reception\ReceptionCheckIn;
 use App\Services\Reception\ReceptionPatientLookup;
 use App\Services\Reception\VisitContext;
+use App\Services\Treatment\PatientTreatments;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\Specialty\PracticeAreas;
@@ -101,6 +103,8 @@ class ReceptionController extends Controller
             'branch' => ['id' => $branch->id, 'name' => $branch->display_name ?: $branch->name],
             'desk' => fn () => $desk->desk($clinic, $branch, $user),
             'billing' => fn () => $desk->billing($clinic, $branch, $user),
+            // Dental lab cases to send, chase or fit; null when there are none (or this member does not work the queue).
+            'lab' => fn () => $desk->labCases($clinic, $branch, $user),
             // Slow-moving and below the fold: it follows the page in, behind a skeleton.
             'follow_ups' => $followUps ? Inertia::defer(fn () => $desk->followUps($clinic, $branch)) : null,
             'intake' => $intake ? ['mode' => $intake, 'query' => mb_substr(trim((string) $request->query('q', '')), 0, 60)] : null,
@@ -219,6 +223,10 @@ class ReceptionController extends Controller
             'reference' => ['nullable', 'string', 'max:100'],
             'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
         ]);
+        // The quick collection at the desk takes what the desk takes: never a gateway or insurance settlement typed in by hand.
+        if (! in_array(PaymentMethod::from($validated['method']), $payments->acceptedMethods($clinic, atDesk: true), true)) {
+            return back()->withErrors(['billing' => 'Choose how the patient is paying: that method is not recorded at the desk.']);
+        }
         $employee = $this->clinicContext->currentEmployee();
         if (! $employee) {
             return back()->withErrors(['billing' => 'Your login has no staff record at this clinic, so it cannot raise bills. Ask the administrator to add you under Staff.']);
@@ -278,28 +286,68 @@ class ReceptionController extends Controller
     }
 
     /**
+     * Start a physiotherapy programme at the desk, for the therapist who will
+     * give it (they need not sign in): a name and, when known, how many
+     * sessions. Needs `physio.session.confirm` (route); physiotherapy only
+     * (`TreatmentAccess::assertCanStartAtDesk`). Returns the patient's
+     * physiotherapy summary, now with the programme.
+     */
+    public function startPhysioProgramme(Request $request, Patient $patient, PatientTreatments $treatments, PhysioCareSummary $summary): JsonResponse
+    {
+        [$clinic, $branch] = $this->context();
+        abort_unless($patient->clinic_id === $clinic->id, 404);
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:150'],
+            'sessions_planned' => ['nullable', 'integer', 'between:1,500'],
+            'therapist_id' => ['required', 'integer'],
+        ]);
+        $therapist = ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->findOrFail($data['therapist_id']);
+
+        try {
+            $treatments->startAdHoc($patient, PhysioCareSummary::SPECIALTY, $data['title'], $therapist, $branch, $request->user(), [
+                'sessions_planned' => $data['sessions_planned'] ?? null, 'at_desk' => true,
+            ]);
+        } catch (DomainException|InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => ['title' => [$e->getMessage()]]], 422);
+        }
+
+        return response()->json(['physio' => $summary->forPatient($patient, $request->user(), $branch)], 201);
+    }
+
+    /**
      * Confirm at the desk that the queued patient's physiotherapy session took
      * place, with the therapist they are queued with (who need not sign in),
      * and which of that treatment's packages paid for it — or none. Needs
      * `physio.session.confirm` (route) and an explicit confirmation; writes no
      * clinical notes and signs nothing (`PhysioRecord::confirmAtDesk`).
      */
-    public function confirmPhysioSession(Request $request, ClinicQueueItem $item, PhysioRecord $physio, IntakeSubmissions $submissions): JsonResponse
+    public function confirmPhysioSession(Request $request, ClinicQueueItem $item, PhysioRecord $physio, IntakeSubmissions $submissions, QueueCorrections $corrections): JsonResponse
     {
         [$clinic, $branch] = $this->context();
         $this->assertOwned($item, $clinic, $branch);
         $data = $request->validate([
             'patient_treatment_id' => ['required', 'integer'],
             'package_id' => ['nullable', 'integer'],
+            // The therapist who gave the session, when the queue does not name them yet (or named someone else).
+            'therapist_id' => ['nullable', 'integer'],
+            'treatment_performed' => ['nullable', 'string', 'max:2000'],
+            'pain_before' => ['nullable', 'integer', 'between:0,10'],
+            'pain_after' => ['nullable', 'integer', 'between:0,10'],
+            'patient_response' => ['nullable', 'string', 'max:2000'],
             'confirm' => ['accepted'],
             'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
         ]);
         $treatment = PatientTreatment::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->findOrFail($data['patient_treatment_id']);
         $confirmer = $this->clinicContext->currentEmployee() ?? abort(403, 'Only clinic staff can confirm sessions.');
+        $notes = array_intersect_key($data, array_flip(['treatment_performed', 'pain_before', 'pain_after', 'patient_response']));
 
-        $confirm = function () use ($item, $treatment, $data, $confirmer, $request, $physio): JsonResponse {
+        $confirm = function () use ($item, $treatment, $data, $notes, $confirmer, $request, $physio, $corrections, $clinic, $branch): JsonResponse {
             try {
-                $session = $physio->confirmAtDesk($item, $treatment, isset($data['package_id']) ? (int) $data['package_id'] : null, $confirmer, $request->user());
+                if (isset($data['therapist_id']) && (int) $data['therapist_id'] !== $item->doctor_id) {
+                    $therapist = ClinicEmployee::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->findOrFail($data['therapist_id']);
+                    $item = $corrections->reassign($clinic, $branch, $item, $therapist, $confirmer);
+                }
+                $session = $physio->confirmAtDesk($item, $treatment, isset($data['package_id']) ? (int) $data['package_id'] : null, $confirmer, $request->user(), $notes);
             } catch (DomainException|InvalidArgumentException $e) {
                 return response()->json(['message' => $e->getMessage(), 'errors' => ['session' => [$e->getMessage()]]], 422);
             }
@@ -400,7 +448,18 @@ class ReceptionController extends Controller
                 'family_history' => array_map($item, $catalogue->effective($clinic->id, DefaultClinicalCatalogue::KIND_FAMILY_HISTORY)),
                 'visit_types' => array_map($item, $catalogue->effective($clinic->id, DefaultClinicalCatalogue::KIND_VISIT_TYPE)),
                 // Each with the specialties and practice areas it is offered for; the server checks the choice again.
-                'visit_reasons' => array_map($item, $catalogue->effective($clinic->id, DefaultClinicalCatalogue::KIND_VISIT_REASON)),
+                // A physiotherapy visit's problems come first, from the owner's list, with the side.
+                // With the owner's problems set, they are a physiotherapy visit's reasons: the general physiotherapy
+                // reasons ("Knee pain") would offer each problem twice, once without its side.
+                'visit_reasons' => (function () use ($clinic, $clinicSpecialties, $catalogue, $item) {
+                    $problems = $clinicSpecialties->active($clinic, PhysioCareSummary::SPECIALTY) !== null ? app(PhysioCatalogue::class)->visitReasons($clinic) : [];
+                    $general = array_map($item, $catalogue->effective($clinic->id, DefaultClinicalCatalogue::KIND_VISIT_REASON));
+                    if ($problems !== []) {
+                        $general = array_values(array_filter($general, fn (array $reason) => ($reason['specialty_keys'] ?? null) !== [PhysioCareSummary::SPECIALTY]));
+                    }
+
+                    return [...$problems, ...$general];
+                })(),
                 'alerts' => $quickCare['alerts'] && $canRecord && $fields->roleAllowed($user, $quickCare['alert_roles']) ? array_map($item, $catalogue->effective($clinic->id, DefaultClinicalCatalogue::KIND_ALERT)) : [],
             ],
             'quick_care' => [
@@ -443,9 +502,10 @@ class ReceptionController extends Controller
         [$clinic] = $this->context();
         $key = $request->expectsJson() ? $request->validate(['idempotency_key' => ['nullable', 'string', 'min:8', 'max:80']])['idempotency_key'] ?? null : null;
 
-        // The desk sends a request key: a repeated submit returns the first check-in.
+        // The desk sends a request key: a repeated submit returns the first check-in. Atomic, as it can take money:
+        // once a payment is saved its key is never freed, so a retry gets the first result, not a second payment.
         return $key !== null
-            ? app(IntakeSubmissions::class)->once($clinic, $request->user(), $key, 'check_in', fn () => $this->performCheckIn($request, $checkIn, $resolver))
+            ? app(IntakeSubmissions::class)->once($clinic, $request->user(), $key, 'check_in', fn () => $this->performCheckIn($request, $checkIn, $resolver), atomic: true)
             : $this->performCheckIn($request, $checkIn, $resolver);
     }
 
@@ -456,6 +516,8 @@ class ReceptionController extends Controller
         $validated = $request->validate([
             'appointment_id' => ['nullable', 'integer'],
             'patient_id' => ['required_without:appointment_id', 'nullable', 'integer'],
+            'case_id' => ['nullable', 'integer'],
+            'new_case' => ['nullable', 'boolean'],
             'practitioner_id' => ['nullable', 'integer'],
             'priority' => ['nullable', 'string', 'max:30'],
             'visit_specialty' => ['nullable', 'string', 'max:64'],
@@ -465,9 +527,13 @@ class ReceptionController extends Controller
             'visit_reason_key' => ['nullable', 'string', 'max:64'],
             // Vitals are no longer taken at the desk: anything sent under that name is dropped.
             'vitals' => ['exclude'],
-            // Money is never taken at check-in: the check-in stands on its own, and a charge it raised is
-            // paid afterwards through the billing payment endpoint. A payment sent here is dropped.
-            'payment' => ['exclude'],
+            // Payment first: when the clinic charges at check-in, the payment is taken in the check-in's own
+            // transaction, and a refused payment checks nobody in. Pay later is the explicit unpaid check-in.
+            'payment' => ['nullable', 'array'],
+            'payment.method' => ['required_with:payment', 'string', 'max:30'],
+            'payment.amount' => ['required_with:payment', 'numeric', 'gt:0'],
+            'payment.reference' => ['nullable', 'string', 'max:100'],
+            'pay_later' => ['nullable', 'boolean'],
             'expected_charge' => ['nullable', 'numeric', 'min:0'],
         ]);
 
@@ -512,13 +578,16 @@ class ReceptionController extends Controller
                 app(PatientFlowConfigService::class)->resolvePriority($clinic, $validated['priority'] ?? null),
                 $this->clinicContext->currentEmployee(),
                 $visit,
+                caseId: isset($validated['case_id']) ? (int) $validated['case_id'] : null,
+                isNewCase: (bool) ($validated['new_case'] ?? false),
             );
 
             return [$item, app(CheckInCharges::class)->chargeVisit(
-                $clinic, $branch, $patient, $item->patientVisit, $item->doctor, $request->user(), $this->clinicContext->currentEmployee(), null,
+                $clinic, $branch, $patient, $item->patientVisit, $item->doctor, $request->user(), $this->clinicContext->currentEmployee(), $validated['payment'] ?? null,
                 // The amount the desk showed, checked against the server's own (sent by Repeat Case; absent from older callers).
                 verify: $request->has('expected_charge'),
                 expected: isset($validated['expected_charge']) ? (float) $validated['expected_charge'] : null,
+                payLater: isset($validated['pay_later']) ? (bool) $validated['pay_later'] : null,
             )];
         });
 
@@ -646,7 +715,8 @@ class ReceptionController extends Controller
             'complete' => "{$name} is done.",
             'skip' => "{$name} marked as not present.",
             'requeue' => "{$name} is back in the queue.",
-            'cancel' => "{$name} has left the queue.",
+            // Reception cancelled the visit (the desk's "Cancel visit"): say that, not that the patient walked out.
+            'cancel' => "{$name}'s visit was cancelled and removed from today's queue.",
             default => 'Queue updated.',
         };
     }

@@ -53,9 +53,7 @@ beforeEach(function () {
     $this->overview = function ($as): array {
         $overview = [];
         $as()->get("/clinic/patients/{$this->patient->id}")->assertInertia(function (Assert $page) use (&$overview) {
-            $page->loadDeferredProps(function (Assert $reload) use (&$overview) {
-                $overview = $reload->toArray()['props']['overview'];
-            });
+            $overview = $page->toArray()['props']['overview'];
         });
 
         return $overview;
@@ -64,7 +62,7 @@ beforeEach(function () {
 
 test('the page is built and the directory links each patient to it', function () {
     expect(ClinicFrontend::available('clinic.patients.show'))->toBeTrue()
-        ->and(ClinicFrontend::PATIENT_360_SECTIONS)->toBe(['overview', 'visits', 'clinical', 'dental', 'physio', 'treatment', 'appointments', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'communication', 'follow-ups', 'timeline', 'requests', 'audit']);
+        ->and(ClinicFrontend::PATIENT_360_SECTIONS)->toBe(['overview', 'visits', 'clinical', 'dental', 'physio', 'cases', 'treatment', 'appointments', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'communication', 'follow-ups', 'timeline', 'requests', 'audit']);
 
     ($this->asOwner)()->get('/clinic/patients')->assertInertia(fn (Assert $page) => $page
         ->where('links.profile', route('clinic.patients.show', ['patient' => '__ID__'])));
@@ -81,11 +79,13 @@ test('every role that may view patients opens on the Overview, with only built s
         ->and($props['patient']['practitioner'])->toBe('Dr. Asha Mehta');
 })->with([
     // In each persona's own order (`Patient360SectionPolicy::ORDER`), built sections only.
-    'doctor' => [ClinicRole::Doctor, ['overview', 'visits', 'clinical', 'prescriptions', 'investigations', 'treatment', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests']],
-    'reception' => [ClinicRole::Receptionist, ['overview', 'visits', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests']],
+    // No billing: a practitioner sees only their own fees (`billing.view_own_fees`), and this member has no practitioner record to own any.
+    'doctor' => [ClinicRole::Doctor, ['overview', 'visits', 'clinical', 'prescriptions', 'investigations', 'cases', 'treatment', 'follow-ups', 'appointments', 'documents', 'consents', 'timeline', 'communication', 'requests']],
+    // Billing too: the desk runs billing in full since 2026-11-05.
+    'reception' => [ClinicRole::Receptionist, ['overview', 'visits', 'cases', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests']],
     // Billing works with the money, not the visit history.
     'billing' => [ClinicRole::BillingStaff, ['billing', 'overview', 'communication', 'timeline', 'requests']],
-    'admin' => [ClinicRole::ClinicAdmin, ['overview', 'visits', 'clinical', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit']],
+    'admin' => [ClinicRole::ClinicAdmin, ['overview', 'visits', 'clinical', 'appointments', 'cases', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit']],
 ]);
 
 test('the header sends the full mobile and email only to members whose work is contacting patients', function () {

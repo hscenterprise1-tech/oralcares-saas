@@ -71,7 +71,7 @@ class NotificationService
         $notification->update(['status' => 'processing']);
 
         // Whether the patient may be contacted is decided again now: the
-        // record may have been merged or marked deceased since the
+        // record may have been merged or deleted since the
         // message was queued. A lifecycle stop is `skipped` with its reason —
         // never `failed`, which is kept for delivery errors.
         if ($notification->recipient_type === 'patient'

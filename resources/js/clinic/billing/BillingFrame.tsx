@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { Link, router } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
+import { Banknote, CircleDollarSign, Hourglass, Receipt, Undo2, Wallet, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { KpiCard } from '@/pages/ClinicPortal/CommandCenter/sections';
 import { Button } from '../ui/Button';
-import { cxTone } from '../ui/tones';
+import { LinkTabs } from '../ui/Tabs';
 import { formatMoney, formatNumber } from '../ui/visuals';
 import type { Tone } from '../types';
 
@@ -32,46 +34,32 @@ export function BillingTabs({ tabs, current }: { tabs: BillingTab[]; current: st
     return null;
   }
 
-  return (
-    <nav aria-label="Billing sections" className="-mx-1 mb-5 overflow-x-auto px-1">
-      <ul className="flex min-w-max gap-1 border-b border-cx-line">
-        {tabs.map((tab) => (
-          <li key={tab.key}>
-            <Link
-              href={tab.href}
-              aria-current={tab.key === current ? 'page' : undefined}
-              className={cn(
-                '-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-3.5 text-[13.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cx-nav-teal',
-                tab.key === current ? 'border-cx-nav-teal text-cx-nav-teal-strong' : 'border-transparent text-cx-nav-muted hover:border-cx-nav-line hover:text-cx-nav-ink',
-              )}
-            >
-              {tab.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
+  return <LinkTabs label="Billing sections" className="mb-4" tabs={tabs.map((tab) => ({ key: tab.key, label: tab.label, href: tab.href, active: tab.key === current }))} />;
 }
 
-/** One headline figure: a money amount or a count, its label, and what it counts. */
-export function Figure({ label, value, money = true, tone = 'slate', currency = 'INR', note }: {
+const FIGURE_TONE = { brand: 'blue', blue: 'blue', green: 'mint', amber: 'amber', red: 'rose', violet: 'violet', slate: 'slate', ink: 'slate' } as const;
+
+/** The icon for a figure, from what it counts. */
+function figureIcon(label: string): LucideIcon {
+  const key = label.toLowerCase();
+
+  return key.includes('collect') || key.includes('paid') ? Wallet : key.includes('refund') ? Undo2 : key.includes('outstanding') || key.includes('waiting') || key.includes('still') ? Hourglass : key.includes('spent') || key.includes('billed') ? Receipt : key.includes('discount') || key.includes('adjust') ? Banknote : CircleDollarSign;
+}
+
+/** One headline figure, on the same soft-wash card as the Front Desk and Command Center: a money amount or a count, its label, and what it counts. */
+export function Figure({ label, value, money = true, tone = 'slate', currency = 'INR', note, period = 'In this list' }: {
   label: string;
   value: number;
   money?: boolean;
   tone?: Tone;
   currency?: string;
   note?: string;
+  /** What time or set the figure covers, said under its label. */
+  period?: string;
 }) {
-  const colours = cxTone(tone);
+  const shown = money ? formatMoney(value, currency) : formatNumber(value);
 
-  return (
-    <div className={cn('rounded-2xl px-4 py-3', colours.bg)}>
-      <p className="text-[19px] font-semibold leading-tight text-cx-text tabular-nums">{money ? formatMoney(value, currency) : formatNumber(value)}</p>
-      <p className={cn('mt-0.5 text-[12px] font-semibold', colours.ink)}>{label}</p>
-      {note && <p className="mt-1 text-[11.5px] leading-snug text-cx-text-3">{note}</p>}
-    </div>
-  );
+  return <KpiCard tone={FIGURE_TONE[tone]} icon={figureIcon(label)} label={label} period={period} description={label} value={shown} note={note ?? ''} href={null} />;
 }
 
 /** A filter bar: the controls in a wrapping row, the apply and clear buttons at the end. */
@@ -79,7 +67,7 @@ export function FilterBar({ children, onApply, onClear, dirty }: { children: Rea
   return (
     <form
       role="search"
-      className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-cx-line bg-cx-surface p-4"
+      className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-cx-line/80 bg-white p-4 shadow-cx-card"
       onSubmit={(event) => {
         event.preventDefault();
         onApply();

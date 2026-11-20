@@ -100,7 +100,7 @@ test('View bills links to the Billing register for this patient only for members
 
     expect(($this->props)($this->asOwner)['links']['bills'])->toBe($bills)
         ->and(($this->props)(($this->asRole)(ClinicRole::BillingStaff))['links']['bills'])->toBe($bills)
-        // The front desk collects payments: it sees money and opens the register.
+        // The front desk reads the register too since 2026-11-05 (full billing at reception).
         ->and(($this->props)(($this->asRole)(ClinicRole::Receptionist))['links']['bills'])->toBe($bills)
         ->and(($this->props)(($this->asRole)(ClinicRole::Doctor))['links']['bills'])->toBeNull();
 

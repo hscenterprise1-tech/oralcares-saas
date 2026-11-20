@@ -44,7 +44,7 @@ class PatientMergeService
         'patient_doctor_assignments', 'patient_follow_ups', 'patient_procedures', 'patient_session_packages',
         'patient_timeline_events', 'patient_tooth_status_histories', 'patient_treatments', 'patient_visits',
         'periodontal_exams', 'physio_assessments', 'physio_care_plans', 'physio_sessions', 'prescriptions',
-        'treatment_plans', 'treatment_records', 'xray_records', 'invoices',
+        'treatment_plans', 'treatment_records', 'xray_records', 'invoices', 'patient_cases',
     ];
 
     /**
@@ -57,7 +57,7 @@ class PatientMergeService
     public const RECONCILED = ['patient_medical_histories', 'patient_profiles', 'case_numbers', 'case_number_history', 'patient_dental_charts', 'patient_specialties', 'patient_branch_activity', 'patient_clinical_entries'];
 
     /** Rows about the duplicate record itself: they stay with it. */
-    public const STAYS = ['deletion_requests', 'patient_data_conflicts', 'patient_merges'];
+    public const STAYS = ['deletion_requests', 'patient_data_conflicts', 'patient_merges', 'patient_clinical_access_audits'];
 
     /** Medical-history list fields that are unioned; flags are OR-ed. */
     private const HISTORY_LISTS = ['allergies', 'medical_conditions', 'current_medications', 'previous_surgeries', 'lifestyle_factors', 'chronic_conditions'];

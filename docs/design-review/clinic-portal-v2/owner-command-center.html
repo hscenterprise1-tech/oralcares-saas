@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner Command Center — OralCares design review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  DESIGN REVIEW MOCKUP — NOT PRODUCTION CODE.
+  Owner Command Center (the owner's and administrator's Dashboard).
+
+  SHELL: the same static copy of ClinicPortalShell, Sidebar and TopBar used by
+  doctor-dashboard-option-b-refined.html (transcribed, not redesigned), with the
+  sidebar items the app renders for a clinic owner today: Main — Dashboard,
+  Appointments, Patients, Queue (Soon), Billing, Reports (Soon); Additional —
+  Follow-ups (Soon), Notifications, Support; and the owner's plan line in the
+  sidebar footer. Only the content inside <main> is new.
+
+  DATA: two sets, switchable at the foot of the page (or with #illustrative):
+   - "QA snapshot" (default): the values the live page showed for the seeded QA
+     clinic on 23 Oct 2026 — real read-model output (OwnerCommandCenter), not
+     production data.
+   - "Illustrative busy day": PLACEHOLDER values in the same shapes, to show
+     how the layout carries a fuller clinic. Never real.
+  Every block maps to a section OwnerCommandCenter already sends: mine, today,
+  money, spending, decisions, branches, people, security, activity.
+-->
+<style>
+  :root {
+    /* Existing shell tokens (tailwind.config.js `cx`). */
+    --nav-canvas: #F5F8FC; --nav-bg: #EEF5FB; --nav-hover: #E1ECF6; --nav-active: #DDF2F2; --nav-line: #D6E3EF;
+    --nav-teal: #00A8A8; --nav-teal-strong: #007A7B; --nav-ink: #0B1F33; --nav-muted: #4A5D73; --rose-ink-shell: #B42318;
+    /* Dashboard content: ink, and the approved panel's three stops as the only accent family. */
+    --card: #FFFFFF; --line: #E6EAF1; --line-strong: #D5DBE6; --row: #EEF1F6;
+    --ink: #0F172A; --ink-2: #475467; --ink-3: #5F6B7E;
+    --teal: #0EA394; --teal-soft: #DDF5F2; --teal-ink: #0A7368;
+    --blue: #2B86D6; --blue-soft: #E1EFFB; --blue-ink: #1C5E9E;
+    --violet: #6B48DE; --violet-soft: #EEE9FD; --violet-ink: #5232C9;
+    /* Safety and urgency only — never decoration. */
+    --rose: #E5484D; --rose-soft: #FFE8EA; --rose-ink: #B42318; --amber-soft: #FFF2D9; --amber-ink: #8F5200;
+    --grad-schedule: linear-gradient(165deg, #0EA394 0%, #2B86D6 52%, #6B48DE 100%);
+    --grad-primary: linear-gradient(135deg, #2B86D6 0%, #6B48DE 100%);
+    --tint-teal: linear-gradient(150deg, #E8F8F6 0%, #D6F1EC 100%);
+    --tint-blue: linear-gradient(150deg, #EAF3FD 0%, #D9E8F8 100%);
+    --tint-violet: linear-gradient(150deg, #F2EFFE 0%, #E6E0FB 100%);
+    --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -16px rgba(15,23,42,.18);
+    --shadow-raised: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -22px rgba(40,40,120,.32);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--nav-canvas); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .review { margin: 0; background: #0F172A; color: #fff; font-size: 12px; font-weight: 600; padding: 10px 16px; text-align: center; }
+  .review span { color: #C9C1FF; font-weight: 500; }
+
+  /* =================== EXISTING SHELL (transcribed, not redesigned) =================== */
+  .app { display: flex; min-height: 100vh; background: var(--nav-canvas); color: var(--ink); }
+  .side-col { position: sticky; top: 0; height: 100vh; width: 240px; flex-shrink: 0; display: none; }
+  @media (min-width: 1024px) { .side-col { display: block; } }
+  .sidebar { display: flex; height: 100%; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--nav-line); background: var(--nav-bg); color: var(--nav-ink); scrollbar-width: none; }
+  .sb-mark { display: flex; height: 77px; flex-shrink: 0; flex-direction: column; justify-content: center; border-bottom: 1px solid var(--nav-line); padding: 0 24px; }
+  .sb-mark b { font-size: 21px; font-weight: 700; line-height: 1; letter-spacing: -.025em; }
+  .sb-mark small { margin-top: 6px; font-size: 11px; font-weight: 500; letter-spacing: .02em; color: var(--nav-muted); }
+  .sb-nav { flex: 1; padding: 8px 12px 16px; }
+  .sb-sec + .sb-sec { margin-top: 24px; }
+  .sb-label { padding: 0 12px 6px; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--nav-muted); }
+  .sb-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .sb-item { position: relative; display: flex; height: 40px; width: 100%; align-items: center; gap: 12px; border-radius: 6px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--nav-ink); text-decoration: none; }
+  .sb-item:hover { background: var(--nav-hover); }
+  .sb-item .i { color: var(--nav-muted); }
+  .sb-item.current { background: var(--nav-active); font-weight: 600; }
+  .sb-item.current::before { content: ''; position: absolute; top: 8px; bottom: 8px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-teal); }
+  .sb-item.current .i { color: var(--nav-teal-strong); }
+  .sb-item.soon { color: var(--nav-muted); cursor: default; }
+  .sb-item.soon:hover { background: transparent; }
+  .sb-item.soon .i { opacity: .8; }
+  .sb-item .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item .tag { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .025em; color: var(--nav-muted); }
+  .sb-clinic { flex-shrink: 0; border-top: 1px solid var(--nav-line); background: #fff; padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+  .sb-clinic .logo { display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 8px; background: var(--nav-bg); box-shadow: inset 0 0 0 1px var(--nav-line); color: var(--nav-teal-strong); }
+  .sb-clinic p { margin: 0; }
+  .sb-clinic .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--nav-muted); }
+  .sb-clinic .n { margin-top: 2px; font-size: 13px; font-weight: 700; text-transform: uppercase; line-height: 1.3; letter-spacing: .05em; color: var(--nav-ink); }
+
+  /* Drawer below 1024px (Radix dialog in the app; a static toggle here). */
+  .drawer { position: fixed; inset: 0; z-index: 50; display: none; }
+  .drawer.open { display: block; }
+  .drawer .overlay { position: absolute; inset: 0; background: rgba(11,31,51,.35); }
+  .drawer .panel { position: absolute; inset: 0 auto 0 0; width: min(272px, 86vw); box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -18px rgba(15,23,42,.22); }
+  .drawer .close { position: absolute; right: 12px; top: 14px; display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  @media (min-width: 1024px) { .drawer, .drawer.open { display: none; } }
+
+  .col { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--nav-line); background: #fff; }
+  .tb-row { display: flex; height: 76px; align-items: center; gap: 12px; padding: 0 16px; }
+  @media (min-width: 640px) { .tb-row { padding: 0 24px; } }
+  @media (min-width: 1024px) { .tb-row { gap: 16px; padding: 0 32px; } }
+  .tb-menu { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; color: var(--nav-muted); cursor: pointer; }
+  .tb-word { flex-shrink: 0; font-size: 18px; font-weight: 700; line-height: 1; letter-spacing: -.025em; color: var(--nav-ink); }
+  @media (min-width: 1024px) { .tb-menu, .tb-word { display: none; } }
+  .tb-search { position: relative; display: none; min-width: 220px; max-width: 720px; flex: 1; }
+  @media (min-width: 768px) { .tb-search { display: block; } }
+  .tb-search .i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--nav-muted); }
+  .tb-search input { height: 44px; width: 100%; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; padding: 0 56px 0 44px; font: 14px Inter, sans-serif; color: var(--nav-ink); }
+  .tb-search input::placeholder { color: var(--nav-muted); }
+  .tb-search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: none; border: 1px solid var(--nav-line); border-radius: 4px; padding: 2px 6px; font: 11px Inter, sans-serif; color: var(--nav-muted); }
+  @media (min-width: 1024px) { .tb-search kbd { display: block; } }
+  .tb-right { margin-left: auto; display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+  @media (min-width: 640px) { .tb-right { gap: 8px; } }
+  @media (min-width: 1024px) { .tb-right { gap: 12px; } }
+  .tb-clock { display: none; text-align: right; flex-shrink: 0; }
+  .tb-clock p { margin: 0; }
+  .tb-clock .d { font-size: 12px; line-height: 1.25; color: var(--nav-muted); }
+  .tb-clock .t { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--nav-ink); font-variant-numeric: tabular-nums; }
+  .tb-div { width: 1px; height: 32px; flex-shrink: 0; background: var(--nav-line); margin: 0 4px; }
+  .tb-div.xl { display: none; }
+  .tb-div.md { display: none; }
+  @media (min-width: 768px) { .tb-div.md { display: block; } }
+  @media (min-width: 1280px) { .tb-clock, .tb-div.xl { display: block; } }
+  .tb-pair { display: flex; align-items: center; gap: 4px; }
+  .tb-round { position: relative; display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  .tb-round:hover { background: var(--nav-bg); color: var(--nav-ink); }
+  .tb-badge { position: absolute; right: 4px; top: 4px; display: flex; height: 18px; min-width: 18px; align-items: center; justify-content: center; border-radius: 999px; background: var(--rose-ink-shell); padding: 0 4px; font-size: 10.5px; font-weight: 700; color: #fff; }
+  .tb-account { display: flex; align-items: center; gap: 12px; border-radius: 6px; padding: 4px 6px 4px 4px; }
+  .tb-account .av { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; background: var(--nav-ink); font-size: 14px; font-weight: 600; color: #fff; }
+  .tb-account .who, .tb-account .chev { display: none; }
+  .tb-account .who b { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--nav-ink); }
+  .tb-account .who span { display: block; max-width: 150px; font-size: 12.5px; color: var(--nav-muted); }
+  .tb-account .chev { width: 16px; height: 16px; color: var(--nav-muted); }
+  @media (min-width: 1280px) { .tb-account .who, .tb-account .chev { display: block; } }
+  .tb-row2 { border-top: 1px solid var(--nav-line); padding: 10px 16px; }
+  .tb-row2 .tb-search { display: block; max-width: none; min-width: 0; }
+  .tb-row2 .tb-search input { padding-right: 16px; }
+  @media (min-width: 768px) { .tb-row2 { display: none; } }
+  .main { margin: 0 auto; width: 100%; min-width: 0; max-width: 1600px; flex: 1; padding: 20px 16px; }
+  @media (min-width: 640px) { .main { padding: 24px; } }
+  @media (min-width: 1024px) { .main { padding: 24px 32px; } }
+  /* ======================== END OF EXISTING SHELL ======================== */
+
+  /* The owner's plan line under the clinic name in the sidebar footer (Sidebar.tsx ClinicIdentity). */
+  .sb-clinic { display: block; }
+  .sb-clinic .row { display: flex; gap: 12px; align-items: flex-start; }
+  .sb-plan { margin-top: 12px; border-top: 1px solid var(--nav-line); padding-top: 10px; }
+  .sb-plan .p { font-size: 12.5px; font-weight: 600; color: var(--nav-ink); }
+  .sb-plan .l { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--nav-muted); }
+  /* Doctor-owner in Owner Mode: AccountMenu draws a teal ring round the avatar. */
+  .tb-account .av.ring { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--nav-teal); }
+
+
+  /* ============================ COMMAND CENTER CONTENT ============================ */
+  :root {
+    --mint: #12A877; --mint-soft: #E2F7EE; --mint-ink: #0B6E4E;
+    --tint-mint: linear-gradient(150deg, #EAFAF3 0%, #D9F3E7 100%);
+    --tint-amber: linear-gradient(150deg, #FFF7E8 0%, #FFEDCC 100%);
+  }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line-strong); background: #fff; color: var(--ink); font-weight: 600; font-size: 13.5px; white-space: nowrap; cursor: pointer; text-decoration: none; transition: border-color .18s, color .18s, transform .18s var(--ease); }
+  .btn:hover { border-color: var(--violet); color: var(--violet-ink); }
+  .btn .i { width: 16px; height: 16px; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); padding: 0 12px; }
+  .btn.quiet:hover { background: #fff; border-color: var(--line); }
+  .btn:focus-visible, a:focus-visible, button:focus-visible { outline: 3px solid rgba(107,72,222,.4); outline-offset: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-card); min-width: 0; }
+  .c-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 12px; padding: 12px 16px 0; }
+  .c-head > div { padding-top: 4px; }
+  .c-head h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .c-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-3); }
+  .more { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 0 -4px 0 0; padding: 0 4px; color: var(--violet-ink); font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .more .i { width: 15px; height: 15px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .src { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .src.real { background: var(--mint-soft); color: var(--mint-ink); }
+  .src.ph { background: var(--amber-soft); color: var(--amber-ink); }
+  .ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0; }
+  .ic .i { width: 17px; height: 17px; }
+  .soon-t { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; color: var(--ink-3); }
+
+  /* Page grid. Phone: what needs the owner first, then money, then the day. */
+  .occ { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+         grid-template-areas: "head" "mine" "decide" "money" "today" "spend" "branches" "people" "trail" "quick"; }
+  .a-head { grid-area: head; } .a-mine { grid-area: mine; } .a-today { grid-area: today; } .a-money { grid-area: money; }
+  .a-decide { grid-area: decide; } .a-spend { grid-area: spend; } .a-branches { grid-area: branches; }
+  .a-people { grid-area: people; } .a-trail { grid-area: trail; } .a-quick { grid-area: quick; }
+  .occ > * { min-width: 0; }
+  /* Below desktop the wrapper steps aside, so decisions and spending take their own places in the order. */
+  .a-side { display: contents; }
+  /* Tablet and small laptop: the day across, money full width, then pairs. */
+  @media (min-width: 768px) {
+    .occ { gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+           grid-template-areas: "head head" "mine mine" "today today" "money money" "decide spend" "branches branches" "people trail" "quick quick"; }
+  }
+  /* Desktop: money beside what waits on the owner. */
+  @media (min-width: 1280px) {
+    .occ { column-gap: 20px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+           grid-template-areas: "head head" "mine mine" "today today" "money side" "branches branches" "people trail" "quick quick"; }
+    /* Decisions and spending stack as one column beside the money; each card keeps its own height. */
+    .a-side { grid-area: side; display: flex; flex-direction: column; gap: 18px; align-self: start; min-width: 0; }
+    .a-money { align-self: start; }
+  }
+  body:not(.doc-owner) .a-mine { display: none; }
+  body:not(.multi) .a-branches { display: none; }
+
+  /* Heading: greeting, then the one line that says what matters now. */
+  .a-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 20px; }
+  .hello { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .hello .g { font-size: 24px; line-height: 1.15; letter-spacing: -.025em; font-weight: 500; color: #33445E; }
+  .hello .g b { font-weight: 700; color: #0B1F33; }
+  .ctx { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--teal-soft); color: var(--teal-ink); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: inset 0 0 0 1px rgba(14,163,148,.18); }
+  .ctx::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px rgba(14,163,148,.18); }
+  .ctx.om { background: var(--violet-soft); color: var(--violet-ink); box-shadow: inset 0 0 0 1px rgba(107,72,222,.2); }
+  .ctx.om::before { background: var(--violet); box-shadow: 0 0 0 3px rgba(107,72,222,.18); }
+  body:not(.doc-owner) .ctx.om { display: none; }
+  .a-head h1 { margin: 6px 0 0; font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: -.015em; }
+  .a-head h1 em { font-style: normal; white-space: nowrap; background: var(--grad-schedule); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .a-head .sub { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-3); }
+  .acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+  .acts .btn { padding: 0 12px; }
+  .tools { display: flex; gap: 4px; justify-content: flex-end; grid-column: 1 / -1; }
+  @media (min-width: 640px) { .acts { display: flex; flex-wrap: wrap; width: auto; justify-content: flex-end; } .tools { order: -1; } }
+  @media (min-width: 768px) { .hello .g { font-size: 30px; } .a-head h1 { font-size: 21px; } }
+  @media (min-width: 1280px) { .hello .g { font-size: 32px; } .a-head h1 { font-size: 22px; } }
+
+  /* Their own day — a doctor-owner in Owner Mode still has patients waiting for them. */
+  .a-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border-radius: 18px; background: #fff; border: 1px dashed rgba(107,72,222,.35); }
+  .a-mine .t { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600; color: var(--violet-ink); }
+  .a-mine .figs { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+  .a-mine .figs b { font-size: 16px; color: var(--ink); margin-right: 4px; }
+  .a-mine .end { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+  /* Today — the four live counts, each its own colour. */
+  .a-today { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 900px) { .a-today { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
+  .tile { position: relative; border-radius: 18px; padding: 14px; border: 1px solid rgba(255,255,255,.9); box-shadow: var(--shadow-card); color: inherit; text-decoration: none; display: block; min-width: 0; transition: transform .2s var(--ease), box-shadow .2s var(--ease); }
+  a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-raised); }
+  .tile .k { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .tile .k .i { width: 16px; height: 16px; }
+  .tile .v { margin-top: 8px; font-size: 30px; line-height: 1; font-weight: 700; letter-spacing: -.03em; }
+  .tile .s { margin-top: 6px; font-size: 12px; color: var(--ink-2); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .tile .s .go { color: var(--blue-ink); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .tile .s .go .i { width: 14px; height: 14px; }
+  .t-pt { background: var(--tint-teal); } .t-pt .k { color: var(--teal-ink); }
+  .t-ap { background: var(--tint-blue); } .t-ap .k { color: var(--blue-ink); }
+  .t-wt { background: var(--tint-mint); } .t-wt .k { color: var(--mint-ink); }
+  .t-dr { background: var(--tint-violet); } .t-dr .k { color: var(--violet-ink); }
+  @media (min-width: 768px) { .tile { padding: 16px; } .tile .v { font-size: 32px; } }
+
+  /* Money — outstanding and collection first, then the ledger every figure opens. */
+  .m-top { display: grid; gap: 10px; padding: 14px 16px 4px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hero { min-width: 0; } .hero .v { white-space: nowrap; }
+  /* Phones: the two highlights stack full width, so an amount never breaks across lines. */
+  @media (max-width: 559px) { .m-top { grid-template-columns: minmax(0, 1fr); padding: 12px 12px 4px; gap: 8px; } .hero { padding: 12px 14px; } .hero .v { font-size: 24px; } }
+  .hero { border-radius: 16px; padding: 14px; display: grid; gap: 4px; color: inherit; text-decoration: none; }
+  .hero .k { font-size: 12.5px; font-weight: 600; }
+  .hero .v { font-size: 28px; line-height: 1.05; font-weight: 700; letter-spacing: -.03em; }
+  .hero .s { font-size: 12px; color: var(--ink-2); }
+  .h-out { background: var(--tint-amber); } .h-out .k { color: var(--amber-ink); }
+  .h-col { background: var(--tint-mint); } .h-col .k { color: var(--mint-ink); }
+  .rate { margin-top: 6px; height: 6px; border-radius: 6px; background: rgba(255,255,255,.95); overflow: hidden; }
+  .rate i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #12A877, #0EA394); }
+  a.hero { transition: transform .2s var(--ease); } a.hero:hover { transform: translateY(-1px); }
+  .ledger { width: 100%; border-collapse: collapse; margin: 6px 0 4px; }
+  .ledger th { padding: 8px 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); text-align: right; }
+  .ledger th:first-child { text-align: left; }
+  .ledger td { padding: 0 16px; height: 48px; border-top: 1px solid var(--row); font-size: 13.5px; text-align: right; white-space: nowrap; }
+  .ledger td:first-child { text-align: left; white-space: normal; }
+  .ledger td:first-child b { display: block; font-weight: 600; }
+  .ledger td:first-child small { display: none; font-size: 12px; color: var(--ink-3); }
+  @media (min-width: 640px) { .ledger td:first-child small { display: block; } }
+  .ledger a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; justify-content: flex-end; min-height: 44px; min-width: 44px; font-weight: 600; }
+  .ledger a:hover { color: var(--violet-ink); }
+  .ledger tr.net td { font-weight: 700; background: #FAFBFD; }
+  .ledger td.muted { color: var(--ink-3); }
+  .ledger td, .ledger th { padding-left: 12px; padding-right: 12px; }
+  @media (min-width: 480px) { .ledger td, .ledger th { padding-left: 16px; padding-right: 16px; } }
+
+  /* Needs your decision — one inbox, each row its own colour and destination. */
+  .inbox { list-style: none; margin: 8px 0 0; padding: 0 8px 8px; }
+  .inbox li + li { border-top: 1px solid var(--row); }
+  .item { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px; border-radius: 12px; color: inherit; text-decoration: none; }
+  a.item:hover { background: #F7F8FB; }
+  .item .txt { min-width: 0; flex: 1; }
+  .item .txt b { display: block; font-size: 13.5px; font-weight: 600; }
+  .item .txt small { display: block; font-size: 12px; color: var(--ink-3); }
+  .item .cnt { min-width: 28px; height: 26px; padding: 0 8px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .item .end { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .item .end .i { width: 16px; height: 16px; color: var(--ink-3); }
+  .item.dep { cursor: not-allowed; }
+  .tone-amber .ic, .tone-amber .cnt { background: var(--amber-soft); color: var(--amber-ink); }
+  .tone-rose .ic, .tone-rose .cnt { background: var(--rose-soft); color: var(--rose-ink); }
+  .tone-violet .ic, .tone-violet .cnt { background: var(--violet-soft); color: var(--violet-ink); }
+  .tone-blue .ic, .tone-blue .cnt { background: var(--blue-soft); color: var(--blue-ink); }
+  .tone-mint .ic, .tone-mint .cnt { background: var(--mint-soft); color: var(--mint-ink); }
+  .empty { margin: 10px 16px 16px; padding: 14px; border-radius: 14px; background: var(--mint-soft); color: var(--mint-ink); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .total { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--violet-soft); color: var(--violet-ink); font-size: 12.5px; font-weight: 700; }
+
+  /* Spending — expenses waiting on someone, to decide and to pay. */
+  .pair { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 16px 16px; }
+  .pair a { border-radius: 14px; padding: 12px; color: inherit; text-decoration: none; display: grid; gap: 2px; transition: transform .2s var(--ease); }
+  .pair a:hover { transform: translateY(-1px); }
+  .pair .k { font-size: 12.5px; font-weight: 600; }
+  .pair .v { font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .pair .s { font-size: 12px; color: var(--ink-2); }
+  .p-dec { background: var(--tint-amber); } .p-dec .k { color: var(--amber-ink); }
+  .p-pay { background: var(--tint-blue); } .p-pay .k { color: var(--blue-ink); }
+
+  /* Branches — only for a clinic with more than one. */
+  .btable { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .btable th { padding: 8px 16px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); text-align: right; }
+  .btable th:first-child, .btable td:first-child { text-align: left; }
+  .btable td { padding: 0 16px; height: 52px; border-top: 1px solid var(--row); text-align: right; font-size: 13.5px; }
+  .btable td:first-child b { font-weight: 600; }
+  .btable .bar { display: block; margin-top: 4px; height: 4px; border-radius: 4px; background: #EEF1F6; overflow: hidden; }
+  .btable .bar i { display: block; height: 100%; background: var(--grad-schedule); border-radius: 4px; }
+  @media (max-width: 479px) { .btable th, .btable td { padding-left: 10px; padding-right: 10px; } .btable .hide-s { display: none; } }
+
+  /* People & plan — logins counted as the plan enforces them. */
+  .plan { margin: 14px 16px 0; padding: 12px 14px; border-radius: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; }
+  .plan b { font-weight: 700; }
+  .plan.none { background: var(--amber-soft); color: var(--amber-ink); }
+  .plan.ok { background: var(--mint-soft); color: var(--mint-ink); }
+  .plan .i { width: 16px; height: 16px; }
+  .seats { list-style: none; margin: 8px 0 0; padding: 0 16px; display: grid; gap: 2px; }
+  .seat { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--row); }
+  .seat:first-child { border-top: 0; }
+  .seat b { font-size: 13.5px; font-weight: 600; }
+  .seat .u { font-size: 13px; color: var(--ink-2); text-align: right; }
+  .seat .u strong { color: var(--ink); font-size: 15px; }
+  .seat .meter { grid-column: 1 / -1; height: 6px; border-radius: 6px; background: #EEF1F6; overflow: hidden; }
+  .seat .meter i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #2B86D6, #6B48DE); }
+  .seat .meter.full i { background: linear-gradient(90deg, #F2994A, #E5484D); }
+  .seat .meter.unknown { background: repeating-linear-gradient(90deg, #EEF1F6 0 6px, #F7F8FB 6px 12px); }
+  .minis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 8px 16px 16px; }
+  .mini { border-radius: 14px; background: #F7F8FB; padding: 10px 12px; }
+  .mini .v { font-size: 20px; font-weight: 700; }
+  .mini .k { font-size: 12px; color: var(--ink-2); }
+
+  /* Security and sensitive actions — the trails the owner checks, last 7 days. */
+  .trail { padding: 6px 16px 14px; }
+  .trail h3 { margin: 10px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .trail ul { list-style: none; margin: 0; padding: 0; }
+  .trail li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--row); font-size: 13px; }
+  .trail li:first-child { border-top: 0; }
+  .trail li .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); flex-shrink: 0; }
+  .trail li.alert .dot { background: var(--rose); }
+  .trail li .w { min-width: 0; flex: 1; }
+  .trail li .w small { display: block; color: var(--ink-3); font-size: 12px; }
+  .trail li time { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+  .ok-chip { display: inline-flex; flex-shrink: 0; white-space: nowrap; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+  .ok-chip.good { background: var(--mint-soft); color: var(--mint-ink); }
+  .ok-chip.bad { background: var(--rose-soft); color: var(--rose-ink); }
+
+  /* Quick access — grouped by the owner's four kinds of work. */
+  .qa-groups { display: grid; gap: 14px 10px; padding: 14px 16px 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 479px) { .qa-groups { padding: 12px; } .q { padding: 6px 10px; gap: 8px; font-size: 13px; } .q .i { display: none; } }
+  @media (min-width: 1280px) { .qa-groups { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .qa-groups h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .qa-groups ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .q { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 12px; background: #F7F8FB; color: var(--ink); text-decoration: none; font-size: 13.5px; font-weight: 600; transition: background .18s, transform .18s var(--ease); }
+  a.q:hover { background: var(--violet-soft); color: var(--violet-ink); transform: translateX(2px); }
+  .q .i { width: 16px; height: 16px; color: var(--ink-3); }
+  .q .soon-t { margin-left: auto; }
+  .q.dep { color: var(--ink-3); cursor: not-allowed; }
+
+  /* Entrance: once per load; off under reduced motion. */
+  .rise { animation: rise .5s var(--ease) both; }
+  .d1 { animation-delay: .03s; } .d2 { animation-delay: .08s; } .d3 { animation-delay: .13s; } .d4 { animation-delay: .18s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* Design-review foot. */
+  .review { background: #0F172A; color: #fff; padding: 16px; text-align: left; }
+  .review .inner { max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
+  .review p { margin: 0; font-size: 12.5px; font-weight: 600; } .review p span { color: #C9C1FF; font-weight: 500; }
+  .review .switches { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+  .review .switch { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .review .switch button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: #E6E3FF; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .review .switch button[aria-pressed="true"] { background: #fff; color: #0F172A; }
+  .review ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: #D5D9E3; display: grid; gap: 4px; }
+  .review ul b { color: #fff; }
+  .databar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 17.5v-11"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+  <symbol id="i-fu" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-buoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M10 12h4M10 8h4M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
+  <symbol id="i-steth" viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-userplus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-usersearch" viewBox="0 0 24 24"><circle cx="10" cy="8" r="5"/><path d="M2 21a8 8 0 0 1 10.434-7.62"/><circle cx="18" cy="18" r="3"/><path d="m22 22-1.9-1.9"/></symbol>
+  <symbol id="i-calplus" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 10h18M16 19h6M19 16v6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h4"/></symbol>
+</defs></svg>
+
+<!-- The sidebar as the app renders it for a clinic owner today (ClinicNavigation × ClinicFrontend::AVAILABLE), with the owner's plan line. -->
+<template id="sidebar-tpl">
+  <div class="sidebar">
+    <div class="sb-mark"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav class="sb-nav" aria-label="Main">
+      <div class="sb-sec"><p class="sb-label">Main</p><ul>
+        <li><a class="sb-item current" href="#" aria-current="page"><svg class="i"><use href="#i-dash"/></svg><span class="lbl">Dashboard</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-cal"/></svg><span class="lbl">Appointments</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Patients</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Queue: coming soon"><svg class="i"><use href="#i-hour"/></svg><span class="lbl">Queue</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-receipt"/></svg><span class="lbl">Billing</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Reports: coming soon"><svg class="i"><use href="#i-chart"/></svg><span class="lbl">Reports</span><span class="tag">Soon</span></span></li>
+      </ul></div>
+      <div class="sb-sec"><p class="sb-label">Additional</p><ul>
+        <li><span class="sb-item soon" aria-disabled="true" title="Follow-ups: coming soon"><svg class="i"><use href="#i-fu"/></svg><span class="lbl">Follow-ups</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-bell"/></svg><span class="lbl">Notifications</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-buoy"/></svg><span class="lbl">Support</span></a></li>
+      </ul></div>
+    </nav>
+    <section class="sb-clinic" aria-label="Clinic">
+      <div class="row"><span class="logo"><svg class="i"><use href="#i-building"/></svg></span><div><p class="k">Clinic</p><p class="n" data-f="clinic">Smile Studio (browser test)</p></div></div>
+      <div class="sb-plan"><p class="p" data-f="planName">Plan</p><p class="l" data-f="planLine">No subscription on record</p></div>
+    </section>
+  </div>
+</template>
+
+<div class="app">
+  <aside class="side-col" id="side-col"></aside>
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation">
+    <div class="overlay" data-close></div>
+    <div class="panel" id="drawer-panel"><button class="close" aria-label="Close navigation" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+  </div>
+
+  <div class="col">
+    <header class="topbar">
+      <div class="tb-row">
+        <button class="tb-menu" id="open-menu" aria-label="Open navigation" aria-haspopup="dialog"><svg class="i"><use href="#i-menu"/></svg></button>
+        <span class="tb-word" aria-hidden="true">OralCares</span>
+        <div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search patients, pages, appointments and support…" aria-label="Search"><kbd>Ctrl K</kbd></div>
+        <div class="tb-right">
+          <div class="tb-clock"><p class="d">Fri, 23 Oct 2026</p><p class="t">11:03 am</p></div>
+          <span class="tb-div xl" aria-hidden="true"></span>
+          <div class="tb-pair">
+            <a class="tb-round" href="#" aria-label="Support" title="Support"><svg class="i"><use href="#i-buoy"/></svg></a>
+            <button class="tb-round" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+          </div>
+          <span class="tb-div md" aria-hidden="true"></span>
+          <div class="tb-account"><span class="av" id="avatar" aria-hidden="true" data-f="initials">PO</span><span class="who"><b data-f="userName">P360 Owner</b><span data-f="userRole">Clinic Owner</span></span><svg class="i chev"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+      <div class="tb-row2"><div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search pages and more…" aria-label="Search"></div></div>
+    </header>
+
+    <main class="main" id="main">
+      <div class="occ">
+
+        <!-- Heading: greeting, scope, and the one line that matters now (computed from the money and decisions sections). -->
+        <section class="a-head rise d1">
+          <div>
+            <p class="hello"><span class="g">Good morning, <b data-f="firstName">P360</b></span><span class="ctx" data-f="scope">Main Branch</span><span class="ctx om">Owner Mode on</span></p>
+            <h1><span data-f="headline"></span></h1>
+            <p class="sub"><span data-f="subline">Friday, 23 October</span> · <span class="src real" data-f="srcTag">QA snapshot</span></p>
+          </div>
+          <div class="acts" aria-label="Quick actions">
+            <div class="tools"><button class="btn quiet" type="button"><svg class="i"><use href="#i-sliders"/></svg>Staff dashboards</button><button class="btn quiet" type="button"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button></div>
+            <button class="btn" type="button"><svg class="i"><use href="#i-userplus"/></svg>New Case</button>
+            <button class="btn" type="button"><svg class="i"><use href="#i-usersearch"/></svg>Repeat Case</button>
+            <a class="btn" href="#"><svg class="i"><use href="#i-calplus"/></svg>Book Appointment</a>
+            <a class="btn" href="#"><svg class="i"><use href="#i-receipt"/></svg>Billing</a>
+          </div>
+        </section>
+
+        <!-- mine: only for a doctor-owner in Owner Mode — their own patients still wait for them. -->
+        <section class="a-mine rise d1" aria-label="Your own patients">
+          <span class="t"><span class="ic tone-violet" style="width:32px;height:32px;border-radius:10px;background:var(--violet-soft)"><svg class="i"><use href="#i-steth"/></svg></span>Your own patients</span>
+          <span class="figs"><span><b class="num">3</b>waiting for you</span><span><b class="num">5</b>seen today</span><span><b class="num">1</b>note to finish</span></span>
+          <span class="end"><span class="src ph">Placeholder</span><span class="soon-t">Doctor Today · Soon</span></span>
+        </section>
+
+        <!-- today -->
+        <section class="a-today" aria-label="Today">
+          <div class="tile t-pt rise d1"><p class="k"><svg class="i"><use href="#i-users"/></svg>Patients today</p><div class="v num" data-f="patients">0</div><div class="s">Checked in today</div></div>
+          <a class="tile t-ap rise d2" href="#"><p class="k"><svg class="i"><use href="#i-cal"/></svg>Appointments</p><div class="v num" data-f="appts">0</div><div class="s">Booked for today<span class="go">Calendar<svg class="i"><use href="#i-arrow"/></svg></span></div></a>
+          <div class="tile t-wt rise d3"><p class="k"><svg class="i"><use href="#i-hour"/></svg>Waiting now</p><div class="v num" data-f="waiting">0</div><div class="s">In the queue</div></div>
+          <div class="tile t-dr rise d4"><p class="k"><svg class="i"><use href="#i-steth"/></svg>With a doctor</p><div class="v num" data-f="withDoc">0</div><div class="s">In consultation</div></div>
+        </section>
+
+        <!-- money -->
+        <section class="a-money card rise d2" aria-labelledby="money-title">
+          <div class="c-head"><div><h2 id="money-title">Money</h2><p>Billing at <span data-f="moneyScope">Main Branch</span>, today and this month</p></div><a class="more" href="#">Financial summary<svg class="i"><use href="#i-arrow"/></svg></a></div>
+          <div class="m-top">
+            <a class="hero h-out" href="#"><span class="k">Outstanding now</span><span class="v num" data-f="outstanding">₹8,300</span><span class="s">Still due on open bills, however old</span></a>
+            <a class="hero h-col" href="#"><span class="k">Collected this month</span><span class="v num" data-f="collectedMonth">₹7,500</span><span class="s"><span data-f="rate">47%</span> of <span data-f="billedMonthS">₹15,800</span> billed</span><span class="rate"><i data-w="rate" style="width:47%"></i></span></a>
+          </div>
+          <table class="ledger">
+            <thead><tr><th scope="col">Measure</th><th scope="col">Today</th><th scope="col">This month</th></tr></thead>
+            <tbody>
+              <tr><td><b>Billed</b><small>Bills issued, not cancelled</small></td><td><a href="#" class="num" data-f="billedToday">₹15,800</a></td><td><a href="#" class="num" data-f="billedMonth">₹15,800</a></td></tr>
+              <tr><td><b>Collected</b><small>Payments received</small></td><td><a href="#" class="num" data-f="colToday">₹7,500</a></td><td><a href="#" class="num" data-f="colMonth">₹7,500</a></td></tr>
+              <tr><td><b>Refunded</b><small>Refunds recorded</small></td><td><a href="#" class="num" data-f="refToday">₹500</a></td><td><a href="#" class="num" data-f="refMonth">₹500</a></td></tr>
+              <tr class="net"><td><b>Net collected</b><small>Collected less refunded</small></td><td class="num" data-f="netToday">₹7,000</td><td class="num" data-f="netMonth">₹7,000</td></tr>
+              <tr><td><b>Discounts</b><small>On those bills</small></td><td class="num muted" data-f="discToday">₹0</td><td class="num muted" data-f="discMonth">₹0</td></tr>
+              <tr><td><b>Adjusted</b><small>Balances conceded or written off</small></td><td><a href="#" class="num" data-f="adjToday">₹0</a></td><td><a href="#" class="num" data-f="adjMonth">₹0</a></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <div class="a-side">
+        <!-- decisions -->
+        <section class="a-decide card rise d2" aria-labelledby="decide-title">
+          <div class="c-head"><div><h2 id="decide-title">Needs your decision</h2><p>What waits on you or your team</p></div><span class="total" data-f="decideTotal">2 in all</span></div>
+          <ul class="inbox" id="inbox"></ul>
+        </section>
+
+        <!-- spending -->
+        <section class="a-spend card rise d3" aria-labelledby="spend-title">
+          <div class="c-head"><div><h2 id="spend-title">Spending</h2><p>Expenses waiting on someone, all dates</p></div><a class="more" href="#">Expenses<svg class="i"><use href="#i-arrow"/></svg></a></div>
+          <div class="pair">
+            <a class="p-dec" href="#"><span class="k">To decide</span><span class="v num" data-f="decN">2</span><span class="s num" data-f="decAmt">₹41,200</span></a>
+            <a class="p-pay" href="#"><span class="k">Approved, to pay</span><span class="v num" data-f="payN">0</span><span class="s num" data-f="payAmt">₹0</span></a>
+          </div>
+        </section>
+        </div>
+
+        <!-- branches: sent only for a clinic with several branches -->
+        <section class="a-branches card rise d3" aria-labelledby="br-title">
+          <div class="c-head"><div><h2 id="br-title">Branches today</h2><p>Each branch's day, side by side</p></div><span class="soon-t">Branch pages · Soon</span></div>
+          <table class="btable"><thead><tr><th scope="col">Branch</th><th scope="col">Appointments</th><th scope="col" class="hide-s">Visits</th><th scope="col">Collected</th></tr></thead><tbody id="branches"></tbody></table>
+        </section>
+
+        <!-- people -->
+        <section class="a-people card rise d3" aria-labelledby="ppl-title">
+          <div class="c-head"><div><h2 id="ppl-title">People &amp; plan</h2><p>Logins counted as the plan enforces them</p></div><span class="soon-t">Staff · Soon</span></div>
+          <div class="plan" id="plan"></div>
+          <ul class="seats" id="seats"></ul>
+          <div class="minis">
+            <div class="mini"><div class="v num" data-f="noLogin">0</div><div class="k">Profiles without a login</div></div>
+            <div class="mini"><div class="v num" data-f="onLeave">0</div><div class="k">On leave today</div></div>
+          </div>
+        </section>
+
+        <!-- security + activity -->
+        <section class="a-trail card rise d4" aria-labelledby="trail-title">
+          <div class="c-head"><div><h2 id="trail-title">Security &amp; sensitive actions</h2><p>Last 7 days, from the audit trail</p></div></div>
+          <div class="trail">
+            <h3>Sign-in and Owner Mode checks <span class="ok-chip" id="failChip">0 failed</span></h3>
+            <ul id="security"></ul>
+            <h3>Sensitive actions <span class="ok-chip good" data-f="actTotal">1 in all</span></h3>
+            <ul id="activity"></ul>
+          </div>
+        </section>
+
+        <!-- quick access -->
+        <section class="a-quick card rise d4" aria-labelledby="quick-title">
+          <div class="c-head"><div><h2 id="quick-title">Go to</h2><p>Your patient, money, people and settings work</p></div></div>
+          <div class="qa-groups">
+            <div><h3>Patients</h3><ul>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-users"/></svg>Patient directory</a></li>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-cal"/></svg>Appointments</a></li>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Follow-ups board"><svg class="i"><use href="#i-fu"/></svg>Follow-ups<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+            <div><h3>Money</h3><ul>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-receipt"/></svg>Bills &amp; collections</a></li>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-coins"/></svg>Expenses</a></li>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-chart"/></svg>Financial summary</a></li>
+            </ul></div>
+            <div><h3>People</h3><ul>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Staff pages"><svg class="i"><use href="#i-users"/></svg>Staff &amp; logins<span class="soon-t">Soon</span></span></li>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Payroll page"><svg class="i"><use href="#i-bank"/></svg>Payroll<span class="soon-t">Soon</span></span></li>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Approvals inbox"><svg class="i"><use href="#i-shield"/></svg>Approvals<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+            <div><h3>Clinic</h3><ul>
+              <li><a class="q" href="#"><svg class="i"><use href="#i-gear"/></svg>Settings: patient form</a></li>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Branches pages"><svg class="i"><use href="#i-branch"/></svg>Branches<span class="soon-t">Soon</span></span></li>
+              <li><span class="q dep" aria-disabled="true" title="Coming soon: the Reports page"><svg class="i"><use href="#i-chart"/></svg>Reports<span class="soon-t">Soon</span></span></li>
+            </ul></div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="review" role="note">
+  <div class="inner">
+    <p>Design review · Owner Command Center <span>· shell copied from the app unchanged · each block maps to a section OwnerCommandCenter already sends</span></p>
+    <div class="switches">
+      <div class="switch" role="group" aria-label="Data shown">
+        <button type="button" data-data="qa" aria-pressed="true">QA snapshot (real read model)</button>
+        <button type="button" data-data="ill" aria-pressed="false">Illustrative busy day (placeholder)</button>
+      </div>
+      <div class="switch" role="group" aria-label="Who is signed in">
+        <button type="button" data-who="owner" aria-pressed="true">Owner who does not treat patients</button>
+        <button type="button" data-who="doc" aria-pressed="false">Doctor-owner in Owner Mode</button>
+      </div>
+    </div>
+    <ul>
+      <li><b>QA snapshot</b>: the figures the live page showed for the seeded QA clinic (Smile Studio, browser test) on 23 Oct 2026 at 11:03 — real read-model output, test data, single branch, no plan on record.</li>
+      <li><b>Illustrative</b>: placeholder values in the same shapes (three branches, a plan, a busier inbox) to show how the layout carries a fuller clinic. Not real.</li>
+      <li><b>Works today</b>: Billing, Book Appointment, New Case, Repeat Case, Staff dashboards, Refresh; every money figure (Bills, Collections, Refunds &amp; Adjustments, Financial summary); Expenses; Appointments calendar; Patient directory; Settings (patient form).</li>
+      <li><b>Soon (page not built)</b>: Queue, Reports, Follow-ups, Staff, Payroll, Branches, Approvals (held back, D1), WhatsApp, Doctor Today. Their inbox rows and tiles show the count but do not link.</li>
+      <li><b>Doctor-owner in Doctor Mode</b> never sees this page: they land on the Doctor Dashboard and reach this one by entering Owner Mode from the account menu.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Mockup only: place the sidebar (desktop column and the phone/tablet drawer), as the shell does.
+  const tpl = document.getElementById('sidebar-tpl');
+  document.getElementById('side-col').appendChild(tpl.content.cloneNode(true));
+  document.getElementById('drawer-panel').prepend(tpl.content.cloneNode(true));
+  const drawer = document.getElementById('drawer');
+  document.getElementById('open-menu').addEventListener('click', () => drawer.classList.add('open'));
+  drawer.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => drawer.classList.remove('open')));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') drawer.classList.remove('open'); });
+
+  const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  const DATA = {
+    // Real read-model output for the seeded QA clinic, as the live Command Center showed it (23 Oct 2026, 11:03).
+    qa: {
+      src: 'QA snapshot', srcClass: 'real', clinic: 'Smile Studio (browser test)', scope: 'Main Branch', multi: false,
+      planName: 'Plan', planLine: 'No subscription on record',
+      today: { patients: 0, appts: 0, waiting: 0, withDoc: 0 },
+      money: { outstanding: 8300, today: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 }, month: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 } },
+      spend: { dec: [2, 41200], pay: [0, 0] },
+      decisions: [ { tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 2, href: true } ],
+      plan: null,
+      seats: [ ['Doctor logins', 1, null], ['All logins', 5, null], ['Branches', 1, null] ],
+      noLogin: 0, onLeave: 0,
+      security: { failed: 0, items: [ ['Owner Mode entered', null, '23 Oct, 12:43 AM', false], ['Owner Mode entered', null, '22 Oct, 12:39 PM', false] ] },
+      activity: [ ['Refund recorded', null, '23 Oct, 01:36 AM', false] ],
+      branches: [],
+    },
+    // PLACEHOLDER values in the same shapes. Not real.
+    ill: {
+      src: 'Illustrative', srcClass: 'ph', clinic: 'Smile Studio', scope: 'All branches', multi: true,
+      planName: 'Dental Growth', planLine: 'Renews 14 Jan 2027',
+      today: { patients: 38, appts: 46, waiting: 7, withDoc: 4 },
+      money: { outstanding: 184600, today: { billed: 96400, col: 71250, ref: 2500, disc: 3800, adj: 1200 }, month: { billed: 1842300, col: 1516900, ref: 18400, disc: 61200, adj: 9800 } },
+      spend: { dec: [3, 58900], pay: [2, 22400] },
+      decisions: [
+        { tone: 'rose', icon: 'hour', primary: 'Long waits', secondary: 'Waiting over 30 min', count: 2, href: false, needs: 'Queue' },
+        { tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 3, href: true },
+        { tone: 'blue', icon: 'coins', primary: 'Expenses to pay', secondary: 'Approved, not yet paid', count: 2, href: true },
+        { tone: 'violet', icon: 'shield', primary: 'Approvals waiting', secondary: 'Requests that need your decision', count: 1, href: false, needs: 'Approvals' },
+        { tone: 'violet', icon: 'bank', primary: 'Payroll to finalise', secondary: 'A month is open, not yet finalised', count: 1, href: false, needs: 'Payroll' },
+        { tone: 'rose', icon: 'msg', primary: 'Messages not delivered', secondary: 'WhatsApp, last 7 days', count: 4, href: false, needs: 'WhatsApp' },
+      ],
+      plan: { name: 'Dental Growth', status: 'Active', ends: '14 Jan 2027' },
+      seats: [ ['Doctor logins', 6, 8], ['Staff logins', 11, 12], ['All logins', 17, 20], ['Branches', 3, 3] ],
+      noLogin: 2, onLeave: 1,
+      security: { failed: 2, items: [ ['Wrong password at sign-in', null, '23 Oct, 09:12 AM', true], ['Owner Mode: wrong password', null, '22 Oct, 06:40 PM', true], ['Owner Mode entered', null, '22 Oct, 06:41 PM', false] ] },
+      activity: [ ['Refund recorded', 'Meena (Billing)', '23 Oct, 10:20 AM', false], ['Expense approved', 'Ravi Kapoor', '22 Oct, 05:02 PM', false], ['Staff roles changed', 'Ravi Kapoor', '21 Oct, 11:45 AM', false] ],
+      branches: [ ['Indiranagar', 21, 18, 38400], ['Koramangala', 16, 13, 24850], ['Whitefield', 9, 7, 8000] ],
+    },
+  };
+  const WHO = {
+    owner: { qa: ['P360 Owner', 'PO', 'Clinic Owner', 'P360'], ill: ['Ravi Kapoor', 'RK', 'Clinic Owner', 'Ravi'] },
+    doc: { qa: ['P360 Owner', 'PO', 'Clinic Owner', 'P360'], ill: ['Dr. Anil Kapoor', 'AK', 'Clinic Owner', 'Dr. Kapoor'] },
+  };
+  let state = { data: 'qa', who: 'owner' };
+  if (location.hash.includes('illustrative')) state.data = 'ill';
+  if (location.hash.includes('doctor-owner')) state.who = 'doc';
+
+  const set = (k, v) => document.querySelectorAll(`[data-f="${k}"]`).forEach((el) => { el.textContent = v; });
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function render() {
+    const d = DATA[state.data];
+    const [userName, initials, role, first] = WHO[state.who][state.data];
+    document.body.classList.toggle('multi', d.multi);
+    document.body.classList.toggle('doc-owner', state.who === 'doc');
+    document.getElementById('avatar').classList.toggle('ring', state.who === 'doc');
+    set('clinic', d.clinic); set('planName', d.planName); set('planLine', d.planLine);
+    set('userName', userName); set('initials', initials); set('userRole', state.who === 'doc' ? 'Clinic Owner · Owner Mode' : role); set('firstName', first);
+    set('scope', `${d.clinic.replace(' (browser test)', '')} · ${d.scope}`); set('moneyScope', d.scope);
+    const tag = document.querySelector('[data-f="srcTag"]'); tag.textContent = d.src; tag.className = `src ${d.srcClass}`;
+    set('subline', 'Friday, 23 October');
+    const decided = d.decisions.reduce((n, x) => n + x.count, 0);
+    document.querySelector('[data-f="headline"]').innerHTML = `<em>${inr(d.money.outstanding)} outstanding</em> · ${decided} ${decided === 1 ? 'decision' : 'decisions'} waiting`;
+    set('patients', d.today.patients); set('appts', d.today.appts); set('waiting', d.today.waiting); set('withDoc', d.today.withDoc);
+    const m = d.money; set('outstanding', inr(m.outstanding)); set('collectedMonth', inr(m.month.col));
+    const rate = m.month.billed ? Math.round((m.month.col / m.month.billed) * 100) : 0;
+    set('rate', `${rate}%`); set('billedMonthS', inr(m.month.billed)); document.querySelector('[data-w="rate"]').style.width = `${rate}%`;
+    for (const [p, v] of [['Today', m.today], ['Month', m.month]]) {
+      set(`billed${p}`, inr(v.billed)); set(`col${p}`, inr(v.col)); set(`ref${p}`, inr(v.ref)); set(`net${p}`, inr(v.col - v.ref)); set(`disc${p}`, inr(v.disc)); set(`adj${p}`, inr(v.adj));
+    }
+    set('decN', d.spend.dec[0]); set('decAmt', `${inr(d.spend.dec[1])} · all dates`); set('payN', d.spend.pay[0]); set('payAmt', `${inr(d.spend.pay[1])} · all dates`);
+    set('decideTotal', `${decided} in all`);
+    document.getElementById('inbox').innerHTML = d.decisions.length === 0
+      ? '<li class="empty"><svg class="i"><use href="#i-check"/></svg>Nothing is waiting on you</li>'
+      : d.decisions.map((x) => {
+          const inner = `<span class="ic"><svg class="i"><use href="#i-${x.icon}"/></svg></span><span class="txt"><b>${esc(x.primary)}</b><small>${esc(x.secondary)}</small></span><span class="end"><span class="cnt num">${x.count}</span>${x.href ? '<svg class="i"><use href="#i-right"/></svg>' : '<span class="soon-t">Soon</span>'}</span>`;
+          return `<li class="tone-${x.tone}">${x.href ? `<a class="item" href="#">${inner}</a>` : `<div class="item dep" aria-disabled="true" title="Coming soon: the ${esc(x.needs)} page">${inner}</div>`}</li>`;
+        }).join('');
+    const max = Math.max(1, ...d.branches.map((b) => b[3]));
+    document.getElementById('branches').innerHTML = d.branches.map((b) => `<tr><td><b>${esc(b[0])}</b><span class="bar"><i style="width:${Math.round((b[3] / max) * 100)}%"></i></span></td><td class="num">${b[1]}</td><td class="num hide-s">${b[2]}</td><td class="num">${inr(b[3])}</td></tr>`).join('');
+    document.getElementById('plan').className = `plan ${d.plan ? 'ok' : 'none'}`;
+    document.getElementById('plan').innerHTML = d.plan
+      ? `<svg class="i"><use href="#i-check"/></svg><b>${esc(d.plan.name)}</b> · ${esc(d.plan.status)} · renews ${esc(d.plan.ends)}`
+      : '<svg class="i"><use href="#i-alert"/></svg><b>No active plan on record</b> · limits below show what is in use';
+    document.getElementById('seats').innerHTML = d.seats.map(([label, used, allowed]) => {
+      const pct = allowed ? Math.min(100, Math.round((used / allowed) * 100)) : 0;
+      return `<li class="seat"><b>${esc(label)}</b><span class="u"><strong class="num">${used}</strong>${allowed ? ` of ${allowed}` : ' in use · no limit on record'}</span><span class="meter ${allowed ? (used >= allowed ? 'full' : '') : 'unknown'}"><i style="width:${pct}%"></i></span></li>`;
+    }).join('');
+    set('noLogin', d.noLogin); set('onLeave', d.onLeave);
+    const chip = document.getElementById('failChip'); chip.textContent = `${d.security.failed} failed`; chip.className = `ok-chip ${d.security.failed ? 'bad' : 'good'}`;
+    const rows = (list) => list.map(([p, who, time, alert]) => `<li class="${alert ? 'alert' : ''}"><span class="dot"></span><span class="w">${esc(p)}${who ? `<small>${esc(who)}</small>` : ''}</span><time>${esc(time)}</time></li>`).join('');
+    document.getElementById('security').innerHTML = rows(d.security.items);
+    document.getElementById('activity').innerHTML = rows(d.activity);
+    set('actTotal', `${d.activity.length} in all`);
+    document.querySelectorAll('.review [data-data]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.data === state.data)));
+    document.querySelectorAll('.review [data-who]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.who === state.who)));
+    document.querySelectorAll('.dep, [aria-disabled="true"]').forEach((el) => el.setAttribute('tabindex', '-1'));
+  }
+  document.querySelectorAll('.review [data-data]').forEach((b) => b.addEventListener('click', () => { state.data = b.dataset.data; render(); }));
+  document.querySelectorAll('.review [data-who]').forEach((b) => b.addEventListener('click', () => { state.who = b.dataset.who; render(); }));
+  render();
+</script>
+</body>
+</html>

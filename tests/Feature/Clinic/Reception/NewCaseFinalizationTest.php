@@ -2,6 +2,7 @@
 
 use App\AppointmentStatus;
 use App\BillingStatus;
+use App\ClinicPermission;
 use App\ClinicRole;
 use App\Models\Appointment;
 use App\Models\Branch;
@@ -17,8 +18,10 @@ use App\Models\Patient;
 use App\Models\PatientBilling;
 use App\Models\PatientBillingPayment;
 use App\Models\PatientVisit;
+use App\Models\SessionPackageUsage;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Clinical\EncounterWorkspace;
+use App\Services\Physio\SessionPackages;
 use App\Services\Reception\PatientFlowConfigService;
 use App\Services\Treatment\PatientTreatments;
 use App\Services\Treatment\TreatmentCatalog;
@@ -26,6 +29,7 @@ use App\Support\ClinicAccess\ClinicModules;
 use App\Support\Specialty\PracticeAreas;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
+use Spatie\Permission\Models\Role;
 use Tests\Support\TreatmentFixture;
 
 /**
@@ -63,39 +67,36 @@ beforeEach(function () {
 
 // ---------------------------------------------------------------- Consultation fee: one charge
 
-test('by default the fee is not charged at registration: payment after consultation, and money is never taken with a check-in', function () {
+test('by default the fee is not charged at registration: payment after consultation, and a payment sent with the check-in is refused', function () {
     ($this->newCase)(['doctor_id' => $this->priya->id])->assertCreated()
         ->assertJsonPath('billing', null)->assertJsonPath('payment_timing', 'after_consultation');
-    // A payment sent with a check-in (an old client) is ignored: no bill, no payment.
-    ($this->newCase)(['doctor_id' => $this->priya->id, 'phone' => '9811100125', 'payment' => ['method' => 'cash', 'amount' => 500]])->assertCreated()->assertJsonPath('billing', null);
+    // Nothing is due at check-in, so a payment sent with it is refused — and the whole check-in with it.
+    ($this->newCase)(['doctor_id' => $this->priya->id, 'phone' => '9811100125', 'payment' => ['method' => 'cash', 'amount' => 500]])
+        ->assertStatus(422)->assertJsonValidationErrors('payment');
 
-    expect(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(0)
+    expect(Patient::query()->count())->toBe(1)
+        ->and(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(0)
         ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 
-test('charged at check-in: the check-in raises one bill with its reason; the payment is taken after it, once — and checkout never charges the consultation again', function () {
+test('charged at check-in: payment first — the payment, the bill, the visit and the queue entry are made together, and checkout never charges the consultation again', function () {
     ($this->chargeAtCheckIn)();
 
-    $checkIn = ($this->newCase)(['doctor_id' => $this->priya->id, 'expected_charge' => 500])->assertCreated()
+    $paid = ($this->newCase)(['doctor_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'upi', 'amount' => 500, 'reference' => 'UPI-77']])->assertCreated()
         ->assertJsonPath('billing.total', 500)
-        ->assertJsonPath('billing.outstanding', 500)
-        ->assertJsonPath('billing.receipt', null)
-        ->assertJsonPath('billing.lines.0.amount', 500);
-    expect($checkIn->json('billing.reason'))->toContain('Consultation fee')
-        ->and($checkIn->json('billing.pay_url'))->toBe(route('clinic.billing.payments.store', $checkIn->json('billing.id')))
-        ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(0);
-
-    // The separate Collect Payment step: the existing billing payment endpoint, as JSON.
-    $paid = ($this->asOwner)()->postJson($checkIn->json('billing.pay_url'), ['method' => 'upi', 'amount' => 500, 'reference' => 'UPI-77', 'idempotency_key' => 'collect-0001'])->assertCreated()
         ->assertJsonPath('billing.outstanding', 0)
+        ->assertJsonPath('billing.lines.0.amount', 500)
         ->assertJsonPath('billing.receipt.method', 'UPI')
         ->assertJsonPath('billing.pay_url', null);
+    expect($paid->json('billing.reason'))->toContain('Consultation fee')
+        ->and($paid->json('billing.print_url'))->toContain('/print');
 
     $bill = PatientBilling::query()->withoutGlobalScopes()->sole();
     expect($bill->status)->toBe(BillingStatus::Paid)
         ->and($bill->items()->withoutGlobalScopes()->sole()->source_type)->toBe((new PatientVisit)->getMorphClass())
         ->and(PatientBillingPayment::query()->withoutGlobalScopes()->sole()->receipt_number)->toBe($paid->json('billing.receipt.number'))
-        ->and($paid->json('billing.print_url'))->toContain('/print');
+        ->and(PatientVisit::query()->count())->toBe(1)
+        ->and(ClinicQueueItem::query()->count())->toBe(1);
 
     // The consultation, opened and signed, has nothing left to charge for the consultation.
     $item = ClinicQueueItem::query()->sole();
@@ -104,52 +105,109 @@ test('charged at check-in: the check-in raises one bill with its reason; the pay
     expect(collect(app(EncounterCheckout::class)->lines($encounter->fresh()))->pluck('key'))->not->toContain('consultation');
 });
 
-test('a part payment leaves the rest outstanding on the same bill; leaving it owing takes nothing', function () {
+test('a part payment leaves the rest outstanding on the same bill; Pay later is an explicit unpaid check-in, and the desk must choose one', function () {
     ($this->chargeAtCheckIn)();
 
-    $first = ($this->checkIn)(['practitioner_id' => $this->priya->id])->assertCreated()->json('billing');
-    ($this->asOwner)()->postJson($first['pay_url'], ['method' => 'cash', 'amount' => 300, 'idempotency_key' => 'collect-0002'])->assertCreated()
+    ($this->checkIn)(['practitioner_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'cash', 'amount' => 300]])->assertCreated()
         ->assertJsonPath('billing.paid', 300)->assertJsonPath('billing.outstanding', 200);
-    // "Collect later": nothing is sent, the bill simply stays owing.
-    ($this->checkIn)(['practitioner_id' => $this->raj->id])->assertCreated()
-        ->assertJsonPath('billing.receipt', null)->assertJsonPath('billing.outstanding', 300);
+    // Pay later: nothing is taken, the bill stays owing, the patient is queued.
+    $later = ($this->checkIn)(['practitioner_id' => $this->raj->id, 'expected_charge' => 300, 'pay_later' => true])->assertCreated()
+        ->assertJsonPath('billing.receipt', null)->assertJsonPath('billing.outstanding', 300)->json('billing');
+    expect(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(1)
+        ->and(ClinicQueueItem::query()->count())->toBe(2);
 
-    expect(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(2)
-        ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(1);
+    // A desk that showed a fee but said neither, or said both, checks nobody in.
+    ($this->checkIn)(['practitioner_id' => $this->raj->id, 'expected_charge' => 300])->assertStatus(422)->assertJsonValidationErrors('payment');
+    ($this->checkIn)(['practitioner_id' => $this->raj->id, 'expected_charge' => 300, 'pay_later' => true, 'payment' => ['method' => 'cash', 'amount' => 300]])->assertStatus(422)->assertJsonValidationErrors('payment');
+    expect(PatientVisit::query()->count())->toBe(2)->and(ClinicQueueItem::query()->count())->toBe(2)
+        ->and(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(2);
+
+    // What Pay later left owing is settled afterwards through the billing payment endpoint.
+    ($this->asOwner)()->postJson($later['pay_url'], ['method' => 'cash', 'amount' => 300, 'idempotency_key' => 'collect-0002'])->assertCreated()
+        ->assertJsonPath('billing.outstanding', 0);
 });
 
-test('a refused payment never undoes the check-in: the patient, visit and bill stay, nothing is paid', function () {
+test('a refused payment checks nobody in: no patient, visit, queue entry, bill or payment is left behind', function () {
     ($this->chargeAtCheckIn)();
-    $billing = ($this->newCase)(['doctor_id' => $this->priya->id])->assertCreated()->json('billing');
 
-    ($this->asOwner)()->postJson($billing['pay_url'], ['method' => 'cash', 'amount' => 900, 'idempotency_key' => 'collect-0003'])->assertStatus(422)->assertJsonValidationErrors('amount');
-    ($this->asOwner)()->postJson($billing['pay_url'], ['method' => 'bitcoin', 'amount' => 500, 'idempotency_key' => 'collect-0004'])->assertStatus(422)->assertJsonValidationErrors('method');
+    // New Case: more than the fee, a method that does not exist, and one the desk does not take.
+    ($this->newCase)(['doctor_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'cash', 'amount' => 900]])->assertStatus(422)->assertJsonValidationErrors('payment.amount');
+    ($this->newCase)(['doctor_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'bitcoin', 'amount' => 500]])->assertStatus(422)->assertJsonValidationErrors('payment.method');
+    ($this->newCase)(['doctor_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'gateway', 'amount' => 500]])->assertStatus(422)->assertJsonValidationErrors('payment.method');
+    expect(Patient::query()->count())->toBe(0);
 
-    expect(Patient::query()->count())->toBe(1)->and(PatientVisit::query()->count())->toBe(1)
-        ->and(PatientBilling::query()->withoutGlobalScopes()->sole()->outstanding_balance)->toEqual(500)
+    // Repeat Case: the returning patient is not checked in.
+    $patient = $this->f->patient();
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', ['patient_id' => $patient->id, 'practitioner_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'cash', 'amount' => 900]])
+        ->assertStatus(422)->assertJsonValidationErrors('payment.amount');
+
+    expect(PatientVisit::query()->count())->toBe(0)
+        ->and(ClinicQueueItem::query()->count())->toBe(0)
+        ->and(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(0)
         ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 
-test('repeated requests never charge or take money twice; the amount charged is never taken from the request', function () {
+test('repeated requests never check in, charge or take money twice; a refused attempt frees the key; the amount charged is never taken from the request', function () {
     ($this->chargeAtCheckIn)();
-    $body = ['doctor_id' => $this->priya->id, 'idempotency_key' => 'case-key-0001', 'total' => 1, 'unit_price' => 1];
+    $body = ['doctor_id' => $this->priya->id, 'expected_charge' => 500, 'idempotency_key' => 'case-key-0001', 'total' => 1, 'unit_price' => 1];
 
-    $billing = ($this->newCase)($body)->assertCreated()->json('billing');
-    ($this->newCase)($body)->assertCreated()->assertJsonPath('replayed', true);
-    expect(PatientBilling::query()->withoutGlobalScopes()->sole()->final_amount)->toEqual(500)->and(PatientVisit::query()->count())->toBe(1);
+    // Refused first (too much), then sent again with the same key and the right amount.
+    ($this->newCase)([...$body, 'payment' => ['method' => 'cash', 'amount' => 900]])->assertStatus(422);
+    ($this->newCase)([...$body, 'payment' => ['method' => 'cash', 'amount' => 500]])->assertCreated();
+    // A double click or a retry of the same request: the first result, nothing new.
+    ($this->newCase)([...$body, 'payment' => ['method' => 'cash', 'amount' => 500]])->assertCreated()->assertJsonPath('replayed', true);
 
-    // The same Collect Payment request twice (a double click, a retry): one payment.
-    $pay = ['method' => 'cash', 'amount' => 500, 'idempotency_key' => 'collect-0005'];
-    ($this->asOwner)()->postJson($billing['pay_url'], $pay)->assertCreated();
-    ($this->asOwner)()->postJson($billing['pay_url'], $pay)->assertCreated()->assertJsonPath('replayed', true);
-    expect(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(1);
+    $repeat = ['patient_id' => $this->f->patient()->id, 'practitioner_id' => $this->raj->id, 'expected_charge' => 300, 'payment' => ['method' => 'cash', 'amount' => 300], 'idempotency_key' => 'case-key-0002'];
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', $repeat)->assertCreated();
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', $repeat)->assertCreated()->assertJsonPath('replayed', true);
+
+    expect(PatientVisit::query()->count())->toBe(2)
+        ->and(ClinicQueueItem::query()->count())->toBe(2)
+        ->and(PatientBilling::query()->withoutGlobalScopes()->pluck('final_amount')->map(fn ($amount) => (float) $amount)->sort()->values()->all())->toBe([300.0, 500.0])
+        ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(2);
 });
 
-test('a member who may not take money cannot take a payment at check-in', function () {
+test('only a member who may collect money takes a payment at check-in; Pay later needs the billing permission', function () {
     ($this->chargeAtCheckIn)();
-    [$doctor, $session] = $this->f->memberWithRole(ClinicRole::Doctor);
+    [$receptionist, $session] = $this->f->memberWithRole(ClinicRole::Receptionist);
+    Role::findByName(ClinicRole::Receptionist->value, 'web')->revokePermissionTo(ClinicPermission::PaymentCollect->value);
+    $asReception = fn () => $this->actingAs($receptionist->fresh())->withSession($session);
 
-    ($this->checkIn)(['practitioner_id' => $this->priya->id, 'payment' => ['method' => 'cash', 'amount' => 500]], $this->actingAs($doctor)->withSession($session))->assertForbidden();
+    // May raise the bill but not take money: the payment is refused and nobody is checked in.
+    ($this->checkIn)(['practitioner_id' => $this->priya->id, 'expected_charge' => 500, 'payment' => ['method' => 'cash', 'amount' => 500]], $asReception())
+        ->assertStatus(422)->assertJsonValidationErrors('payment');
+    expect(ClinicQueueItem::query()->count())->toBe(0);
+    // Pay later is theirs to choose: checked in, the bill owing.
+    ($this->checkIn)(['practitioner_id' => $this->priya->id, 'expected_charge' => 500, 'pay_later' => true], $asReception())
+        ->assertCreated()->assertJsonPath('billing.outstanding', 500)->assertJsonPath('billing.receipt', null);
+
+    // A member without the billing permission raises no bill at all, so has nothing to leave owing.
+    Role::findByName(ClinicRole::Receptionist->value, 'web')->revokePermissionTo(ClinicPermission::BillingCreate->value);
+    ($this->checkIn)(['practitioner_id' => $this->priya->id, 'expected_charge' => 500, 'pay_later' => true], $this->actingAs($receptionist->fresh())->withSession($session))
+        ->assertStatus(422)->assertJsonValidationErrors('expected_charge');
+
+    expect(PatientBilling::query()->withoutGlobalScopes()->count())->toBe(1)
+        ->and(PatientBillingPayment::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+test('a physiotherapy check-in charges nothing and never uses a package session', function () {
+    ($this->chargeAtCheckIn)();
+    $therapist = ($this->practitioner)('Ms. Anu Rao', 'sports_rehabilitation', 400);
+    $patient = $this->f->patient('Meera', 'Joshi');
+    $treatment = app(PatientTreatments::class)->startAdHoc($patient, 'physiotherapy', 'Knee Rehabilitation', $therapist, $this->f->branch, $this->t->actAsOwner(), ['sessions_planned' => 6]);
+    $package = app(SessionPackages::class)->sell($treatment, $this->f->branch, ['name' => 'Knee 6-pack', 'sessions_total' => 6, 'price' => 3000], $therapist);
+    $body = ['patient_id' => $patient->id, 'practitioner_id' => $therapist->id];
+    // Selling the package raised its own bill; the check-in must add none.
+    $bills = PatientBilling::query()->withoutGlobalScopes()->count();
+
+    // Nothing is due, so a payment is refused (and checks nobody in).
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', [...$body, 'expected_charge' => 0, 'payment' => ['method' => 'cash', 'amount' => 400]])->assertStatus(422);
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', [...$body, 'expected_charge' => 0])->assertCreated()->assertJsonPath('billing', null);
+
+    expect(ClinicQueueItem::query()->count())->toBe(1)
+        ->and(PatientBilling::query()->withoutGlobalScopes()->count())->toBe($bills)
+        ->and(app(SessionPackages::class)->balance($package->fresh()))->toBe(6)
+        ->and(SessionPackageUsage::query()->withoutGlobalScopes()->where('entry_type', SessionPackageUsage::CONSUME)->count())->toBe(0);
 });
 
 // ---------------------------------------------------------------- Queue as a module

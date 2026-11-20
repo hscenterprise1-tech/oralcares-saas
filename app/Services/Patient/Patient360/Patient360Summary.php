@@ -20,7 +20,6 @@ use App\Models\PatientVisit;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\User;
-use App\PatientStatus;
 use App\Services\Patient\PatientClinicalEntries;
 use App\Services\Patient\PatientDirectoryAudience;
 use App\Services\Treatment\TreatmentReadModel;
@@ -71,6 +70,7 @@ class Patient360Summary
             'age' => $patient->age,
             'gender' => $patient->gender,
             'blood_group' => $patient->blood_group,
+            'date_of_birth' => $patient->date_of_birth?->toDateString(),
             'phone' => $contact ? $patient->phone : null,
             'phone_last_digits' => strlen($digits) >= 4 ? substr($digits, -4) : null,
             'email' => $contact ? $patient->email : null,
@@ -80,12 +80,6 @@ class Patient360Summary
             'branch' => $lastVisit?->branch?->name,
             'last_visit_on' => $lastVisit?->visit_date?->toDateString(),
             'registered_branch' => $this->registeredBranch($patient),
-            // The death record, when one exists: the date, and who recorded it and when.
-            'deceased' => $patient->status === PatientStatus::Deceased ? [
-                'on' => $patient->date_of_death?->toDateString(),
-                'recorded_at' => $patient->death_recorded_at?->toIso8601String(),
-                'recorded_by' => $patient->death_recorded_by ? User::query()->whereKey($patient->death_recorded_by)->value('name') : null,
-            ] : null,
             'practitioner' => $patient->currentPractitioner?->name,
         ];
     }
@@ -110,6 +104,9 @@ class Patient360Summary
 
         return [
             'address' => $address === [] ? null : implode(', ', $address),
+            'city' => $contact ? $profile?->city : null,
+            'state' => $contact ? $profile?->state : null,
+            'pincode' => $contact ? ($profile?->pincode ?: $profile?->postal_code) : null,
             'preferred_channel' => $profile?->preferred_channel,
             'alternate_phone' => $contact ? $patient->alternate_phone : null,
             'emergency_contact' => $profile?->emergency_contact_name || $profile?->emergency_contact_phone ? [

@@ -15,7 +15,8 @@ use App\Support\ClinicAccess\ClinicAccess;
  *   who manages staff. Everyone at the clinic, by default.
  * - Doctor: a practitioner here. Their assigned patients by default, with
  *   today's visits to them and everyone they may open one tap away.
- * - Reception: the front desk. Today's patients by default.
+ * - Reception: the front desk. Everyone it may see by default, with
+ *   today's patients one tap away.
  * - Staff: anyone else who may view patients (billing, assistants).
  *
  * The views only narrow the directory; who may be seen at all is still
@@ -81,7 +82,7 @@ class PatientDirectoryAudience
     {
         return match ($this->audience()) {
             self::DOCTOR => [self::VIEW_MINE, self::VIEW_TODAY, self::VIEW_ALL],
-            self::RECEPTION => [self::VIEW_TODAY, self::VIEW_ALL],
+            self::RECEPTION => [self::VIEW_ALL, self::VIEW_TODAY],
             default => [self::VIEW_ALL, self::VIEW_TODAY],
         };
     }

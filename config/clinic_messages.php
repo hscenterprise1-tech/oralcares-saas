@@ -22,7 +22,25 @@ return [
     /** Wall-clock hour a follow-up reminder is sent, the day before the review. */
     'follow_up_hour' => 9,
 
+    /*
+     * Care advice sent after a procedure is recorded (`PatientMessaging::procedureAftercare`):
+     * the first entry whose pattern matches the procedure's name is used, once per
+     * consultation and kind. General advice only; it never replaces the doctor's.
+     */
+    'aftercare' => [
+        'extraction' => ['pattern' => '/extract|removal of tooth/i', 'care' => 'Bite on the gauze for 30–45 minutes. Do not rinse, spit or use a straw for 24 hours, and eat soft, cool food today.'],
+        'root_canal' => ['pattern' => '/root canal|\brct\b|endodont|pulpectomy/i', 'care' => 'The tooth may feel tender for a few days. Avoid chewing hard food on that side until the final filling or crown is placed.'],
+        'implant' => ['pattern' => '/implant/i', 'care' => 'Some swelling is normal. Use a cold pack on the cheek today, eat soft food, and rinse gently from tomorrow.'],
+        'scaling' => ['pattern' => '/scaling|cleaning|prophylaxis|root planing/i', 'care' => 'Your gums may feel sensitive for a day or two. Brush gently twice a day with a soft brush.'],
+        'filling' => ['pattern' => '/filling|restoration|composite/i', 'care' => 'If your mouth is numb, wait until it wears off before eating. Avoid very hard or sticky food for 24 hours.'],
+    ],
+
     'templates' => [
+        'procedure_aftercare' => [
+            'name' => 'Care after a procedure',
+            'subject' => 'Caring for yourself after your {{procedure}}',
+            'content' => 'Hello {{patient}}, after your {{procedure}} at {{clinic}}: {{care}} Call us if you have any concerns.',
+        ],
         'appointment_confirmed' => [
             'name' => 'Appointment confirmation',
             'subject' => 'Your appointment at {{clinic}}',
@@ -67,6 +85,11 @@ return [
             'name' => 'Your turn',
             'subject' => 'It is your turn at {{clinic}}',
             'content' => 'Hello {{patient}}, it is your turn now at {{clinic}}. Please come in.',
+        ],
+        'dental_plan_waiting' => [
+            'name' => 'Treatment waiting for a visit',
+            'subject' => 'Your treatment at {{clinic}}',
+            'content' => 'Hello {{patient}}, your treatment at {{clinic}} is waiting for your next visit. Please book a time that suits you.',
         ],
         'dental_treatment_followup' => [
             'name' => 'Treatment follow-up',

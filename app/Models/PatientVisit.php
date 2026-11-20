@@ -31,7 +31,9 @@ class PatientVisit extends Model
     protected $fillable = [
         'clinic_id',
         'branch_id',
+        'case_id',
         'patient_id',
+        'appointment_id',
         'case_number_id',
         'department_id',
         'doctor_id',
@@ -86,6 +88,16 @@ class PatientVisit extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(ClinicEmployee::class, 'doctor_id');
+    }
+
+    public function case(): BelongsTo
+    {
+        return $this->belongsTo(PatientCase::class, 'case_id');
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class, 'appointment_id');
     }
 
     /**

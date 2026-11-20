@@ -122,3 +122,16 @@ test('an edit that only changes allergies or manual alerts still writes a timeli
     expect($event)->not->toBeNull();
     expect($event->context['updated_fields'])->toContain('medical_alerts');
 });
+
+test('saving patient details without medical notes leaves the medical notes untouched', function () {
+    $this->actingAs($this->user)->withSession($this->session)->put("/clinic/patients/{$this->patient->id}", [
+        'first_name' => 'Meera', 'last_name' => 'Iyer', 'phone' => '9876533333', 'gender' => 'female', 'medical_notes' => 'Anxious about injections',
+    ])->assertSessionHasNoErrors();
+
+    $this->actingAs($this->user)->withSession($this->session)->put("/clinic/patients/{$this->patient->id}", [
+        'first_name' => 'Meera', 'last_name' => 'Iyer-Rao', 'phone' => '9876533333', 'gender' => 'female',
+    ])->assertSessionHasNoErrors();
+
+    expect($this->patient->fresh()->last_name)->toBe('Iyer-Rao')
+        ->and(PatientMedicalHistory::query()->withoutGlobalScopes()->where('patient_id', $this->patient->id)->value('notes'))->toBe('Anxious about injections');
+});

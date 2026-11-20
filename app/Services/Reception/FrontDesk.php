@@ -5,6 +5,7 @@ namespace App\Services\Reception;
 use App\AppointmentStatus;
 use App\BillingStatus;
 use App\ClinicPermission;
+use App\LabCaseStatus;
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Clinic;
@@ -12,17 +13,21 @@ use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicQueue;
 use App\Models\ClinicQueueItem;
+use App\Models\LabOrder;
 use App\Models\Patient;
 use App\Models\PatientBilling;
 use App\Models\PatientFollowUp;
 use App\Models\User;
 use App\QueueItemStatus;
+use App\Services\Billing\BillInstalments;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Clinical\ClinicalContextResolver;
 use App\Services\ClinicContext;
+use App\Services\LaboratoryWorkflowService;
 use App\Services\Patient\CaseNumberFormatter;
 use App\Services\Patient\PatientClinicalEntries;
 use App\Services\PaymentService;
+use App\Services\Physio\DeskPhysio;
 use App\Support\ClinicClock;
 use App\Support\Specialty\PracticeAreas;
 use App\VisitPriority;
@@ -57,6 +62,9 @@ class FrontDesk
         'done' => [QueueItemStatus::Completed],
         'not_present' => [QueueItemStatus::Skipped],
     ];
+
+    /** @var array<int, bool> whether the desk works for each practitioner, asked once per practitioner, not once per row */
+    private array $deskRuns = [];
 
     private const PATIENT_COLUMNS = ['id', 'clinic_id', 'uhid', 'first_name', 'middle_name', 'last_name', 'name', 'gender', 'age', 'date_of_birth', 'status'];
 
@@ -94,7 +102,11 @@ class FrontDesk
         $safety = $this->entries->safetyFlags($clinic->id, $rows->map(fn (ClinicQueueItem $i) => $i->patientVisit?->patient_id)->filter()->unique()->values()->all());
         $canOpenPatient = $user->hasClinicPermission(ClinicPermission::PatientView);
         $present = fn (ClinicQueueItem $item) => $this->row($clinic, $item, $now, $safety, $canOpenPatient);
-        $payments = $user->hasClinicPermission(ClinicPermission::BillingView) ? $this->paymentStates($clinic, $done) : null;
+        // Each finished visit's money, on its own row: shown to whoever reads the ledger or collects; collected from the row.
+        $collects = $user->hasClinicPermission(ClinicPermission::PaymentCollect);
+        $payments = $user->hasClinicPermission(ClinicPermission::BillingView) || $collects
+            ? $this->paymentStates($clinic, $done, $collects, $collects && $user->hasClinicPermission(ClinicPermission::BillingCreate) && $this->clinicContext->currentEmployee() !== null)
+            : null;
         $upcoming = $this->upcoming($clinic, $branch, $now);
 
         return [
@@ -112,7 +124,10 @@ class FrontDesk
             ],
             'waiting' => $waiting->map($present)->values()->all(),
             'with_doctor' => $withDoctor->map($present)->values()->all(),
-            'done' => $done->map(fn (ClinicQueueItem $item) => $present($item) + ['payment' => $payments === null ? null : ($payments[$item->id] ?? 'not_billed')])->values()->all(),
+            'done' => $done->map(fn (ClinicQueueItem $item) => $present($item) + [
+                'payment' => $payments === null ? null : ($payments[$item->id]['state'] ?? 'not_billed'),
+                'collect' => $payments[$item->id]['collect'] ?? null,
+            ])->values()->all(),
             'upcoming' => $upcoming,
             'attention' => $this->presentAttention($attention, $present, $now),
             'doctors' => $this->doctors($clinic, $branch, $queueIds),
@@ -133,6 +148,63 @@ class FrontDesk
             ->orderBy('scheduled_at')->limit(self::PREVIEW)
             ->get(['id', 'patient_id', 'practitioner_id', 'prospect_name', 'prospect_phone', 'scheduled_at', 'status', 'appointment_type'])
             ->map(fn (Appointment $a) => $this->booking($a, $now))->values()->all();
+    }
+
+    /**
+     * The dental lab cases the desk has to move: made but not sent, out with the lab (late ones flagged), and arrived back
+     * and waiting for the patient to be called in to be fitted. Arrived first, then late, then by due date. Null for a member
+     * who does not work the queue; the step routes decide again who may send or receive.
+     *
+     * @return array{count: array{to_send: int, with_lab: int, late: int, arrived: int}, rows: list<array<string, mixed>>}|null
+     */
+    public function labCases(Clinic $clinic, Branch $branch, User $user): ?array
+    {
+        if (! $user->hasClinicPermission(ClinicPermission::QueueManage)) {
+            return null;
+        }
+        $today = ClinicClock::now()->toDateString();
+        $open = LabOrder::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('branch_id', $branch->id)
+            ->whereIn('status', [LabCaseStatus::Draft->value, LabCaseStatus::Requested->value, LabCaseStatus::Accepted->value, LabCaseStatus::InProduction->value,
+                LabCaseStatus::QualityCheck->value, LabCaseStatus::ReadyForDelivery->value, LabCaseStatus::Delivered->value]);
+        $orders = $open->with(['patient' => fn ($query) => $query->withoutGlobalScopes()->select(['id', 'first_name', 'middle_name', 'last_name', 'name', 'uhid'])])
+            ->orderBy('delivery_due_date')->orderBy('id')->limit(100)->get();
+        if ($orders->isEmpty()) {
+            return null;
+        }
+
+        $rows = $orders->map(function (LabOrder $order) use ($today) {
+            $status = $order->status instanceof LabCaseStatus ? $order->status : LabCaseStatus::from((string) $order->status);
+            $state = match ($status) {
+                LabCaseStatus::Draft => 'to_send',
+                LabCaseStatus::Delivered => 'arrived',
+                default => 'with_lab',
+            };
+            $due = $order->delivery_due_date?->toDateString();
+            $steps = collect(['send', 'receive'])->filter(fn (string $step) => in_array($status->value, LaboratoryWorkflowService::STEPS[$step]['from'], true))
+                ->mapWithKeys(fn (string $step) => [$step => route('clinic.patients.dental.lab.step', [$order->patient_id, $order->id, $step])])->all();
+
+            return [
+                'id' => $order->id,
+                'number' => $order->lab_order_number,
+                'patient' => $order->patient ? ['id' => $order->patient->id, 'name' => $order->patient->full_name, 'uhid' => $order->patient->uhid] : null,
+                'what' => trim(($order->restoration ?: 'Lab work').($order->requested_teeth ? ' · '.implode(', ', (array) $order->requested_teeth) : '')),
+                'lab' => $order->laboratory_name,
+                'state' => $state,
+                'due_on' => $due,
+                'late' => $state === 'with_lab' && $due !== null && $due < $today,
+                'steps' => $steps,
+                'links' => ['patient' => route('clinic.patients.show', $order->patient_id)],
+            ];
+        });
+        $rank = fn (array $row) => $row['state'] === 'arrived' ? 0 : ($row['late'] ? 1 : ($row['state'] === 'to_send' ? 2 : 3));
+
+        return [
+            'count' => [
+                'to_send' => $rows->where('state', 'to_send')->count(), 'with_lab' => $rows->where('state', 'with_lab')->count(),
+                'late' => $rows->where('late', true)->count(), 'arrived' => $rows->where('state', 'arrived')->count(),
+            ],
+            'rows' => $rows->sortBy(fn (array $row) => [$rank($row), $row['due_on'] ?? '9999-12-31'])->take(self::PREVIEW)->values()->all(),
+        ];
     }
 
     /**
@@ -171,13 +243,17 @@ class FrontDesk
     }
 
     /**
-     * Where each finished visit's money stands: `paid`, `due` (a balance
-     * remains) or, with no bill yet, absent. One read for the preview.
+     * Where each finished visit's money stands, and how the desk collects it
+     * from the row: `due` (a bill with a balance: pay it), `not_billed`
+     * (charges not yet billed: bill and pay in one step, at the clinic's
+     * prices), `paid`, or `none` (nothing charged, e.g. a session paid from
+     * a package). `$collect` and `$bill` are the member's rights to take a
+     * payment and to raise the bill; without them a row shows its state only.
      *
      * @param  Collection<int, ClinicQueueItem>  $items
-     * @return array<int, string>
+     * @return array<int, array{state: string, collect: array{amount: float, url: string, bills: bool, encounter_id: int, bill_id: ?int}|null}>
      */
-    private function paymentStates(Clinic $clinic, Collection $items): array
+    private function paymentStates(Clinic $clinic, Collection $items, bool $collect = false, bool $bill = false): array
     {
         $encounters = $items->pluck('encounter_id', 'id')->filter();
         if ($encounters->isEmpty()) {
@@ -185,11 +261,30 @@ class FrontDesk
         }
         $bills = PatientBilling::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereIn('encounter_id', $encounters->values()->all())
             ->whereNotIn('status', [BillingStatus::Cancelled->value, BillingStatus::Draft->value])
-            ->get(['encounter_id', 'outstanding_balance'])->groupBy('encounter_id');
+            ->get(['id', 'encounter_id', 'outstanding_balance'])->groupBy('encounter_id');
+        $models = ClinicalEncounter::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereIn('id', $encounters->values()->all())->get()->keyBy('id');
 
-        return $encounters->map(fn (int $encounterId) => isset($bills[$encounterId])
-            ? ($bills[$encounterId]->sum('outstanding_balance') > 0 ? 'due' : 'paid')
-            : null)->filter()->all();
+        return $encounters->map(function (int $encounterId) use ($bills, $models, $collect, $bill) {
+            $billed = $bills[$encounterId] ?? collect();
+            $due = $billed->first(fn (PatientBilling $b) => (float) $b->outstanding_balance > 0);
+            if ($due) {
+                return ['state' => 'due', 'collect' => $collect ? [
+                    'amount' => (float) $due->outstanding_balance, 'url' => route('clinic.billing.payments.store', $due->id), 'bills' => false, 'encounter_id' => $encounterId, 'bill_id' => $due->id,
+                ] : null];
+            }
+            // What the visit still has to bill: the checkout's own lines, at the clinic's prices.
+            $encounter = $models[$encounterId] ?? null;
+            $toBill = $encounter && $encounter->isFinalized()
+                ? round(collect($this->checkout->lines($encounter))->sum(fn (array $line) => $line['quantity'] * $line['unit_price']), 2)
+                : 0.0;
+            if ($toBill > 0) {
+                return ['state' => 'not_billed', 'collect' => $bill ? [
+                    'amount' => $toBill, 'url' => route('clinic.reception.billing.collect', $encounterId), 'bills' => true, 'encounter_id' => $encounterId, 'bill_id' => null,
+                ] : null];
+            }
+
+            return ['state' => $billed->isNotEmpty() ? 'paid' : 'none', 'collect' => null];
+        })->all();
     }
 
     /**
@@ -240,7 +335,10 @@ class FrontDesk
      */
     public function billing(Clinic $clinic, Branch $branch, User $user): ?array
     {
-        if (! $user->hasClinicPermission(ClinicPermission::BillingView)) {
+        // Whoever collects payments sees what is waiting to be paid (owner's decision, 2026-11-05: the desk takes the
+        // payment when the treatment ends); the day's takings and the ledger stay with `billing.view`.
+        $ledger = $user->hasClinicPermission(ClinicPermission::BillingView);
+        if (! $ledger && ! $user->hasClinicPermission(ClinicPermission::PaymentCollect)) {
             return null;
         }
         $ready = $this->checkout->readyToBill($clinic, $branch, 2, self::PREVIEW + 1);
@@ -249,7 +347,7 @@ class FrontDesk
         $unpaid = (clone $open)->with(['patient' => fn ($q) => $q->withoutGlobalScopes()->select(self::PATIENT_COLUMNS)])
             ->latest('issued_at')->limit(self::PREVIEW)->get(['id', 'patient_id', 'encounter_id', 'billing_number', 'final_amount', 'outstanding_balance', 'issued_at']);
         $start = CarbonImmutable::now(ClinicClock::timezone())->startOfDay()->utc();
-        $collected = DB::table('patient_billing_payments')->join('patient_billings', 'patient_billings.id', '=', 'patient_billing_payments.patient_billing_id')
+        $collected = ! $ledger ? null : DB::table('patient_billing_payments')->join('patient_billings', 'patient_billings.id', '=', 'patient_billing_payments.patient_billing_id')
             ->where('patient_billings.clinic_id', $clinic->id)->where('patient_billings.branch_id', $branch->id)
             ->where('patient_billing_payments.created_at', '>=', $start)
             ->selectRaw('count(*) as payments, coalesce(sum(patient_billing_payments.amount), 0) as total')->first();
@@ -280,18 +378,61 @@ class FrontDesk
                 ];
             })->values()->all(),
             'ready_more' => $ready->count() > self::PREVIEW,
-            'unpaid' => $unpaid->map(fn (PatientBilling $bill) => [
-                'id' => $bill->id,
-                'number' => $bill->billing_number,
-                'patient' => $bill->patient ? ['id' => $bill->patient->id, 'name' => $bill->patient->full_name, 'uhid' => $bill->patient->uhid] : null,
-                'total' => (float) $bill->final_amount,
-                'outstanding' => (float) $bill->outstanding_balance,
-                'links' => ['pay' => route('clinic.billing.payments.store', $bill)],
-            ])->values()->all(),
+            // A bill with a payment plan shows its next instalment; late ones come first.
+            'unpaid' => (function () use ($unpaid) {
+                $plans = app(BillInstalments::class)->nextFor($unpaid->pluck('id')->all());
+
+                return $unpaid->map(fn (PatientBilling $bill) => [
+                    'id' => $bill->id,
+                    'number' => $bill->billing_number,
+                    'patient' => $bill->patient ? ['id' => $bill->patient->id, 'name' => $bill->patient->full_name, 'uhid' => $bill->patient->uhid] : null,
+                    'total' => (float) $bill->final_amount,
+                    'outstanding' => (float) $bill->outstanding_balance,
+                    'plan' => $plans[$bill->id] ?? null,
+                    'links' => ['pay' => route('clinic.billing.payments.store', $bill)],
+                ])->sortBy(fn (array $row) => [($row['plan']['overdue'] ?? false) ? 0 : 1])->values()->all();
+            })(),
             'unpaid_count' => (clone $open)->count(),
-            'collected_today' => ['total' => (float) ($collected->total ?? 0), 'payments' => (int) ($collected->payments ?? 0)],
-            'links' => ['all' => route('clinic.billing.index')],
+            'collected_today' => $ledger ? ['total' => (float) ($collected->total ?? 0), 'payments' => (int) ($collected->payments ?? 0)] : null,
+            'links' => ['all' => $ledger ? route('clinic.billing.index') : null, 'closing' => $user->hasClinicPermission(ClinicPermission::PaymentCollect) ? route('clinic.reception.day-closing') : null],
         ];
+    }
+
+    /**
+     * What is waiting to be paid for a finished visit and its patient, for the
+     * desk to collect from the visit page itself (no checkout page between):
+     * the visit's charges not yet billed (billed and paid in one step, at the
+     * clinic's prices) and every bill of the patient at this branch that still
+     * has a balance. Null for a member who may not take payments.
+     *
+     * @return array{currency: string, methods: list<array{value: string, label: string}>, items: list<array{key: string, label: string, detail: ?string, amount: float, url: string, bills: bool}>}|null
+     */
+    public function visitPayment(ClinicalEncounter $encounter, User $user): ?array
+    {
+        if (! $user->hasClinicPermission(ClinicPermission::PaymentCollect)) {
+            return null;
+        }
+        $clinic = Clinic::query()->findOrFail($encounter->clinic_id);
+        $canBill = $user->hasClinicPermission(ClinicPermission::BillingCreate) && $this->clinicContext->currentEmployee() !== null;
+
+        $items = [];
+        if ($canBill && $encounter->isFinalized()) {
+            $toBill = round(collect($this->checkout->lines($encounter))->sum(fn (array $line) => $line['quantity'] * $line['unit_price']), 2);
+            if ($toBill > 0) {
+                $items[] = ['key' => 'visit', 'label' => 'This visit', 'detail' => 'Charges not billed yet', 'amount' => $toBill, 'url' => route('clinic.reception.billing.collect', $encounter), 'bills' => true];
+            }
+        }
+        $bills = PatientBilling::query()->withoutGlobalScopes()->where('clinic_id', $encounter->clinic_id)->where('branch_id', $encounter->branch_id)->where('patient_id', $encounter->patient_id)
+            ->whereIn('status', [BillingStatus::Pending->value, BillingStatus::PartiallyPaid->value])->where('outstanding_balance', '>', 0)
+            ->orderBy('issued_at')->get(['id', 'encounter_id', 'billing_number', 'outstanding_balance']);
+        foreach ($bills as $bill) {
+            $items[] = [
+                'key' => "bill-{$bill->id}", 'label' => $bill->encounter_id === $encounter->id ? 'This visit' : 'Earlier balance', 'detail' => $bill->billing_number,
+                'amount' => (float) $bill->outstanding_balance, 'url' => route('clinic.billing.payments.store', $bill->id), 'bills' => false,
+            ];
+        }
+
+        return ['currency' => (string) config('reception.currency', 'INR'), 'methods' => app(PaymentService::class)->methodOptions($clinic, atDesk: true), 'items' => $items];
     }
 
     /**
@@ -404,7 +545,9 @@ class FrontDesk
             'type' => $a->appointment_type ? str($a->appointment_type)->replace('_', ' ')->ucfirst()->toString() : null,
             'scheduled_at' => $a->scheduled_at?->format(QueueBoard::DATETIME),
             'late_minutes' => $late,
-            'links' => ['status' => route('clinic.appointments.status', $a)],
+            // A registered patient's booking is checked in from its row (Reception's check-in, by the booking);
+            // a prospect is registered first.
+            'links' => ['status' => route('clinic.appointments.status', $a)] + ($a->patient ? ['check_in' => route('clinic.reception.check-in')] : []),
         ];
     }
 
@@ -452,8 +595,24 @@ class FrontDesk
                 'doctor' => route('clinic.reception.queue.doctor', $item),
                 'visit' => route('clinic.reception.queue.visit', $item),
                 'patient' => $canOpenPatient && $patient ? route('clinic.patients.show', $patient->id) : null,
+                // A physiotherapist without a login: the desk opens and works the visit for them (`DeskPhysio`).
+                ...$this->deskPhysioLinks($item),
             ],
         ];
+    }
+
+    /** @return array{desk_open?: string, desk_workspace?: string} */
+    private function deskPhysioLinks(ClinicQueueItem $item): array
+    {
+        $user = auth()->user();
+        if (! $user || ! in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called, QueueItemStatus::InConsultation, QueueItemStatus::Completed], true)
+            || ! $item->doctor_id || ! ($this->deskRuns[$item->doctor_id] ??= app(DeskPhysio::class)->mayRunFor($user, $item->doctor))) {
+            return [];
+        }
+
+        return $item->encounter_id
+            ? ['desk_workspace' => route('clinic.desk-physio.show', $item->encounter_id)]
+            : (in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called], true) ? ['desk_open' => route('clinic.reception.physio-desk.open', $item)] : []);
     }
 
     /**
@@ -470,7 +629,8 @@ class FrontDesk
                 'patientVisit' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'patient_id', 'case_number_id', 'clinic_specialty_id', 'visit_type_key', 'visit_reason']),
                 'patientVisit.patient' => fn ($q) => $q->withoutGlobalScopes()->select(self::PATIENT_COLUMNS),
                 'patientVisit.caseNumber',
-                'doctor:id,name',
+                // `user_id` too: whether the doctor signs in decides whether the desk may work for them.
+                'doctor:id,name,user_id,clinic_id',
             ]);
     }
 

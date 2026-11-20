@@ -71,7 +71,7 @@ function LinkButton({ onClick, children, label }: { onClick: () => void; childre
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="inline-flex min-h-7 min-w-6 shrink-0 items-center justify-center rounded-sm text-[12.5px] font-semibold text-cx-blue-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan"
+      className="inline-flex min-h-7 items-center justify-center rounded-lg px-2 py-0.5 text-[12px] font-bold text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
     >
       {children}
     </button>
@@ -81,22 +81,22 @@ function LinkButton({ onClick, children, label }: { onClick: () => void; childre
 /** One part of the strip: a small labelled heading with its actions, then the content. */
 function Part({ icon: Icon, tone, label, count, actions, children }: { icon: typeof HeartPulse; tone: string; label: string; count?: number; actions?: ReactNode; children: ReactNode }) {
   return (
-    <div className="min-w-0 px-3.5 py-3 sm:px-4">
+    <div className="min-w-0 px-4 py-3.5 sm:px-5">
       <div className="flex min-h-7 items-center justify-between gap-2">
-        <p className="flex min-w-0 items-center gap-2 text-[13px] font-semibold leading-5 text-cx-text">
+        <p className="flex min-w-0 items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-slate-700">
           <Icon className={cn('h-4 w-4 shrink-0', tone)} aria-hidden="true" />
           {label}
-          {count !== undefined && count > 0 && <span className="rounded-full bg-cx-slate-bg px-1.5 text-[11.5px] font-semibold tabular-nums text-cx-slate-ink">{count}</span>}
+          {count !== undefined && count > 0 && <span className="rounded-full border border-slate-200 bg-slate-100 px-2 text-[11px] font-bold tabular-nums text-slate-700">{count}</span>}
         </p>
-        {actions && <div className="flex shrink-0 items-center gap-3">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      <div className="mt-1.5 min-w-0">{children}</div>
+      <div className="mt-2 min-w-0">{children}</div>
     </div>
   );
 }
 
 function Quiet({ children }: { children: ReactNode }) {
-  return <p className="text-[13px] leading-5 text-cx-text-2">{children}</p>;
+  return <p className="text-[13px] leading-5 text-slate-400">{children}</p>;
 }
 
 export function SafetyStrip({ context, editor, safetyEditor, readOnly }: { context: Patient360Context; editor: ConditionEditor | null; safetyEditor: SafetyEditor | null; readOnly: boolean }) {
@@ -110,11 +110,27 @@ export function SafetyStrip({ context, editor, safetyEditor, readOnly }: { conte
 
   return (
     <>
-      <div className={cn('grid divide-y divide-cx-line rounded-[14px] border border-cx-line bg-white/80', parts === 3 && 'xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(0,1fr)] xl:divide-x xl:divide-y-0')}>
+      {context.allergies && context.allergies.length > 0 && (
+        <div role="alert" className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-2.5 text-rose-900 shadow-sm">
+          <span className="flex items-center gap-1.5 font-bold uppercase tracking-wide text-[12px] text-rose-700">
+            <AlertTriangle className="h-4 w-4 text-rose-600" aria-hidden="true" />
+            Allergies:
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {context.allergies.map((allergy) => (
+              <span key={allergy} className="inline-flex items-center rounded-lg bg-white px-2.5 py-0.5 text-[12px] font-bold text-rose-700 border border-rose-200 shadow-xs">
+                {allergy}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={cn('grid divide-y divide-slate-100 rounded-2xl border border-slate-200/80 bg-white shadow-sm', parts === 3 && 'xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_minmax(0,1fr)] xl:divide-x xl:divide-y-0')}>
         {context.clinical && (
           <Part
             icon={HeartPulse}
-            tone="text-cx-rose-ink"
+            tone="text-rose-600"
             label="Medical conditions"
             count={conditions.length}
             actions={
@@ -131,7 +147,7 @@ export function SafetyStrip({ context, editor, safetyEditor, readOnly }: { conte
                 {conditions.slice(0, CONDITIONS_SHOWN).map((condition) => (
                   <li
                     key={condition.label}
-                    className="inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-[8px] bg-cx-slate-bg/80 px-2 py-0.5 text-[12.5px] font-semibold leading-[18px] text-cx-text [overflow-wrap:anywhere]"
+                    className="inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/70 px-2.5 py-0.5 text-[12.5px] font-semibold text-slate-800 [overflow-wrap:anywhere]"
                   >
                     <SeverityDot severity={condition.severity} />
                     {condition.label}

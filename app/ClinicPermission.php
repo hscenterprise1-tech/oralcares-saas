@@ -31,6 +31,8 @@ enum ClinicPermission: string
     // Clinical Capabilities (Generic for all specialties)
     case ClinicalView = 'clinical.view';
     case ClinicalEdit = 'clinical.edit';
+    // Another branch's consultations, only while the patient attends here today; every access is audited (`CrossBranchClinicalAccess`).
+    case ClinicalCrossBranch = 'clinical.cross_branch';
     case PrescriptionManage = 'prescription.manage';
 
     // Treatment engine
@@ -49,7 +51,12 @@ enum ClinicPermission: string
 
     // Billing & Financial POS Capabilities
     case BillingView = 'billing.view';
+    // A practitioner's own fees only: the lines of bills raised for their
+    // care, never the clinic's ledger, other practitioners' fees or totals.
+    case BillingViewOwnFees = 'billing.view_own_fees';
     case BillingCreate = 'billing.create';
+    // Selling a session package (it raises a bill too, so `billing.create` is needed as well).
+    case PackageSell = 'package.sell';
     case PaymentCollect = 'payment.collect';
     case DiscountApply = 'discount.apply';
     case RefundProcess = 'refund.process';
@@ -109,9 +116,13 @@ enum ClinicPermission: string
                 self::FrontOffice->value,
                 self::VisitView->value,
                 self::VisitCreate->value,
+                // The desk runs billing in full, as billing staff do (owner's decision, 2026-11-05): the Billing work
+                // center and its ledger, bills, payments, packages and discounts. Refunds stay the owner's.
                 self::BillingView->value,
                 self::BillingCreate->value,
                 self::PaymentCollect->value,
+                self::PackageSell->value,
+                self::DiscountApply->value,
                 self::PhysioSessionConfirm->value,
                 self::DocumentsManage->value,
                 self::ConsentManage->value,
@@ -126,12 +137,18 @@ enum ClinicPermission: string
                 self::VisitView->value,
                 self::ClinicalView->value,
                 self::ClinicalEdit->value,
+                self::ClinicalCrossBranch->value,
                 self::PrescriptionManage->value,
                 self::TreatmentStart->value,
                 self::TreatmentExecute->value,
                 self::ConsentManage->value,
                 self::DocumentsManage->value,
-                self::BillingView->value,
+                self::BillingViewOwnFees->value,
+                // The treating doctor bills the visit, sells a package and takes the payment (2026-11-05, owner's
+                // decision), without reading the clinic's ledger (`billing.view` stays the owner's and billing's).
+                self::BillingCreate->value,
+                self::PaymentCollect->value,
+                self::PackageSell->value,
                 self::LeaveRequest->value,
             ],
             'Billing' => [
@@ -140,6 +157,7 @@ enum ClinicPermission: string
                 self::BillingView->value,
                 self::BillingCreate->value,
                 self::PaymentCollect->value,
+                self::PackageSell->value,
                 self::DiscountApply->value,
                 self::ReportsView->value,
                 self::LeaveRequest->value,

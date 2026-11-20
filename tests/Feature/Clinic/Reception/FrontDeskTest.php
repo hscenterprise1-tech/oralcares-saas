@@ -1,5 +1,6 @@
 <?php
 
+use App\ClinicPermission;
 use App\ClinicRole;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
@@ -19,6 +20,9 @@ use App\VisitPriority;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\TreatmentFixture;
 
 /**
@@ -46,6 +50,12 @@ beforeEach(function () {
             context: VisitContext::fromInput($this->f->clinic, ['visit_specialty' => $specialty, 'visit_reason' => 'Knee pain']),
         );
     };
+    // The desk's billing overview is the ledger's (OD-9: not a default Reception right); a clinic may grant it.
+    $this->grantDeskLedger = function () {
+        setPermissionsTeamId(null);
+        Role::findByName(ClinicRole::Receptionist->value, 'web')->givePermissionTo(Permission::firstOrCreate(['name' => ClinicPermission::BillingView->value, 'guard_name' => 'web']));
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    };
     $this->desk = function () {
         $desk = null;
         ($this->asReception)()->get('/clinic/reception')->assertOk()->assertInertia(function (Assert $page) use (&$desk) {
@@ -61,12 +71,12 @@ beforeEach(function () {
 test('every role lands from the one home route, its primary workspace noted; whoever runs the clinic lands on the Command Center', function () {
     [$billingUser, $billingSession] = $this->f->memberWithRole(ClinicRole::BillingStaff);
     [$adminUser, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
-    // No separate staff dashboard: reception lands on the Front Desk, a doctor on the Calendar, billing staff on Billing.
+    // No separate staff dashboard: reception lands on the Front Desk, a doctor on the Doctor Dashboard (Today), billing staff on Billing.
     $home = fn ($as, string $workspace, string $component) => $as->followingRedirects()->get('/clinic/dashboard')->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component($component, true)->where('clinic.workspaces.0.key', $workspace));
 
     $home(($this->asReception)(), 'front_desk', 'ClinicPortal/FrontDesk/Index');
-    $home(($this->asDoctor)(), 'today', 'ClinicPortal/Appointments/Index');
+    $home(($this->asDoctor)(), 'today', 'ClinicPortal/Today/Index');
     $home($this->actingAs($billingUser)->withSession($billingSession), 'billing', 'ClinicPortal/Billing/Index');
     $home($this->actingAs($adminUser)->withSession($adminSession), 'command_center', 'ClinicPortal/CommandCenter/Index');
     $home($this->actingAs($this->f->owner)->withSession($this->f->session), 'command_center', 'ClinicPortal/CommandCenter/Index');
@@ -115,12 +125,15 @@ test('the Front Desk and its actions are closed on the server to anyone whose wo
     expect($item->fresh()->doctor_id)->toBe($this->doctor->id);
 });
 
-test('the Billing work center is the billing staff\'s, the front desk\'s and the owner\'s, not a practitioner\'s', function () {
+test('the Billing work center is the billing staff\'s, the owner\'s and the front desk\'s, never a practitioner\'s; a clinic may take it from the desk', function () {
     [$billingUser, $billingSession] = $this->f->memberWithRole(ClinicRole::BillingStaff);
 
     $this->actingAs($billingUser)->withSession($billingSession)->get('/clinic/billing')->assertOk();
+    // The desk runs billing in full since 2026-11-05.
     ($this->asReception)()->get('/clinic/billing')->assertOk();
     ($this->asDoctor)()->get('/clinic/billing')->assertForbidden();
+    withoutDeskLedger();
+    ($this->asReception)()->get('/clinic/billing')->assertForbidden();
 });
 
 test('New Case and Repeat Case open their dialogs on the Front Desk, never a page of their own', function () {
@@ -290,6 +303,7 @@ test('Reception corrects why the patient came before the consultation, and not a
 // ─── Collection at the desk ─────────────────────────────────
 
 test('Reception bills a signed visit at the clinic\'s prices and takes the payment in one step; extra prices sent by the browser are ignored', function () {
+    ($this->grantDeskLedger)();
     $item = ($this->checkIn)('Ravi');
     $this->actingAs($this->doctorUser);
     $encounter = app(EncounterWorkspace::class)->startFromQueue($item, $this->doctor);
@@ -314,6 +328,7 @@ test('Reception bills a signed visit at the clinic\'s prices and takes the payme
 });
 
 test('collection at the desk needs billing rights, and an open bill\'s balance is collected from the list', function () {
+    ($this->grantDeskLedger)();
     $item = ($this->checkIn)('Ravi');
     $this->actingAs($this->doctorUser);
     $encounter = app(EncounterWorkspace::class)->startFromQueue($item, $this->doctor);
@@ -333,6 +348,7 @@ test('collection at the desk needs billing rights, and an open bill\'s balance i
 });
 
 test('a login with no staff record is told why it cannot bill, and no bill is raised', function () {
+    ($this->grantDeskLedger)();
     $item = ($this->checkIn)('Ravi');
     $this->actingAs($this->doctorUser);
     $encounter = app(EncounterWorkspace::class)->startFromQueue($item, $this->doctor);
@@ -347,6 +363,7 @@ test('a login with no staff record is told why it cannot bill, and no bill is ra
 });
 
 test('the billing preview is bounded too', function () {
+    ($this->grantDeskLedger)();
     $patient = $this->f->patient('Many', 'Bills');
     foreach (range(1, 12) as $i) {
         DB::table('patient_billings')->insert([

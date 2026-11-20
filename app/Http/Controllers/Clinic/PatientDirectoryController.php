@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic;
 
+use App\ClinicPermission;
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
 use App\Services\ClinicContext;
@@ -31,14 +32,23 @@ class PatientDirectoryController extends Controller
             'specialty' => ['nullable', 'string', 'max:50'],
             'branch_id' => ['nullable', 'integer'],
             'practitioner_id' => ['nullable', 'regex:/^(none|\d{1,18})$/'],
+            'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
+            'status' => ['nullable', 'string'],
+            'treatment_status' => ['nullable', 'string', Rule::in(['ongoing', 'completed', 'not_started'])],
             'active_care' => ['nullable', 'boolean'],
+            'patient_type' => ['nullable', 'string', Rule::in(['new', 'repeat'])],
+            'age_min' => ['nullable', 'integer', 'min:0', 'max:130'],
+            'age_max' => array_values(array_filter(['nullable', 'integer', 'min:0', 'max:130', $request->filled('age_min') ? 'gte:age_min' : null])),
             'registered_from' => ['nullable', 'date'],
-            'registered_to' => ['nullable', 'date', 'after_or_equal:registered_from'],
+            'registered_to' => array_values(array_filter(['nullable', 'date', $request->filled('registered_from') ? 'after_or_equal:registered_from' : null])),
+            'last_visit_from' => ['nullable', 'date'],
+            'last_visit_to' => array_values(array_filter(['nullable', 'date', $request->filled('last_visit_from') ? 'after_or_equal:last_visit_from' : null])),
             // Without a view, the whole directory the member may see (this endpoint's original contract).
             'view' => ['nullable', Rule::in([PatientDirectoryAudience::VIEW_MINE, PatientDirectoryAudience::VIEW_TODAY, PatientDirectoryAudience::VIEW_ALL])],
             'cursor' => ['nullable', 'string', 'max:500'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
+        unset($filters['status']);
         if (array_key_exists('active_care', $filters)) {
             $filters['active_care'] = (bool) $filters['active_care'];
         }
@@ -48,12 +58,16 @@ class PatientDirectoryController extends Controller
             unset($filters['practitioner_id']);
         }
 
+        $canSeeContact = $audience->canSeeContact($request->user());
+        $canSeeBilling = $request->user()->hasClinicPermission(ClinicPermission::BillingView);
+
         return response()->json($this->directory->page(
             $this->clinicContext->clinic()->id,
             [...$filters, ...$scope],
             $filters['cursor'] ?? null,
             (int) ($filters['per_page'] ?? PatientDirectory::PER_PAGE),
-            $audience->canSeeContact($request->user()),
+            $canSeeContact,
+            $canSeeBilling,
         ));
     }
 }

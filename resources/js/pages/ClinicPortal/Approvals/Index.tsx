@@ -10,6 +10,7 @@ import { Field, Textarea } from '@/clinic/ui/controls';
 import { Modal } from '@/clinic/ui/Modal';
 import { Notice } from '@/clinic/ui/Notice';
 import { PageHeader } from '@/clinic/ui/PageHeader';
+import { LinkTabs } from '@/clinic/ui/Tabs';
 import { EmptyState } from '@/clinic/ui/states';
 import type { Paginated } from '@/clinic/types';
 import { cn } from '@/lib/utils';
@@ -128,23 +129,17 @@ export default function ApprovalsIndex({ requests, tab, counts, owner, ownerMode
         </Notice>
       )}
 
-      <nav aria-label="Requests" className="mb-4 flex gap-2">
-        {(['open', 'decided'] as const).map((key) => (
-          <Link
-            key={key}
-            href={`${window.location.pathname}${key === 'decided' ? '?tab=decided' : ''}`}
-            preserveScroll
-            aria-current={tab === key ? 'page' : undefined}
-            className={cn(
-              'inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-[13.5px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal',
-              tab === key ? 'border-cx-nav-ink bg-cx-nav-ink text-white' : 'border-cx-line bg-cx-surface text-cx-nav-ink hover:bg-cx-nav-bg',
-            )}
-          >
-            {key === 'open' ? 'Open' : 'Decided'}
-            <span className={cn('rounded-full px-2 text-[12px]', tab === key ? 'bg-white/20' : 'bg-cx-nav-bg')}>{counts[key]}</span>
-          </Link>
-        ))}
-      </nav>
+      <LinkTabs
+        label="Requests"
+        className="mb-4"
+        tabs={(['open', 'decided'] as const).map((key) => ({
+          key,
+          label: key === 'open' ? 'Open' : 'Decided',
+          href: `${window.location.pathname}${key === 'decided' ? '?tab=decided' : ''}`,
+          active: tab === key,
+          count: counts[key],
+        }))}
+      />
 
       <Card>
         {empty ? (

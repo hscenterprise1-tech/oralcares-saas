@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Clinic;
 
-use App\ClinicPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Clinic\Consultation\PhysioAssessmentRequest;
 use App\Http\Requests\Clinic\Consultation\PhysioCarePlanRequest;
@@ -16,6 +15,7 @@ use App\Models\PhysioCarePlan;
 use App\Models\PhysioSession;
 use App\Services\ClinicContext;
 use App\Services\Physio\PhysioRecord;
+use App\Services\Physio\SessionPackages;
 use App\Services\Reception\IntakeSubmissions;
 use App\Support\Specialty\SpecialtyRegistry;
 use Closure;
@@ -112,7 +112,7 @@ class PhysioController extends Controller
         $clinic = $this->clinicContext->clinic() ?? abort(403);
         abort_unless($patient->clinic_id === $clinic->id, 404);
         $this->authorize('view', $patient);
-        abort_unless($request->user()->hasClinicPermission(ClinicPermission::BillingCreate), 403);
+        abort_unless(SessionPackages::maySell($request->user()), 403, 'Selling a package needs the package-selling permission.');
         $branch = $this->clinicContext->requireBranch();
         abort_unless(in_array('session_packages', $specialties->extensionsFor($specialties->forBranch($branch, $clinic)), true), 403);
 
@@ -144,10 +144,10 @@ class PhysioController extends Controller
         $clinic = $this->clinicContext->clinic() ?? abort(403);
         abort_unless($patient->clinic_id === $clinic->id && $package->patient_id === $patient->id, 404);
         $this->authorize('view', $patient);
-        abort_unless($request->user()->hasClinicPermission(ClinicPermission::BillingCreate), 403);
+        abort_unless(SessionPackages::maySell($request->user()), 403, 'Cancelling a package needs the package-selling permission.');
 
-        return $this->attempt(function () use ($package) {
-            $this->physio->cancelPackage($package);
+        return $this->attempt(function () use ($package, $request) {
+            $this->physio->cancelPackage($package, $request->user());
 
             return back()->with('success', 'Package cancelled.');
         });

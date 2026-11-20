@@ -201,16 +201,14 @@ test('the check-in summary: treatments, sessions done of planned, package balanc
 
     $nobody = $this->f->patient('No', 'Treatment');
     expect(($this->asReception)()->getJson("/clinic/reception/patients/{$nobody->id}/physio-summary")->assertOk()->json('physio'))
-        ->toEqual(['treatments' => [], 'amount_due' => 0, 'confirm' => null]);
+        ->toMatchArray(['treatments' => [], 'amount_due' => 0, 'confirm' => null]);
 });
 
 test('Patient 360 carries the same summary, with the confirm action only while the patient is queued here', function () {
     ($this->checkIn)();
     $overview = [];
     ($this->asReception)()->get("/clinic/patients/{$this->patient->id}")->assertOk()->assertInertia(function (Assert $page) use (&$overview) {
-        $page->loadDeferredProps(function (Assert $reload) use (&$overview) {
-            $overview = $reload->toArray()['props']['overview'];
-        });
+        $overview = $page->toArray()['props']['overview'];
     });
 
     expect(collect($overview['physio_care']['treatments'])->pluck('title')->sort()->values()->all())->toBe(['Back Rehabilitation', 'Knee Rehabilitation'])
@@ -225,4 +223,45 @@ test('a dental-only clinic gets no physiotherapy summary or action', function ()
     expect(($this->asReception)()->getJson("/clinic/reception/patients/{$dentalPatient->id}/physio-summary")->assertOk()->json('physio'))->toBeNull();
     expect(PatientTreatment::query()->withoutGlobalScopes()->count())->toBe(2)
         ->and(PatientSessionPackage::query()->withoutGlobalScopes()->count())->toBe(1);
+});
+
+test('the desk records who gave the session and a short note, changing the queued therapist when it was someone else', function () {
+    $other = $this->f->doctor('Ms. Second Therapist');
+    $other->practitionerProfile()->withoutGlobalScopes()->update(['specialty' => 'Physiotherapist']);
+    $item = ($this->checkIn)();
+
+    ($this->confirm)($item, [
+        'patient_treatment_id' => $this->knee->id, 'therapist_id' => $other->id,
+        'treatment_performed' => 'IFT 15 min, quadriceps strengthening', 'pain_before' => 6, 'pain_after' => 3, 'patient_response' => 'Walking easier',
+    ])->assertCreated();
+
+    $session = PhysioSession::query()->withoutGlobalScopes()->sole();
+    expect($session->therapist_id)->toBe($other->id)
+        ->and($session->treatment_performed)->toBe('IFT 15 min, quadriceps strengthening')
+        ->and([$session->pain_before, $session->pain_after])->toBe([6, 3])
+        ->and($session->patient_response)->toBe('Walking easier')
+        ->and($item->fresh()->doctor_id)->toBe($other->id);
+});
+
+test('the desk starts a physiotherapy programme for a therapist without a login, and nothing else', function () {
+    $patient = $this->f->patient('Ravi', 'Kumar');
+
+    ($this->asReception)()->postJson("/clinic/reception/patients/{$patient->id}/physio-programme", ['title' => 'Shoulder rehab', 'sessions_planned' => 10, 'therapist_id' => $this->therapist->id])
+        ->assertCreated()->assertJsonPath('physio.treatments.0.title', 'Shoulder rehab')->assertJsonPath('physio.treatments.0.sessions_planned', 10);
+
+    $programme = PatientTreatment::query()->withoutGlobalScopes()->where('patient_id', $patient->id)->sole();
+    expect($programme->specialty_key)->toBe('physiotherapy')
+        ->and($programme->practitioner_id)->toBe($this->therapist->id);
+
+    // The desk's session permission starts physiotherapy only, never another specialty.
+    $this->actingAs($this->receptionist);
+    expect(fn () => app(PatientTreatments::class)->startAdHoc($patient, 'dental', 'Fillings', $this->therapist, $this->f->branch, $this->receptionist, ['at_desk' => true]))
+        ->toThrow(Exception::class);
+});
+
+test('the desk summary lists today\'s physiotherapists and where a programme starts', function () {
+    ($this->asReception)()->getJson("/clinic/reception/patients/{$this->patient->id}/physio-summary")
+        ->assertOk()
+        ->assertJsonPath('physio.therapists.0.id', $this->therapist->id)
+        ->assertJsonPath('physio.start_url', route('clinic.reception.physio-programme', $this->patient->id));
 });

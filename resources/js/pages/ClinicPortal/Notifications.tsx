@@ -9,6 +9,7 @@ import type { NotificationItem, Paginated } from '@/clinic/types';
 import { Button } from '@/clinic/ui/Button';
 import { Card } from '@/clinic/ui/Card';
 import { PageHeader } from '@/clinic/ui/PageHeader';
+import { PillTabs } from '@/clinic/ui/Tabs';
 import { EmptyState, ErrorState, LoadingState } from '@/clinic/ui/states';
 
 const PER_PAGE = 20;
@@ -107,22 +108,7 @@ export default function Notifications({ links }: { links: { read: string } }) {
         }
       />
 
-      <div role="group" aria-label="Show" className="mb-4 flex gap-2">
-        {(['all', 'unread'] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={filter === key}
-            onClick={() => setFilter(key)}
-            className={cn(
-              'h-9 rounded-md px-3.5 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal',
-              filter === key ? 'bg-cx-nav-active font-semibold text-cx-nav-teal-strong ring-1 ring-inset ring-cx-nav-teal/40' : 'border border-cx-nav-line bg-white text-cx-nav-ink hover:bg-cx-nav-bg',
-            )}
-          >
-            {key === 'all' ? 'All' : 'Unread'}
-          </button>
-        ))}
-      </div>
+      <PillTabs label="Show" className="mb-4" value={filter} onChange={setFilter} options={[{ key: 'all', label: 'All' }, { key: 'unread', label: 'Unread' }]} />
 
       {actionError && (
         <p role="alert" className="mb-3 rounded-md bg-cx-rose-bg px-3 py-2 text-[12.5px] font-medium text-cx-rose-ink">

@@ -1,12 +1,15 @@
-import type { ReactNode } from 'react';
-import { Link } from '@inertiajs/react';
-import { ArrowRight, CalendarClock, CalendarHeart, ReceiptText, Stethoscope, TriangleAlert } from 'lucide-react';
-import { Avatar, FOCUS_RING, Panel, TONE, dsButtonClasses } from '@/clinic/ds';
+import { useState, type ReactNode } from 'react';
+import { Link, router } from '@inertiajs/react';
+import { ArrowRight, CalendarClock, FlaskConical, CalendarHeart, CalendarPlus, ReceiptText, Stethoscope, TriangleAlert } from 'lucide-react';
+import { requestKey } from '@/clinic/billing/BillingFrame';
+import { PaymentForm, paymentFor, paymentPayloadOf, paymentProblem } from '@/clinic/billing/PaymentForm';
+import { Avatar, DsButton, DsDialog, FOCUS_RING, Panel, TONE, dsButtonClasses } from '@/clinic/ds';
 import { formatMoney, formatNumber } from '@/clinic/ui/visuals';
 import { cn } from '@/lib/utils';
+import { DayClosingDialog } from './DayClosingDialog';
 import type { DeskMode } from './desk';
 import { clockTime, waitLabel } from './QueueRowItem';
-import type { BookingRow, Desk, DeskBilling, DeskFollowUps, DoctorRow, QueueRow } from './types';
+import type { BookingRow, Desk, DeskBilling, DeskFollowUps, DeskLab, DoctorRow, QueueRow } from './types';
 
 /*
  * The desk's secondary panels, each in its category's colour: attention
@@ -51,20 +54,23 @@ function GroupHeading({ children, action }: { children: ReactNode; action?: Reac
   );
 }
 
-export function attentionTotal(attention: Desk['attention']): number {
-  return attention.long_wait.count + attention.unassigned.count + attention.not_present.rows.length + attention.late_bookings.count;
+/** What needs the desk; a physio-only desk keeps no queue, so long waits and "not present" are not its concern. */
+export function attentionTotal(attention: Desk['attention'], mode: DeskMode): number {
+  const queue = mode.physioOnly ? 0 : attention.long_wait.count + attention.not_present.rows.length;
+
+  return queue + attention.unassigned.count + attention.late_bookings.count;
 }
 
 /** Long waits, patients without a doctor, people not present when called and bookings past their time. */
 export function AttentionPanel({ attention, mode, onShowLane }: { attention: Desk['attention']; mode: DeskMode; onShowLane: (lane: 'waiting' | 'not_present') => void }) {
-  const total = attentionTotal(attention);
+  const total = attentionTotal(attention, mode);
   if (total === 0) {
     return null;
   }
   const groups: { key: string; label: string; count: number; rows: QueueRow[]; lane: 'waiting' | 'not_present' }[] = [
-    { key: 'long', label: `Waiting over ${attention.long_wait.minutes} min`, count: attention.long_wait.count, rows: attention.long_wait.rows, lane: 'waiting' },
+    { key: 'long', label: `Waiting over ${attention.long_wait.minutes} min`, count: mode.physioOnly ? 0 : attention.long_wait.count, rows: attention.long_wait.rows, lane: 'waiting' },
     { key: 'unassigned', label: `No ${mode.doctor.toLowerCase()} assigned`, count: attention.unassigned.count, rows: attention.unassigned.rows, lane: 'waiting' },
-    { key: 'absent', label: 'Not present when called', count: attention.not_present.rows.length, rows: attention.not_present.rows, lane: 'not_present' },
+    { key: 'absent', label: 'Not present when called', count: mode.physioOnly ? 0 : attention.not_present.rows.length, rows: attention.not_present.rows, lane: 'not_present' },
   ];
 
   return (
@@ -90,7 +96,7 @@ export function AttentionPanel({ attention, mode, onShowLane }: { attention: Des
                       name={row.patient?.name ?? 'Unknown patient'}
                       href={row.links.patient}
                       detail={row.doctor?.name ?? `No ${mode.doctor.toLowerCase()} yet`}
-                      aside={row.wait_minutes !== null ? <span className="text-[13px] font-bold tabular-nums text-[#B42318]">{waitLabel(row.wait_minutes)}</span> : undefined}
+                      aside={row.wait_minutes !== null && !mode.physioOnly ? <span className="text-[13px] font-bold tabular-nums text-[#B42318]">{waitLabel(row.wait_minutes)}</span> : undefined}
                     />
                   </li>
                 ))}
@@ -133,21 +139,37 @@ function BookingLine({ row }: { row: BookingRow }) {
   );
 }
 
-/** Today's bookings not yet checked in (only where the calendar is open to this member). */
-export function ArrivalsPanel({ upcoming, stillToArrive, calendarHref }: { upcoming: BookingRow[]; stillToArrive: number; calendarHref: string | null }) {
-  if (upcoming.length === 0) {
-    return null;
-  }
-
+/** Today's bookings not yet checked in (only where the calendar is open to this member); an empty day says so. */
+export function ArrivalsPanel({ upcoming, stillToArrive, calendarHref, bookHref }: { upcoming: BookingRow[]; stillToArrive: number; calendarHref: string | null; bookHref?: string | null }) {
   return (
-    <Panel title="Still to arrive" icon={CalendarClock} tone="cyan" count={formatNumber(stillToArrive)} actions={calendarHref ? <MoreLink href={calendarHref}>Calendar</MoreLink> : undefined} flush>
-      <ul className="pb-2">
-        {upcoming.map((row) => (
-          <li key={row.id}>
-            <BookingLine row={row} />
-          </li>
-        ))}
-      </ul>
+    <Panel
+      title="Appointments"
+      icon={CalendarClock}
+      tone="cyan"
+      count={stillToArrive > 0 ? formatNumber(stillToArrive) : undefined}
+      description={stillToArrive > 0 ? 'Today, still to arrive' : 'Today'}
+      actions={calendarHref ? <MoreLink href={calendarHref}>Calendar</MoreLink> : undefined}
+      flush
+    >
+      {upcoming.length > 0 ? (
+        <ul className="pb-2">
+          {upcoming.map((row) => (
+            <li key={row.id}>
+              <BookingLine row={row} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="flex items-center justify-between gap-3 px-5 pb-5">
+          <p className="text-[13px] leading-5 text-[#64748B]">No more bookings today.</p>
+          {bookHref && (
+            <Link href={bookHref} className={cn(dsButtonClasses('secondary', 'sm'), 'shrink-0')}>
+              <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+              Book
+            </Link>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -172,7 +194,9 @@ export function DoctorsPanel({ doctors, mode }: { doctors: DoctorRow[]; mode: De
                   <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold', doctor.with_patient ? cn(TONE.violet.soft, TONE.violet.ink) : cn(TONE.green.soft, TONE.green.ink))}>
                     {doctor.with_patient ? 'With patient' : 'Free'}
                   </span>
-                  <span className="mt-0.5 block text-[12px] tabular-nums text-[#64748B]">{formatNumber(doctor.waiting)} waiting</span>
+                  <span className="mt-0.5 block text-[12px] tabular-nums text-[#64748B]">
+                    {formatNumber(doctor.waiting)} {mode.physioOnly ? 'to start' : 'waiting'}
+                  </span>
                 </>
               }
             />
@@ -207,6 +231,46 @@ export function FollowUpsPanel({ followUps }: { followUps: DeskFollowUps | null 
   );
 }
 
+/**
+ * Dental lab work the desk moves: made but not yet sent, out with the lab (late ones flagged), and arrived back, when the patient
+ * is to be called in to be fitted. Sending and receiving are the desk's steps; the server decides again who may take them.
+ */
+export function LabCasesPanel({ lab }: { lab: DeskLab | null | undefined }) {
+  const [busy, setBusy] = useState<number | null>(null);
+  if (!lab || lab.rows.length === 0) {
+    return null;
+  }
+  const move = (id: number, url: string) => router.post(url, {}, { preserveScroll: true, onStart: () => setBusy(id), onFinish: () => setBusy(null) });
+  const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const waiting = lab.count.arrived + lab.count.late + lab.count.to_send;
+
+  return (
+    <Panel id="desk-lab" title="Lab cases" icon={FlaskConical} tone="cyan" count={waiting > 0 ? formatNumber(waiting) : undefined} description={`${formatNumber(lab.count.arrived)} arrived · ${formatNumber(lab.count.with_lab)} with the lab${lab.count.late > 0 ? ` · ${formatNumber(lab.count.late)} late` : ''}`} flush>
+      <ul className="pb-2">
+        {lab.rows.map((row) => (
+          <li key={row.id}>
+            <PersonLine
+              name={row.patient?.name ?? 'Unknown patient'}
+              href={row.links.patient}
+              detail={[row.what, row.lab, row.state === 'arrived' ? 'Call the patient to be fitted' : row.due_on ? `due ${day(row.due_on)}` : null].filter(Boolean).join(' · ')}
+              aside={
+                row.steps.send || row.steps.receive ? (
+                  <DsButton size="sm" variant={row.state === 'arrived' ? 'secondary' : 'primary'} loading={busy === row.id} onClick={() => move(row.id, (row.steps.send ?? row.steps.receive) as string)}>
+                    {row.steps.send ? 'Mark sent' : 'Mark received'}
+                  </DsButton>
+                ) : (
+                  <span className={cn('rounded-full px-2 py-0.5 text-[12px] font-semibold', TONE.cyan.soft, TONE.cyan.ink)}>Arrived</span>
+                )
+              }
+            />
+            {row.late && <p className="-mt-1 px-5 pb-2 text-[12px] font-semibold text-[#B13A22]">Late from the lab</p>}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 /** The follow-ups request ended without them (a network or server failure): say so and offer another try. */
 export function FollowUpsFailed({ onRetry }: { onRetry: () => void }) {
   return (
@@ -221,58 +285,117 @@ export function FollowUpsFailed({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+export type Collectable = { key: string; name: string; detail: string; amount: number; url: string; bills: boolean };
+
 /**
- * Billing overview for members the server sends billing to (billing
- * rights): collected today first, then signed visits waiting for a bill
- * and bills with a balance, each figure exactly as the server sent it.
- * It reads only; bills are raised and paid on the Billing page. A day
- * with no billing activity says so instead of showing a row of zeroes.
+ * What is waiting to be paid at this branch, for whoever collects payments:
+ * visits finished and not yet billed (billed and paid in one step, at the
+ * clinic's own prices) and bills with a balance. Each is collected right
+ * here; the day's takings show only to those who read the ledger.
  */
-export function BillingSummaryPanel({ billing }: { billing: DeskBilling }) {
+export function PaymentsPanel({ billing, onRows }: { billing: DeskBilling; onRows: { encounters: number[]; bills: number[] } }) {
   const money = (value: number) => formatMoney(value, billing.currency);
-  const payments = billing.collected_today.payments;
-  const quiet = payments === 0 && billing.ready.length === 0 && billing.unpaid_count === 0;
+  const [paying, setPaying] = useState<Collectable | null>(null);
+  const [closing, setClosing] = useState(false);
+  // Today's finished visits are collected from their own rows; this panel keeps what is left from earlier.
+  const items: Collectable[] = [
+    ...(billing.can.bill
+      ? billing.ready.filter((row) => !onRows.encounters.includes(row.encounter_id)).map((row) => ({
+          key: `ready-${row.encounter_id}`,
+          name: row.patient?.name ?? 'Unknown patient',
+          detail: [row.doctor, 'to bill'].filter(Boolean).join(' · '),
+          amount: row.total,
+          url: row.links.collect,
+          bills: true,
+        }))
+      : []),
+    ...billing.unpaid.filter((bill) => !onRows.bills.includes(bill.id)).map((bill) => ({ key: `bill-${bill.id}`, name: bill.patient?.name ?? 'Unknown patient', detail: [bill.number, bill.plan ? `${bill.plan.overdue ? 'Instalment overdue' : 'Next instalment'} ${money(bill.plan.remaining)}, ${new Date(`${bill.plan.due_on}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}${bill.plan.left > 1 ? ` · ${bill.plan.left} left` : ''}` : 'balance due'].filter(Boolean).join(' · '), amount: bill.outstanding, url: bill.links.pay, bills: false })),
+  ];
+  const waiting = items.length;
 
   return (
-    <section aria-labelledby="billing-overview-title" className="min-w-0 rounded-2xl border border-[#E6EBF1] bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_-16px_rgba(23,59,96,0.3)]">
-      <header className="flex items-center gap-2">
-        <ReceiptText className="h-4 w-4 text-[#1E6F51]" strokeWidth={2} aria-hidden="true" />
-        <h2 id="billing-overview-title" className="text-[15px] font-semibold leading-6 text-[#173B60]">
-          Billing overview
-        </h2>
-      </header>
-
-      {quiet ? (
-        <p className="mt-2 text-[13px] leading-5 text-[#64748B]">No payments, bills ready or balances due yet today.</p>
+    <Panel
+      id="desk-payments"
+      title="Payments due"
+      icon={ReceiptText}
+      tone="green"
+      count={waiting > 0 ? formatNumber(waiting) : undefined}
+      description={billing.collected_today ? `${money(billing.collected_today.total)} collected today` : 'From earlier visits'}
+      actions={billing.links.all ? <MoreLink href={billing.links.all}>Billing</MoreLink> : undefined}
+      flush
+    >
+      {items.length === 0 ? (
+        <p className="px-5 pb-5 text-[13px] leading-5 text-[#64748B]">No balances from earlier visits. Today’s are collected from each patient’s row.</p>
       ) : (
-        <>
-          <div className="mt-3 rounded-xl bg-[#F2FAF6] px-3.5 py-3">
-            <p className="text-[12.5px] font-semibold text-[#1E6F51]">Collected today</p>
-            <p className="mt-0.5 text-[24px] font-bold leading-8 tracking-tight text-[#173B60] tabular-nums">{money(billing.collected_today.total)}</p>
-            <p className="text-[12.5px] text-[#64748B]">
-              from {formatNumber(payments)} payment{payments === 1 ? '' : 's'}
-            </p>
-          </div>
-          <dl className="mt-3 grid grid-cols-2 divide-x divide-[#E6EBF1]">
-            <div className="pr-3">
-              <dt className="text-[12.5px] font-medium text-[#64748B]">Ready to bill</dt>
-              <dd className="text-[18px] font-bold leading-7 text-[#173B60] tabular-nums">
-                {formatNumber(billing.ready.length)}
-                {billing.ready_more ? '+' : ''}
-              </dd>
-            </div>
-            <div className="pl-3">
-              <dt className="text-[12.5px] font-medium text-[#64748B]">Balance due</dt>
-              <dd className={cn('text-[18px] font-bold leading-7 tabular-nums', billing.unpaid_count > 0 ? 'text-[#A35A06]' : 'text-[#173B60]')}>{formatNumber(billing.unpaid_count)}</dd>
-            </div>
-          </dl>
-        </>
+        <ul className="pb-2">
+          {items.map((item) => (
+            <li key={item.key}>
+              <PersonLine
+                name={item.name}
+                detail={item.detail}
+                aside={
+                  <DsButton size="sm" variant="primary" onClick={() => setPaying(item)}>
+                    Collect {money(item.amount)}
+                  </DsButton>
+                }
+              />
+            </li>
+          ))}
+        </ul>
       )}
+      {billing.links.closing && (
+        <div className="border-t border-[#EEF2F7] px-5 py-3">
+          <DsButton size="sm" variant="secondary" className="w-full" onClick={() => setClosing(true)}>
+            Close the day
+          </DsButton>
+        </div>
+      )}
+      {paying && <CollectDialog item={paying} billing={billing} onClose={() => setPaying(null)} />}
+      {closing && billing.links.closing && <DayClosingDialog url={billing.links.closing} currency={billing.currency} onClose={() => setClosing(false)} />}
+    </Panel>
+  );
+}
 
-      <Link href={billing.links.all} className={cn(dsButtonClasses('secondary', 'md', 'mt-4 w-full'))}>
-        Open Billing
-        <ArrowRight className="h-4 w-4" aria-hidden="true" />
-      </Link>
-    </section>
+/** One payment taken at the desk: how it was paid and how much, sent once (idempotent). */
+export function CollectDialog({ item, billing, onClose }: { item: Collectable; billing: Pick<DeskBilling, 'methods' | 'currency'>; onClose: () => void }) {
+  const [payment, setPayment] = useState(() => paymentFor(billing.methods, item.amount));
+  const [key] = useState(() => requestKey('desk-pay'));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pay = () => {
+    const wrong = paymentProblem(payment, item.amount, billing.currency);
+    if (wrong) {
+      setProblem(wrong);
+
+      return;
+    }
+    setBusy(true);
+    router.post(item.url, { ...paymentPayloadOf(payment), idempotency_key: key }, {
+      preserveScroll: true,
+      onError: (errors) => setProblem(Object.values(errors)[0] ?? 'The payment was not recorded.'),
+      onSuccess: () => onClose(),
+      onFinish: () => setBusy(false),
+    });
+  };
+
+  return (
+    <DsDialog
+      open
+      onOpenChange={(open) => !open && !busy && onClose()}
+      title={`Collect from ${item.name}`}
+      description={item.bills ? 'The visit is billed at the clinic’s prices and paid in one step.' : item.detail}
+      footer={
+        <>
+          <DsButton variant="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </DsButton>
+          <DsButton variant="primary" onClick={pay} loading={busy}>
+            Record payment
+          </DsButton>
+        </>
+      }
+    >
+      <PaymentForm value={payment} onChange={(patch) => setPayment((value) => ({ ...value, ...patch }))} methods={billing.methods} due={item.amount} currency={billing.currency} idPrefix={`desk-${item.key}`} error={problem} />
+    </DsDialog>
   );
 }

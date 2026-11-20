@@ -1,5 +1,6 @@
 <?php
 
+use App\ClinicPermission;
 use App\ClinicRole;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicRoom;
@@ -16,6 +17,9 @@ use App\Services\Clinical\EncounterWorkspace;
 use App\Services\Physio\PhysioRecord;
 use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\ReceptionFixture;
 
 beforeEach(function () {
@@ -194,6 +198,10 @@ test('a sold package with a price is billed on the canonical clinic bill, agains
     $treatment = PatientTreatment::withoutGlobalScopes()->sole();
     [$receptionUser, $receptionSession] = $this->f->memberWithRole(ClinicRole::Receptionist);
     ClinicEmployee::create(['clinic_id' => $this->f->clinic->id, 'user_id' => $receptionUser->id, 'name' => 'Front Desk', 'email' => 'desk@example.com', 'status' => 'active']);
+    // Selling a package is granted on its own (`package.sell`); the desk's `billing.create` is not enough.
+    Role::query()->where('name', ClinicRole::Receptionist->value)->whereNull('branch_id')->sole()
+        ->givePermissionTo(Permission::firstOrCreate(['name' => ClinicPermission::PackageSell->value, 'guard_name' => 'web']));
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
 
     $this->actingAs($receptionUser)->withSession($receptionSession)->post("/clinic/patients/{$this->patient->id}/session-packages", [
         'name' => '10 physio sessions', 'sessions_total' => 10, 'price' => 6000, 'valid_until' => '2027-01-31', 'patient_treatment_id' => $treatment->id,
@@ -212,6 +220,7 @@ test('a sold package with a price is billed on the canonical clinic bill, agains
 });
 
 test('selling a package needs billing rights', function () {
+    withoutDoctorBillingRights();
     ($this->asTherapist)()->post("/clinic/patients/{$this->patient->id}/session-packages", ['name' => 'Pack', 'sessions_total' => 5, 'patient_treatment_id' => 1])->assertForbidden();
 });
 
@@ -226,7 +235,7 @@ test('a signed session is fixed, and a dental clinic has no physio record', func
     $this->f->clinic->update(['specialties' => ['dental']]);
     $open = ($this->newSession)();
     ($this->asTherapist)()->post("/clinic/consultations/{$open->id}/physio/assessment", ['pain_at_rest' => 3])->assertForbidden();
-    ($this->asTherapist)()->get("/clinic/consultations/{$open->id}")->assertInertia(fn (Assert $page) => $page->where('physio', null));
+    ($this->asTherapist)()->get("/clinic/consultations/{$open->id}?record=1")->assertInertia(fn (Assert $page) => $page->where('physio', null));
 });
 
 test('the session screen carries the physio record, each treatment\'s plan and session, packages and pain progress', function () {
@@ -234,15 +243,13 @@ test('the session screen carries the physio record, each treatment\'s plan and s
     $treatment = PatientTreatment::withoutGlobalScopes()->sole();
     ($this->asTherapist)()->post("/clinic/consultations/{$this->encounter->id}/physio/session", ['patient_treatment_id' => $treatment->id, 'pain_before' => 7, 'pain_after' => 4]);
 
+    // The visit opens the physio consultation: the course, today's draft session and the clinic's treatments.
     ($this->asTherapist)()->get("/clinic/consultations/{$this->encounter->id}")
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('encounter.label', 'Session')
-            ->where('physio.can_write.soap_notes', true)
-            ->where('physio.session.pain_before', 7)
-            ->where('physio.session.patient_treatment_id', $treatment->id)
-            ->where('physio.sessions.0.patient_treatment_id', $treatment->id)
-            ->where('physio.plans.0.patient_treatment_id', $treatment->id)
-            ->where('physio.progress.sessions.0.pain_after', 4)
-            ->has('physio.vocabulary.modalities'));
+            ->component('ClinicPortal/Consultations/Physio', false)
+            ->where('can_edit', true)
+            ->where('physio.courses.0.id', $treatment->id)
+            ->where('physio.courses.0.today.status', 'draft')
+            ->has('physio.treatments'));
 });

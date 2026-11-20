@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doctor Dashboard — Option B refined — OralCares design review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  DESIGN REVIEW MOCKUP — NOT PRODUCTION CODE.
+  Doctor Dashboard, Option B refined.
+
+  SHELL: a static copy of the existing Clinic Portal frame — ClinicPortalShell,
+  Sidebar and TopBar as they are in resources/js/clinic/shell (classes and
+  breakpoints transcribed, nothing redesigned): 240px sidebar from 1024px, a
+  drawer below it, the 76px top bar, the content area's padding. Only the
+  content inside <main> is new.
+
+  APPOINTMENTS PANEL: the approved reference, copied unchanged from
+  doctor-dashboard-option-b.html.
+
+  DATA: every patient, time and figure is ILLUSTRATIVE. Fields are the ones the
+  backend sends today: DoctorToday queue rows (priority, case number, visit
+  type, reason, safety flags, active care, wait, booked time, note status,
+  start link), DashboardData::followUpsDue, and the doctor's appointments.
+-->
+<style>
+  :root {
+    /* Existing shell tokens (tailwind.config.js `cx`). */
+    --nav-canvas: #F5F8FC; --nav-bg: #EEF5FB; --nav-hover: #E1ECF6; --nav-active: #DDF2F2; --nav-line: #D6E3EF;
+    --nav-teal: #00A8A8; --nav-teal-strong: #007A7B; --nav-ink: #0B1F33; --nav-muted: #4A5D73; --rose-ink-shell: #B42318;
+    /* Dashboard content: ink, and the approved panel's three stops as the only accent family. */
+    --card: #FFFFFF; --line: #E6EAF1; --line-strong: #D5DBE6; --row: #EEF1F6;
+    --ink: #0F172A; --ink-2: #475467; --ink-3: #5F6B7E;
+    --teal: #0EA394; --teal-soft: #DDF5F2; --teal-ink: #0A7368;
+    --blue: #2B86D6; --blue-soft: #E1EFFB; --blue-ink: #1C5E9E;
+    --violet: #6B48DE; --violet-soft: #EEE9FD; --violet-ink: #5232C9;
+    /* Safety and urgency only — never decoration. */
+    --rose: #E5484D; --rose-soft: #FFE8EA; --rose-ink: #B42318; --amber-soft: #FFF2D9; --amber-ink: #8F5200;
+    --grad-schedule: linear-gradient(165deg, #0EA394 0%, #2B86D6 52%, #6B48DE 100%);
+    --grad-primary: linear-gradient(135deg, #2B86D6 0%, #6B48DE 100%);
+    --tint-teal: linear-gradient(150deg, #E8F8F6 0%, #D6F1EC 100%);
+    --tint-blue: linear-gradient(150deg, #EAF3FD 0%, #D9E8F8 100%);
+    --tint-violet: linear-gradient(150deg, #F2EFFE 0%, #E6E0FB 100%);
+    --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -16px rgba(15,23,42,.18);
+    --shadow-raised: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -22px rgba(40,40,120,.32);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--nav-canvas); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .review { margin: 0; background: #0F172A; color: #fff; font-size: 12px; font-weight: 600; padding: 10px 16px; text-align: center; }
+  .review span { color: #C9C1FF; font-weight: 500; }
+
+  /* =================== EXISTING SHELL (transcribed, not redesigned) =================== */
+  .app { display: flex; min-height: 100vh; background: var(--nav-canvas); color: var(--ink); }
+  .side-col { position: sticky; top: 0; height: 100vh; width: 240px; flex-shrink: 0; display: none; }
+  @media (min-width: 1024px) { .side-col { display: block; } }
+  .sidebar { display: flex; height: 100%; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--nav-line); background: var(--nav-bg); color: var(--nav-ink); scrollbar-width: none; }
+  .sb-mark { display: flex; height: 77px; flex-shrink: 0; flex-direction: column; justify-content: center; border-bottom: 1px solid var(--nav-line); padding: 0 24px; }
+  .sb-mark b { font-size: 21px; font-weight: 700; line-height: 1; letter-spacing: -.025em; }
+  .sb-mark small { margin-top: 6px; font-size: 11px; font-weight: 500; letter-spacing: .02em; color: var(--nav-muted); }
+  .sb-nav { flex: 1; padding: 8px 12px 16px; }
+  .sb-sec + .sb-sec { margin-top: 24px; }
+  .sb-label { padding: 0 12px 6px; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--nav-muted); }
+  .sb-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .sb-item { position: relative; display: flex; height: 40px; width: 100%; align-items: center; gap: 12px; border-radius: 6px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--nav-ink); text-decoration: none; }
+  .sb-item:hover { background: var(--nav-hover); }
+  .sb-item .i { color: var(--nav-muted); }
+  .sb-item.current { background: var(--nav-active); font-weight: 600; }
+  .sb-item.current::before { content: ''; position: absolute; top: 8px; bottom: 8px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-teal); }
+  .sb-item.current .i { color: var(--nav-teal-strong); }
+  .sb-item.soon { color: var(--nav-muted); cursor: default; }
+  .sb-item.soon:hover { background: transparent; }
+  .sb-item.soon .i { opacity: .8; }
+  .sb-item .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item .tag { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .025em; color: var(--nav-muted); }
+  .sb-clinic { flex-shrink: 0; border-top: 1px solid var(--nav-line); background: #fff; padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+  .sb-clinic .logo { display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 8px; background: var(--nav-bg); box-shadow: inset 0 0 0 1px var(--nav-line); color: var(--nav-teal-strong); }
+  .sb-clinic p { margin: 0; }
+  .sb-clinic .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--nav-muted); }
+  .sb-clinic .n { margin-top: 2px; font-size: 13px; font-weight: 700; text-transform: uppercase; line-height: 1.3; letter-spacing: .05em; color: var(--nav-ink); }
+
+  /* Drawer below 1024px (Radix dialog in the app; a static toggle here). */
+  .drawer { position: fixed; inset: 0; z-index: 50; display: none; }
+  .drawer.open { display: block; }
+  .drawer .overlay { position: absolute; inset: 0; background: rgba(11,31,51,.35); }
+  .drawer .panel { position: absolute; inset: 0 auto 0 0; width: min(272px, 86vw); box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -18px rgba(15,23,42,.22); }
+  .drawer .close { position: absolute; right: 12px; top: 14px; display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  @media (min-width: 1024px) { .drawer, .drawer.open { display: none; } }
+
+  .col { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--nav-line); background: #fff; }
+  .tb-row { display: flex; height: 76px; align-items: center; gap: 12px; padding: 0 16px; }
+  @media (min-width: 640px) { .tb-row { padding: 0 24px; } }
+  @media (min-width: 1024px) { .tb-row { gap: 16px; padding: 0 32px; } }
+  .tb-menu { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; color: var(--nav-muted); cursor: pointer; }
+  .tb-word { flex-shrink: 0; font-size: 18px; font-weight: 700; line-height: 1; letter-spacing: -.025em; color: var(--nav-ink); }
+  @media (min-width: 1024px) { .tb-menu, .tb-word { display: none; } }
+  .tb-search { position: relative; display: none; min-width: 220px; max-width: 720px; flex: 1; }
+  @media (min-width: 768px) { .tb-search { display: block; } }
+  .tb-search .i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--nav-muted); }
+  .tb-search input { height: 44px; width: 100%; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; padding: 0 56px 0 44px; font: 14px Inter, sans-serif; color: var(--nav-ink); }
+  .tb-search input::placeholder { color: var(--nav-muted); }
+  .tb-search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: none; border: 1px solid var(--nav-line); border-radius: 4px; padding: 2px 6px; font: 11px Inter, sans-serif; color: var(--nav-muted); }
+  @media (min-width: 1024px) { .tb-search kbd { display: block; } }
+  .tb-right { margin-left: auto; display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+  @media (min-width: 640px) { .tb-right { gap: 8px; } }
+  @media (min-width: 1024px) { .tb-right { gap: 12px; } }
+  .tb-clock { display: none; text-align: right; flex-shrink: 0; }
+  .tb-clock p { margin: 0; }
+  .tb-clock .d { font-size: 12px; line-height: 1.25; color: var(--nav-muted); }
+  .tb-clock .t { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--nav-ink); font-variant-numeric: tabular-nums; }
+  .tb-div { width: 1px; height: 32px; flex-shrink: 0; background: var(--nav-line); margin: 0 4px; }
+  .tb-div.xl { display: none; }
+  .tb-div.md { display: none; }
+  @media (min-width: 768px) { .tb-div.md { display: block; } }
+  @media (min-width: 1280px) { .tb-clock, .tb-div.xl { display: block; } }
+  .tb-pair { display: flex; align-items: center; gap: 4px; }
+  .tb-round { position: relative; display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  .tb-round:hover { background: var(--nav-bg); color: var(--nav-ink); }
+  .tb-badge { position: absolute; right: 4px; top: 4px; display: flex; height: 18px; min-width: 18px; align-items: center; justify-content: center; border-radius: 999px; background: var(--rose-ink-shell); padding: 0 4px; font-size: 10.5px; font-weight: 700; color: #fff; }
+  .tb-account { display: flex; align-items: center; gap: 12px; border-radius: 6px; padding: 4px 6px 4px 4px; }
+  .tb-account .av { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; background: var(--nav-ink); font-size: 14px; font-weight: 600; color: #fff; }
+  .tb-account .who, .tb-account .chev { display: none; }
+  .tb-account .who b { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--nav-ink); }
+  .tb-account .who span { display: block; max-width: 150px; font-size: 12.5px; color: var(--nav-muted); }
+  .tb-account .chev { width: 16px; height: 16px; color: var(--nav-muted); }
+  @media (min-width: 1280px) { .tb-account .who, .tb-account .chev { display: block; } }
+  .tb-row2 { border-top: 1px solid var(--nav-line); padding: 10px 16px; }
+  .tb-row2 .tb-search { display: block; max-width: none; min-width: 0; }
+  .tb-row2 .tb-search input { padding-right: 16px; }
+  @media (min-width: 768px) { .tb-row2 { display: none; } }
+  .main { margin: 0 auto; width: 100%; min-width: 0; max-width: 1600px; flex: 1; padding: 20px 16px; }
+  @media (min-width: 640px) { .main { padding: 24px; } }
+  @media (min-width: 1024px) { .main { padding: 24px 32px; } }
+  /* ======================== END OF EXISTING SHELL ======================== */
+
+
+  /* ============================ DASHBOARD CONTENT ============================ */
+  /* Phone first: one column, the next patient before anything else. */
+  .dash { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+          grid-template-areas: "head" "next" "tiles" "queue" "follow" "panel"; }
+  .a-head { grid-area: head; } .a-next { grid-area: next; } .a-tiles { grid-area: tiles; } .a-queue { grid-area: queue; }
+  .a-follow { grid-area: follow; } .a-panel { grid-area: panel; min-width: 0; }
+  .dash > * { min-width: 0; }
+  /* Tablet and small laptop: one column, full width — the clinical work, then the follow-through,
+     then the appointments panel on its own row, so no card sits beside empty space. */
+  @media (min-width: 768px) {
+    .dash { gap: 18px; grid-template-columns: minmax(0, 1fr);
+            grid-template-areas: "head" "tiles" "next" "queue" "follow" "panel"; align-items: start; }
+  }
+  /* Desktop: the approved panel on the right, sticky, beside the whole clinical column. */
+  @media (min-width: 1280px) {
+    .dash { grid-template-columns: minmax(0, 1fr) 372px; column-gap: 22px;
+            grid-template-areas: "head panel" "tiles panel" "next panel" "queue panel" "follow panel"; grid-template-rows: auto auto auto auto 1fr; }
+    .a-panel { position: sticky; top: 96px; align-self: start; }
+  }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-card); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent; font-weight: 600; font-size: 14px; white-space: nowrap; cursor: pointer; transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s; }
+  .btn.primary { background: var(--grad-primary); color: #fff; box-shadow: 0 10px 22px -12px rgba(75,70,214,.85); }
+  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -12px rgba(75,70,214,.95); }
+  .btn.ghost { background: #fff; border-color: var(--line-strong); color: var(--ink); }
+  .btn.ghost:hover { border-color: var(--violet); color: var(--violet-ink); }
+  .btn.soft { background: rgba(255,255,255,.85); border-color: rgba(255,255,255,1); color: var(--ink); }
+  .btn .i { width: 16px; height: 16px; }
+  a.btn { text-decoration: none; }
+  .btn:focus-visible, .tab:focus-visible, .row:focus-visible, .tb-round:focus-visible, .tb-menu:focus-visible { outline: 3px solid rgba(107,72,222,.4); outline-offset: 2px; }
+  .avatar { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .b-urgent { background: var(--rose); color: #fff; } .b-urgent::before { background: #fff; }
+  .b-new { background: var(--teal-soft); color: var(--teal-ink); }
+  .b-repeat { background: var(--violet-soft); color: var(--violet-ink); }
+  .b-any { background: var(--blue-soft); color: var(--blue-ink); }
+  .b-booked { background: #F1F3F7; color: var(--ink-2); }
+  /* Safety: always a red outline chip with an icon and words — distinct from every other badge. */
+  .flag { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 2px 10px; border-radius: 999px; background: var(--rose-soft); color: var(--rose-ink); box-shadow: inset 0 0 0 1px #F5B8BD; font-size: 12px; font-weight: 600; }
+  .flag .i { width: 14px; height: 14px; stroke-width: 2.2; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Heading */
+  /* Greeting first and largest (navy, the name carries the weight); the patient headline beneath it
+     is the second voice, with the gradient phrase as the only accent. Context chip sits beside the
+     greeting while it fits and drops to its own line on a phone. */
+  .a-head .hello { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .a-head .hello .g { font-size: 24px; line-height: 1.15; letter-spacing: -.025em; font-weight: 500; color: #33445E; }
+  .a-head .hello .g b { font-weight: 700; color: #0B1F33; }
+  .ctx { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--teal-soft); color: var(--teal-ink); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: inset 0 0 0 1px rgba(14,163,148,.18); }
+  .ctx::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px rgba(14,163,148,.18); }
+  .a-head h1 { margin: 6px 0 0; font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: -.015em; color: var(--ink); animation-delay: .12s; }
+  /* The highlighted phrase never splits: on a narrow phone the line breaks before it, as a person would. */
+  .a-head h1 em { font-style: normal; white-space: nowrap; background: var(--grad-schedule); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  @media (min-width: 768px) {
+    .a-head .hello .g { font-size: 30px; }
+    .a-head h1 { font-size: 21px; }
+  }
+  @media (min-width: 1280px) {
+    .a-head .hello .g { font-size: 32px; }
+    .a-head h1 { font-size: 22px; }
+  }
+
+  /* Status tiles — the panel's three stops, washed pale, plus one white tile. */
+  .a-tiles { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "wait seen" "with with" "notes notes"; }
+  .tile { position: relative; overflow: hidden; border-radius: 20px; padding: 14px; border: 1px solid rgba(255,255,255,.9); box-shadow: var(--shadow-card); min-width: 0; }
+  .t-wait { grid-area: wait; background: var(--tint-teal); } .t-with { grid-area: with; background: var(--tint-blue); }
+  .t-seen { grid-area: seen; background: var(--tint-violet); } .t-notes { grid-area: notes; background: #fff; border-color: var(--line); }
+  .tile .k { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .tile .v { margin-top: 6px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .tile .v b { font-size: 28px; line-height: 1; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .tile .v span { font-size: 12.5px; color: var(--ink-2); }
+  .tile .s { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .t-wait .k .i, .t-with .k .i, .t-seen .k .i, .t-notes .k .i { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+  .t-wait .k { color: var(--teal-ink); } .t-with .k { color: var(--blue-ink); } .t-seen .k { color: var(--violet-ink); } .t-notes .k { color: var(--rose-ink); }
+  .stack { display: none; margin-top: 10px; }
+  .stack .avatar { width: 28px; height: 28px; font-size: 10.5px; border: 2px solid #fff; margin-left: -8px; }
+  .stack .avatar:first-child { margin-left: 0; }
+  .t-with .row2 { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .t-with .draft { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(255,255,255,.85); color: var(--blue-ink); font-size: 12px; font-weight: 600; }
+  .meter { margin-top: 10px; height: 6px; border-radius: 6px; background: rgba(255,255,255,.9); overflow: hidden; }
+  .meter i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #8E73EC, #6B48DE); }
+  /* The reminder wraps beside the button rather than pushing it to a row of its own. */
+  .t-notes .row2 { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .t-notes .row2 .s { flex: 1 1 auto; min-width: 0; }
+  .t-notes .row2 .btn { flex: 0 0 auto; }
+  .link { color: var(--violet-ink); font-weight: 600; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; }
+  @media (min-width: 768px) {
+    .a-tiles { gap: 14px; grid-template-areas: "wait with" "seen notes"; }
+    .tile { padding: 16px; }
+    .tile .v b { font-size: 32px; }
+    .stack { display: flex; }
+  }
+
+  /* Next patient — the decision the doctor makes most often, with what they need to make it. */
+  .next { position: relative; border-radius: 20px; padding: 14px; background: linear-gradient(#fff, #fff) padding-box, var(--grad-schedule) border-box; border: 2px solid transparent; box-shadow: var(--shadow-card); display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  /* Card header: what this is, and how long they have waited as a chip beside it. */
+  .next .eyebrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--violet-ink); }
+  .next .eyebrow .wait { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--rose-soft); text-transform: none; letter-spacing: 0; color: var(--rose-ink); font-weight: 700; font-size: 12.5px; }
+  .next .who { display: flex; align-items: center; gap: 10px; }
+  .next .who .avatar { width: 44px; height: 44px; font-size: 15px; }
+  .next .who b { display: block; font-size: 18px; line-height: 1.25; font-weight: 600; overflow-wrap: anywhere; }
+  .next .who small { display: block; margin-top: 1px; color: var(--ink-3); font-size: 12.5px; }
+  .next .tags { margin-top: 8px; }
+  .next .why { margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: var(--ink); }
+  /* Safety and last visit share one quiet panel: a label column and a value column, one row each. */
+  .next .facts { border-radius: 14px; background: #F7F8FB; padding: 2px 12px; }
+  .next .fact { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 0; }
+  .next .fact + .fact { border-top: 1px solid var(--line); }
+  .next .fact .h { margin: 0; font-size: 11px; line-height: 26px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .next .fact .tags { margin: 0; }
+  .next .fact p.v { margin: 0; padding-top: 4px; font-size: 13px; line-height: 1.4; color: var(--ink); }
+  .next .fact p.v small { color: var(--ink-3); font-size: 12px; }
+  /* Actions: sized to their labels. On a phone the primary leads and both share the row when they fit. */
+  .next .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .next .acts .btn { position: relative; gap: 6px; padding: 0 14px; font-size: 13.5px; flex: 1 1 auto; }
+  .next .acts .btn.primary { order: -1; }
+  /* Narrow phones: the labels carry the actions, so both stay on one row instead of stacking. */
+  @media (max-width: 419px) { .next .acts .btn .i { display: none; } }
+  .next .right { display: grid; gap: 10px; align-content: start; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  @media (min-width: 768px) {
+    .next { padding: 16px 18px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); column-gap: 20px; }
+    /* Header above the patient on the left; safety, last visit and actions take the full right side. */
+    .next { grid-template-areas: "eye right" "left right"; grid-template-rows: auto 1fr; row-gap: 10px; }
+    .next .eyebrow { grid-area: eye; } .next .left { grid-area: left; } .next .right { grid-area: right; }
+    .next .acts { justify-content: flex-end; }
+    .next .acts .btn { flex: 0 0 auto; }
+    .next .acts .btn.primary { order: 0; }
+  }
+
+  /* Queue — patient cards; names wrap rather than truncate; safety stays on the card. */
+  .qhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 12px; margin-bottom: 12px; }
+  .qhead h2 { margin: 0; font-size: 17px; font-weight: 600; }
+  .qhead p { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
+  .tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: #fff; border: 1px solid var(--line); }
+  .tab { min-height: 44px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+  .tab.on { background: var(--violet-soft); color: var(--violet-ink); }
+  .tab em { font-style: normal; margin-left: 4px; opacity: .8; }
+  @media (max-width: 767px) { .qhead .tabs { width: 100%; } .qhead .tab { flex: 1; } }
+  .cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  /* At least 270px a card, so IDs, care stage and the action never squeeze: two across on desktop, laptop and tablet. */
+  @media (min-width: 640px) {
+    .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    /* An odd last card takes the whole row instead of leaving a hole beside it. */
+    .cards > .pc:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    /* …and lays itself out across that row (identity · case · wait and action) rather than leaving it empty. */
+    .cards > .pc:last-child:nth-child(odd) { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) auto; column-gap: 18px; row-gap: 6px; align-items: center; }
+    .cards > .pc:last-child:nth-child(odd) > .who { grid-column: 1; grid-row: 1 / span 2; }
+    .cards > .pc:last-child:nth-child(odd) > .tags { grid-column: 2; grid-row: 1; }
+    .cards > .pc:last-child:nth-child(odd) > .why { grid-column: 2; grid-row: 2; margin: 0; }
+    .cards > .pc:last-child:nth-child(odd) > .foot { grid-column: 3; grid-row: 1 / span 2; margin: 0; padding: 0; gap: 14px; }
+  }
+  .pc { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-card); transition: transform .2s var(--ease), box-shadow .2s var(--ease); }
+  .pc:hover { transform: translateY(-2px); box-shadow: var(--shadow-raised); }
+  .pc .who { display: flex; align-items: flex-start; gap: 10px; }
+  .pc .who b { display: block; font-size: 14.5px; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
+  .pc .who small { display: block; margin-top: 1px; color: var(--ink-3); font-size: 12px; }
+  .pc .why { font-size: 13px; color: var(--ink-2); }
+  .pc .care { border-radius: 12px; background: #F7F8FB; padding: 8px 10px; font-size: 12.5px; }
+  .pc .care .top { display: flex; justify-content: space-between; gap: 8px; color: var(--ink-2); }
+  .pc .bar { margin-top: 6px; height: 5px; border-radius: 5px; background: #E5E8EF; overflow: hidden; }
+  .pc .bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #0EA394, #2B86D6); }
+  .pc .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 2px; }
+  .pc .foot .w { font-size: 12.5px; color: var(--ink-3); } .pc .foot .w b { color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .pc .foot .btn { min-height: 44px; padding: 0 16px; }
+  @media (min-width: 768px) { .pc { padding: 16px; } }
+
+  /* Follow-through — what the doctor still owes after today's consultations. */
+  .a-follow .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 16px 6px; }
+  .a-follow h2 { margin: 0; font-size: 17px; font-weight: 600; } .a-follow .head p { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
+  .a-follow .tabs { width: 100%; } .a-follow .tab { flex: 1; padding: 0 8px; }
+  .rows { list-style: none; margin: 0; padding: 4px 8px 10px; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px; border-radius: 12px; color: inherit; text-decoration: none; }
+  .row:hover { background: #F7F8FB; }
+  .rows li + li { border-top: 1px solid var(--row); }
+  .row .ic { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0; }
+  .row .ic .i { width: 17px; height: 17px; }
+  .row b { display: block; font-size: 13.5px; font-weight: 600; } .row small { color: var(--ink-3); font-size: 12px; }
+  .row .end { margin-left: auto; text-align: right; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+
+  /* Actions whose destination is not built yet (`dep`): shown as the sidebar shows them —
+     muted, with "Soon", not clickable and out of the keyboard order. The review switch at the
+     foot previews them as they will look once their pages exist. */
+  .soon-tag { display: none; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .025em; color: var(--ink-3); }
+  body:not(.future) .soon-tag { display: inline; }
+  body:not(.future) .dep { cursor: not-allowed; }
+  body:not(.future) .btn.dep { background: #F1F3F7; border-color: var(--line); color: var(--ink-3); box-shadow: none; transform: none; }
+  body:not(.future) .btn.dep .i { opacity: .55; }
+  /* One disabled treatment for every unbuilt button: "Soon" rides on its top edge, so it is read
+     without widening the button or crowding its label. */
+  body:not(.future) .btn.dep { position: relative; }
+  body:not(.future) .btn.dep .soon-tag { position: absolute; top: -8px; right: 12px; padding: 1px 6px; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 1px var(--line-strong); line-height: 14px; }
+  body:not(.future) .link.dep { color: var(--ink-3); }
+  body:not(.future) .link.dep .arr { display: none; }
+  body:not(.future) .row.dep:hover { background: transparent; }
+  body:not(.future) .row.dep .end .go { display: none; }
+  body.future .row.dep .end .soon-tag { display: none; }
+
+  /* Design-review foot: the note, the preview switch and the implementation dependencies. */
+  .review { background: #0F172A; color: #fff; padding: 16px; }
+  .review .inner { max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
+  .review p { margin: 0; font-size: 12.5px; font-weight: 600; } .review p span { color: #C9C1FF; font-weight: 500; }
+  .review .switch { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.12); justify-self: start; flex-wrap: wrap; }
+  .review .switch button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: #E6E3FF; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .review .switch button[aria-pressed="true"] { background: #fff; color: #0F172A; }
+  .review ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: #D5D9E3; display: grid; gap: 4px; }
+  .review ul b { color: #fff; }
+
+  /* Entrance and motion: once per load, never on refresh; off under reduced motion. */
+  .rise { animation: rise .5s var(--ease) both; }
+  .d1 { animation-delay: .03s; } .d2 { animation-delay: .08s; } .d3 { animation-delay: .13s; } .d4 { animation-delay: .18s; } .d5 { animation-delay: .23s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* ---------- Approved appointments panel (copied unchanged from Option B) ---------- */
+  .schedule { background: var(--grad-schedule); border-radius: 24px; color: #fff; padding: 18px 16px 20px; box-shadow: 0 24px 50px -28px rgba(70,50,190,.7); position: sticky; top: 18px; overflow: hidden; }
+  .schedule::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0 2px, transparent 2px 14px); pointer-events: none; }
+  .schedule > * { position: relative; }
+  .s-head { display: flex; align-items: center; justify-content: space-between; }
+  .s-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .s-head .ghost { height: 36px; padding: 0 14px; border-radius: 999px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; font: 600 12.5px/1 inherit; }
+  .month { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 10px; font-weight: 600; font-size: 15px; }
+  .month button { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); display: grid; place-items: center; }
+  .month svg { width: 15px; height: 15px; stroke: #fff; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 14px; }
+  .day { border-radius: 14px; text-align: center; padding: 7px 0 8px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); }
+  .day small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; opacity: .9; } .day b { font-size: 15px; }
+  .day.on { background: #fff; color: var(--violet-ink); box-shadow: 0 8px 18px -10px rgba(0,0,0,.4); }
+  .timeline { display: grid; grid-template-columns: 46px 1fr; row-gap: 10px; }
+  .t-time { font-size: 12px; font-weight: 600; opacity: .92; padding-top: 12px; }
+  .slot { background: rgba(255,255,255,.94); color: var(--ink); border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 16px -12px rgba(0,0,0,.45); }
+  .slot .avatar { width: 34px; height: 34px; font-size: 12px; }
+  .slot b { display: block; font-size: 13.5px; } .slot small { color: var(--ink-3); font-size: 12px; }
+  .slot .when { margin-left: auto; text-align: right; font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .slot.done { background: rgba(255,255,255,.55); }
+  /* As in the approved panel: pointer cursors, a small hover nudge, darker text on past slots. */
+  .s-head .ghost, .month button { cursor: pointer; }
+  .slot { transition: transform .18s var(--ease); } .slot:hover { transform: translateX(2px); }
+  .slot.done b, .slot.done small, .slot.done .when { color: var(--ink-2); }
+  .now-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; }
+  .now-line::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.3); }
+  .now-line::after { content: ''; flex: 1; height: 2px; background: rgba(255,255,255,.85); border-radius: 2px; }
+  .s-foot { margin-top: 14px; font-size: 12.5px; opacity: .95; }
+  /* Phone only: the same panel, given room — tighter padding and day pills, and each
+     appointment's time beneath the name instead of beside it, so nothing escapes. */
+  @media (max-width: 479px) {
+    .schedule { padding: 16px 12px 18px; border-radius: 22px; }
+    .days { gap: 4px; }
+    .day { border-radius: 12px; padding: 6px 0 7px; }
+    .day small { font-size: 10px; letter-spacing: .02em; }
+    .day b { font-size: 14px; }
+    .timeline { grid-template-columns: 40px 1fr; }
+    .slot { flex-wrap: wrap; row-gap: 2px; }
+    .slot > div { min-width: 0; flex: 1; }
+    .slot .when { margin-left: 44px; width: 100%; text-align: left; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-fu" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-buoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <!-- The panel's own arrows, as in Option B (they carry their stroke, the panel colours them white). -->
+  <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-steth" viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h4"/></symbol>
+</defs></svg>
+
+<!-- The sidebar, as the app renders it for a Doctor (Main: Dashboard, Appointments, Patients; Additional: Follow-ups (soon), Notifications, Support). -->
+<template id="sidebar-tpl">
+  <div class="sidebar">
+    <div class="sb-mark"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav class="sb-nav" aria-label="Main">
+      <div class="sb-sec"><p class="sb-label">Main</p><ul>
+        <li><a class="sb-item current" href="#" aria-current="page"><svg class="i"><use href="#i-dash"/></svg><span class="lbl">Dashboard</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-cal"/></svg><span class="lbl">Appointments</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Patients</span></a></li>
+      </ul></div>
+      <div class="sb-sec"><p class="sb-label">Additional</p><ul>
+        <li><span class="sb-item soon" aria-disabled="true" title="Follow-ups: coming soon"><svg class="i"><use href="#i-fu"/></svg><span class="lbl">Follow-ups</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-bell"/></svg><span class="lbl">Notifications</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-buoy"/></svg><span class="lbl">Support</span></a></li>
+      </ul></div>
+    </nav>
+    <section class="sb-clinic" aria-label="Clinic"><span class="logo"><svg class="i"><use href="#i-building"/></svg></span><div><p class="k">Clinic</p><p class="n">Example Dental Clinic</p></div></section>
+  </div>
+</template>
+
+<div class="app">
+  <aside class="side-col" id="side-col"></aside>
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation">
+    <div class="overlay" data-close></div>
+    <div class="panel" id="drawer-panel"><button class="close" aria-label="Close navigation" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+  </div>
+
+  <div class="col">
+    <header class="topbar">
+      <div class="tb-row">
+        <button class="tb-menu" id="open-menu" aria-label="Open navigation" aria-haspopup="dialog"><svg class="i"><use href="#i-menu"/></svg></button>
+        <span class="tb-word" aria-hidden="true">OralCares</span>
+        <div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search pages, appointments and support…" aria-label="Search"><kbd>Ctrl K</kbd></div>
+        <div class="tb-right">
+          <div class="tb-clock"><p class="d">Fri, 23 Oct 2026</p><p class="t">10:48 am</p></div>
+          <span class="tb-div xl" aria-hidden="true"></span>
+          <div class="tb-pair">
+            <a class="tb-round" href="#" aria-label="Support" title="Support"><svg class="i"><use href="#i-buoy"/></svg></a>
+            <button class="tb-round" aria-label="Notifications, 3 unread"><svg class="i"><use href="#i-bell"/></svg><span class="tb-badge">3</span></button>
+          </div>
+          <span class="tb-div md" aria-hidden="true"></span>
+          <div class="tb-account"><span class="av" aria-hidden="true">AM</span><span class="who"><b>Dr. Asha Mehta</b><span>Doctor</span></span><svg class="i chev"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+      <div class="tb-row2"><div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search pages and more…" aria-label="Search"></div></div>
+    </header>
+
+    <main class="main" id="main">
+      <div class="dash">
+        <!-- Heading: who, where, and the state of the day in one sentence. -->
+        <section class="a-head rise d1">
+          <p class="hello"><span class="g">Good morning, <b>Dr. Mehta</b></span><span class="ctx">General dentistry · Main Branch</span></p>
+          <h1 class="rise">Four patients are <em>waiting for you</em></h1>
+        </section>
+
+        <!-- Status tiles: each a different job — who waits, who is with you, how the day is going, what is owed. -->
+        <section class="a-tiles" aria-label="Your day">
+          <article class="tile t-wait rise d1">
+            <p class="k"><svg class="i"><use href="#i-hour"/></svg>Waiting for you</p>
+            <div class="v"><b>4</b><span>patients · longest 26 min</span></div>
+            <div class="stack" aria-hidden="true"><span class="avatar" style="background:linear-gradient(135deg,#F59AA4,#E5484D)">PN</span><span class="avatar" style="background:linear-gradient(135deg,#6FE0D2,#0EA394)">VS</span><span class="avatar" style="background:linear-gradient(135deg,#9CC9F2,#2B86D6)">MI</span><span class="avatar" style="background:linear-gradient(135deg,#B7A6F4,#6B48DE)">AK</span></div>
+          </article>
+          <article class="tile t-with rise d2">
+            <p class="k"><svg class="i"><use href="#i-steth"/></svg>With you now</p>
+            <div class="v"><b>17</b><span>min · Rahul Iyer · Filling #26</span></div>
+            <div class="row2"><span class="draft">Note in draft</span><button class="btn soft dep" data-needs="the consultation workspace">Resume <svg class="i"><use href="#i-arrow"/></svg><span class="soon-tag">Soon</span></button></div>
+          </article>
+          <article class="tile t-seen rise d3">
+            <p class="k"><svg class="i"><use href="#i-check"/></svg>Seen today</p>
+            <div class="v"><b>7</b><span>of 12 booked</span></div>
+            <div class="meter" role="img" aria-label="7 of 12 booked patients seen"><i style="width:58%"></i></div>
+            <p class="s">5 bookings still to arrive</p>
+          </article>
+          <article class="tile t-notes rise d4">
+            <p class="k"><svg class="i"><use href="#i-note"/></svg>Notes to finish</p>
+            <div class="v"><b>2</b><span>drafts · oldest 9:15 am</span></div>
+            <div class="row2"><span class="s" style="margin:0">Sign before the end of the day</span><a class="btn ghost dep" href="#follow" data-needs="Doctor Today">Review notes <svg class="i"><use href="#i-arrow"/></svg><span class="soon-tag">Soon</span></a></div>
+          </article>
+        </section>
+
+        <!-- Next patient: who, why, what to watch, then the one action. -->
+        <section class="a-next next rise d2" aria-labelledby="next-name">
+          <div class="eyebrow"><span>Up next · called 10:44</span><span class="wait">Waiting 26 min</span></div>
+          <div class="left">
+            <div class="who"><span class="avatar" style="background:linear-gradient(135deg,#F59AA4,#E5484D)">PN</span><div><b id="next-name">Priya Nair</b><small>C-0418 · 34 F · OC-00000231</small></div></div>
+            <div class="tags"><span class="badge b-urgent">Emergency</span><span class="badge b-repeat">Repeat case</span><span class="badge b-booked">Walk-in</span></div>
+            <p class="why">Severe pain, lower left molar since last night</p>
+          </div>
+          <div class="right">
+            <div class="facts">
+              <div class="fact"><p class="h">Safety</p><div class="tags"><span class="flag"><svg class="i"><use href="#i-alert"/></svg>Penicillin allergy · severe</span><span class="flag"><svg class="i"><use href="#i-alert"/></svg>On blood thinners</span></div></div>
+              <div class="fact"><p class="h">Last visit</p><p class="v">Scaling and polishing <small>· 14 Aug 2026 · Dr. Mehta</small></p></div>
+            </div>
+            <div class="acts"><button class="btn ghost dep" data-needs="Patient 360"><svg class="i"><use href="#i-file"/></svg>Patient record<span class="soon-tag">Soon</span></button><button class="btn primary dep" data-needs="the consultation workspace"><svg class="i"><use href="#i-play"/></svg>Start consultation<span class="soon-tag">Soon</span></button></div>
+          </div>
+        </section>
+
+        <!-- The rest of the queue. -->
+        <section class="a-queue rise d3" aria-labelledby="queue-title">
+          <div class="qhead">
+            <div><h2 id="queue-title">After Priya</h2><p>Checked in for you or for any doctor, in calling order</p></div>
+            <div class="tabs" role="tablist"><button class="tab on" role="tab" aria-selected="true">Waiting<em>3</em></button><button class="tab" role="tab" aria-selected="false">Seen<em>7</em></button></div>
+          </div>
+          <div class="cards">
+            <article class="pc">
+              <div class="who"><span class="avatar" style="background:linear-gradient(135deg,#6FE0D2,#0EA394)">VS</span><div><b>Vikram Shetty</b><small>C-0421 · 52 M · OC-00000187</small></div></div>
+              <div class="tags"><span class="badge b-repeat">Repeat case</span><span class="badge b-booked">Booked 10:30</span></div>
+              <div class="care"><div class="top"><span>Root canal #36</span><span>Stage 2 of 3</span></div><div class="bar"><i style="width:66%"></i></div></div>
+              <div class="foot"><span class="w"><b>18 min</b> waiting</span><button class="btn ghost dep" data-needs="the consultation workspace">Start <svg class="i"><use href="#i-arrow"/></svg><span class="soon-tag">Soon</span></button></div>
+            </article>
+            <article class="pc">
+              <div class="who"><span class="avatar" style="background:linear-gradient(135deg,#9CC9F2,#2B86D6)">MI</span><div><b>Meera Iyer</b><small>C-0422 · 27 F · New patient</small></div></div>
+              <div class="tags"><span class="badge b-new">New case</span><span class="badge b-booked">Walk-in</span></div>
+              <p class="why" style="margin:0">Bleeding gums, first visit</p>
+              <div class="tags"><span class="flag"><svg class="i"><use href="#i-alert"/></svg>Diabetic</span></div>
+              <div class="foot"><span class="w"><b>9 min</b> waiting</span><button class="btn ghost dep" data-needs="the consultation workspace">Start <svg class="i"><use href="#i-arrow"/></svg><span class="soon-tag">Soon</span></button></div>
+            </article>
+            <article class="pc">
+              <div class="who"><span class="avatar" style="background:linear-gradient(135deg,#B7A6F4,#6B48DE)">AK</span><div><b>Arjun Venkataraman Kulkarni</b><small>C-0424 · 41 M · OC-00000098</small></div></div>
+              <div class="tags"><span class="badge b-repeat">Repeat case</span><span class="badge b-any">Any doctor</span></div>
+              <p class="why" style="margin:0">Crown fitting, upper right</p>
+              <div class="foot"><span class="w"><b>4 min</b> waiting</span><button class="btn ghost dep" data-needs="the consultation workspace">Start <svg class="i"><use href="#i-arrow"/></svg><span class="soon-tag">Soon</span></button></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Follow-through: notes to sign, follow-ups due, plans in progress. -->
+        <section class="a-follow card rise d4" id="follow" aria-labelledby="follow-title">
+          <div class="head">
+            <div><h2 id="follow-title">Your follow-through</h2><p>What is still owed after today's consultations</p></div>
+            <div class="tabs" role="tablist"><button class="tab on" role="tab" aria-selected="true">Notes<em>2</em></button><button class="tab" role="tab" aria-selected="false">Follow-ups<em>3</em></button><button class="tab" role="tab" aria-selected="false">Plans<em>3</em></button></div>
+          </div>
+          <ul class="rows">
+            <li><a class="row dep" href="#" data-needs="the consultation workspace"><span class="ic" style="background:var(--rose-soft);color:var(--rose-ink)"><svg class="i"><use href="#i-note"/></svg></span><span><b>Sanjay Rao</b><small>Extraction #48 · 9:15 am</small></span><span class="end" style="color:var(--rose-ink)">Draft<span class="go"> · finish</span> <span class="soon-tag">· Soon</span></span></a></li>
+            <li><a class="row dep" href="#" data-needs="the consultation workspace"><span class="ic" style="background:var(--rose-soft);color:var(--rose-ink)"><svg class="i"><use href="#i-note"/></svg></span><span><b>Fatima Sheikh</b><small>Scaling · 10:02 am</small></span><span class="end" style="color:var(--rose-ink)">Draft<span class="go"> · finish</span> <span class="soon-tag">· Soon</span></span></a></li>
+            <li><div class="row"><span class="ic" style="background:var(--teal-soft);color:var(--teal-ink)"><svg class="i"><use href="#i-check"/></svg></span><span><b>5 notes signed today</b><small>Last at 10:20 am</small></span></div></li>
+          </ul>
+        </section>
+
+        <!-- The approved appointments panel (Doctor workspace only). -->
+        <div class="a-panel rise d2">
+      <!-- APPROVED REFERENCE: appointments panel, unchanged. -->
+      <aside class="schedule rise d2" aria-labelledby="sched-title">
+        <div class="s-head"><h2 id="sched-title">Your appointments</h2><button class="ghost">Open calendar</button></div>
+        <div class="month"><button aria-label="Previous week"><svg><use href="#i-left"/></svg></button><span>October 2026</span><button aria-label="Next week"><svg><use href="#i-right"/></svg></button></div>
+        <div class="days" role="list" aria-label="This week">
+          <div class="day" role="listitem"><small>MON</small><b>19</b></div><div class="day" role="listitem"><small>TUE</small><b>20</b></div><div class="day" role="listitem"><small>WED</small><b>21</b></div><div class="day" role="listitem"><small>THU</small><b>22</b></div>
+          <div class="day on" role="listitem" aria-current="date"><small>FRI</small><b>23</b></div><div class="day" role="listitem"><small>SAT</small><b>24</b></div><div class="day" role="listitem"><small>SUN</small><b>25</b></div>
+        </div>
+        <div class="timeline">
+          <div class="t-time">9:30</div>
+          <div class="slot done"><span class="avatar" style="background:linear-gradient(135deg,#9AA0B8,#636984)">FS</span><div><b>Fatima Sheikh</b><small>Scaling · seen</small></div><span class="when">9:30–10:00</span></div>
+          <div class="t-time">10:00</div>
+          <div class="slot done"><span class="avatar" style="background:linear-gradient(135deg,#9AA0B8,#636984)">RI</span><div><b>Rahul Iyer</b><small>Filling #26 · with you</small></div><span class="when">10:15–10:45</span></div>
+          <div class="now-line">Now · 10:48</div>
+          <div class="t-time">11:00</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#6FE0D2,#13B3A3)">KM</span><div><b>Kavya Menon</b><small>Aligner review · arrived</small></div><span class="when">11:00–11:20</span></div>
+          <div class="t-time">11:30</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#B7A6F4,#7357E6)">DP</span><div><b>Deepak Pillai</b><small>Consultation · to arrive</small></div><span class="when">11:30–11:50</span></div>
+          <div class="t-time">12:00</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#FFC56B,#F59E0B)">AJ</span><div><b>Anil Joshi</b><small>Implant review · to arrive</small></div><span class="when">12:00–12:30</span></div>
+        </div>
+        <p class="s-foot">5 bookings still to arrive today</p>
+      </aside>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="review" role="note">
+  <div class="inner">
+    <p>Design review · Doctor Dashboard, Option B refined <span>· shell copied from the app unchanged · all patients, times and figures are illustrative</span></p>
+    <div class="switch" role="group" aria-label="Preview actions">
+      <button type="button" data-mode="today" aria-pressed="true">As the app is today</button>
+      <button type="button" data-mode="future" aria-pressed="false">Once dependencies ship</button>
+    </div>
+    <ul>
+      <li><b>Works today:</b> Open calendar (Appointments page); the queue and follow-through tabs (in-page, from the dashboard's own data).</li>
+      <li><b>Needs the consultation workspace</b> (<code>clinic.consultations.show</code>, page not built; the start-from-queue route exists): Start consultation, Start on each queue card, Resume, and the draft-note rows.</li>
+      <li><b>Needs Doctor Today</b> (<code>clinic.consultations.index</code>, page not built): Review notes.</li>
+      <li><b>Needs Patient 360</b> (<code>clinic.patients.show</code>, page not built): Patient record; the Plans tab rows.</li>
+      <li><b>Needs the Follow-ups board</b> (<code>clinic.follow-ups.index</code>, page not built; the sidebar shows it as Soon): the Follow-ups tab rows.</li>
+      <li><b>Needs a dashboard date</b> (no page, a small backend addition): the panel's week arrows and day pills.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Mockup only: place the sidebar (desktop column and the phone/tablet drawer), as the shell does.
+  const tpl = document.getElementById('sidebar-tpl');
+  document.getElementById('side-col').appendChild(tpl.content.cloneNode(true));
+  document.getElementById('drawer-panel').prepend(tpl.content.cloneNode(true));
+  const drawer = document.getElementById('drawer');
+  document.getElementById('open-menu').addEventListener('click', () => drawer.classList.add('open'));
+  drawer.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => drawer.classList.remove('open')));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') drawer.classList.remove('open'); });
+
+  // Review switch: "today" shows unbuilt destinations as unavailable (not clickable, not focusable);
+  // "future" previews them as working actions. The default is today.
+  const setMode = (mode) => {
+    document.body.classList.toggle('future', mode === 'future');
+    document.querySelectorAll('.review .switch button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    document.querySelectorAll('.dep').forEach((el) => {
+      if (mode === 'future') {
+        el.removeAttribute('aria-disabled'); el.removeAttribute('tabindex'); el.removeAttribute('title');
+      } else {
+        el.setAttribute('aria-disabled', 'true'); el.setAttribute('tabindex', '-1'); el.setAttribute('title', `Coming soon: needs ${el.dataset.needs}`);
+      }
+    });
+  };
+  document.querySelectorAll('.review .switch button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  document.querySelectorAll('.dep').forEach((el) => el.addEventListener('click', (e) => { if (!document.body.classList.contains('future')) e.preventDefault(); }));
+  setMode('today');
+</script>
+</body>
+</html>

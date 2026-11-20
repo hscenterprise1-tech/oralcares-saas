@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicQueueItem;
 use App\Models\Patient;
+use App\Models\PatientCase;
 use App\Models\PatientProfile;
 use App\PatientStatus;
 use App\Services\Patient\CaseNumberFormatter;
@@ -128,7 +129,17 @@ class ReceptionPatientLookup
         $flags = $this->clinicalEntries->safetyFlags($clinic->id, $allowedIds);
         $addresses = $this->addresses($clinic, $allowedIds);
 
-        return $patients->map(function (Patient $patient) use ($appointments, $queued, $working, $specialties, $lastSeen, $flags, $addresses) {
+        // Phase C: Batch-load active cases for returning patients
+        $casesByPatient = PatientCase::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinic->id)
+            ->whereIn('patient_id', $ids)
+            ->whereIn('status', PatientCase::OPEN)
+            ->with(['leadPractitioner', 'branch'])
+            ->orderByDesc('opened_at')
+            ->get()
+            ->groupBy('patient_id');
+
+        return $patients->map(function (Patient $patient) use ($appointments, $queued, $working, $specialties, $lastSeen, $flags, $addresses, $casesByPatient) {
             $appointment = $appointments->get($patient->id)?->first();
             $inQueue = $queued->get($patient->id);
             $seen = $lastSeen->get($patient->id)?->first();
@@ -146,6 +157,17 @@ class ReceptionPatientLookup
                 'last_seen' => $seen ? ['at' => Carbon::parse($seen->last_seen_at)->toDateString(), 'branch' => $seen->display_name ?: $seen->name] : null,
                 'safety_flags' => $flags[$patient->id] ?? [],
                 'address' => $addresses[$patient->id] ?? null,
+                'cases' => $casesByPatient->get($patient->id, collect())->map(fn (PatientCase $c) => [
+                    'id' => $c->id,
+                    'case_number' => $c->case_number,
+                    'specialty' => $c->specialty,
+                    'title' => $c->title,
+                    'chief_complaint' => $c->chief_complaint,
+                    'status' => $c->status,
+                    'doctor' => $c->leadPractitioner ? ['id' => $c->leadPractitioner->id, 'name' => $c->leadPractitioner->name] : null,
+                    'branch' => $c->branch ? ['id' => $c->branch->id, 'name' => $c->branch->display_name ?: $c->branch->name] : null,
+                    'opened_at' => $c->opened_at?->toDateString(),
+                ])->values()->all(),
                 'appointment' => $appointment ? [
                     'id' => $appointment->id,
                     'time' => $appointment->scheduled_at->format(QueueBoard::DATETIME),

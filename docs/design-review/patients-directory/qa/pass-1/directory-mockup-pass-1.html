@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patients Directory — design review (fictional data)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas: #F5F8FC; --surface: #FFFFFF; --line: #E3EAF2; --line-2: #D6E3EF;
+  --ink: #0B1F33; --ink-2: #33445E; --text-2: #475467; --text-3: #5F6B7E;
+  --teal: #0E9F87; --teal-ink: #0B7A68; --teal-soft: #E3F6F4; --nav-teal: #007A7B;
+  --blue-ink: #1F57B3; --blue-soft: #EAF1FF; --violet-ink: #5536C2; --violet-soft: #F0ECFE;
+  --amber-ink: #A2560B; --amber-soft: #FFF3DC; --rose: #E5484D; --rose-ink: #B4232C; --rose-soft: #FDECEC;
+  --slate-soft: #EEF1F5; --focus: #00A8A8;
+  --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -14px rgba(15,23,42,.14);
+  --shadow-up: 0 2px 6px rgba(15,23,42,.06), 0 16px 32px -18px rgba(15,23,42,.24);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--canvas); color: var(--ink); font-size: 14px; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tab { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- static replica of the approved shell (context only, not redesigned) */
+.app { display: flex; min-height: 100vh; }
+.side { width: 240px; flex: none; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(214,227,239,.8); background: linear-gradient(180deg,#F1FAFA 0%,#FFFFFF 160px); display: flex; flex-direction: column; }
+.side .brand { height: 73px; border-bottom: 1px solid rgba(214,227,239,.8); padding: 0 24px; display: flex; flex-direction: column; justify-content: center; }
+.side .brand b { font-size: 20px; font-weight: 600; letter-spacing: -.02em; } .side .brand small { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+.side nav { padding: 12px; flex: 1; }
+.side .grp { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 12px 12px 6px; }
+.side .it { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 12px; font-weight: 500; }
+.side .it svg { width: 18px; height: 18px; color: #4A5D73; }
+.side .it.on { background: linear-gradient(90deg,#DDF4F2,#E6F0FD); color: var(--nav-teal); } .side .it.on svg { color: var(--nav-teal); }
+.side .it .soon { margin-left: auto; font-size: 10.5px; background: var(--slate-soft); color: var(--text-3); border-radius: 99px; padding: 2px 8px; }
+.side .it.dim { color: var(--text-3); }
+.side .clinic { margin: 12px; padding: 12px; border-radius: 16px; background: #fff; box-shadow: var(--shadow); font-size: 13px; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.95); border-bottom: 1px solid rgba(214,227,239,.8); }
+.top .bar { max-width: 1600px; margin: 0 auto; height: 72px; padding: 0 32px; display: flex; align-items: center; gap: 16px; }
+.top .menu { display: none; }
+.top .gsearch { flex: 1; max-width: 560px; height: 44px; border-radius: 12px; border: 1px solid rgba(214,227,239,.7); background: var(--canvas); display: flex; align-items: center; gap: 10px; padding: 0 14px; color: var(--text-3); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.top .ib { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #4A5D73; border: 0; background: transparent; }
+.top .avatar { width: 44px; height: 44px; border-radius: 99px; background: linear-gradient(135deg,#D6F2EF,#E4DEFC); display: grid; place-items: center; font-weight: 600; }
+.top .who { line-height: 1.25; } .top .who b { display: block; font-size: 13.5px; } .top .who small { font-size: 12px; color: var(--text-3); }
+.brandm { display: none; font-size: 18px; font-weight: 600; }
+.page { max-width: 1600px; width: 100%; margin: 0 auto; padding: 28px 32px 120px; }
+
+/* ---------- pieces */
+.btn { min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line-2); background: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 500; font-size: 14px; white-space: nowrap; transition: background .15s, box-shadow .15s, transform .15s; }
+.btn:hover { background: var(--canvas); }
+.btn.pri { background: linear-gradient(135deg,#12A99A,#0B8C80); border-color: transparent; color: #fff; box-shadow: 0 8px 18px -10px rgba(11,140,128,.9); }
+.btn.pri:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -10px rgba(11,140,128,.95); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; transform: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 99px; font-size: 12px; font-weight: 500; background: var(--slate-soft); color: var(--text-2); white-space: nowrap; }
+.chip.amber { background: var(--amber-soft); color: var(--amber-ink); } .chip.violet { background: var(--violet-soft); color: var(--violet-ink); }
+.chip.rose { background: var(--rose-soft); color: var(--rose-ink); }
+.uhid { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--ink-2); background: #F1F5F9; border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.skel { background: linear-gradient(90deg,#EEF2F7 0%,#F7F9FC 50%,#EEF2F7 100%); background-size: 200% 100%; animation: sh 1.2s infinite linear; border-radius: 8px; }
+@keyframes sh { to { background-position: -200% 0; } }
+
+/* ---------- header */
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.head h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+.head p { margin: 6px 0 0; color: var(--text-2); font-size: 14px; max-width: 60ch; }
+
+/* ---------- finder: search + filters on one tinted surface */
+.finder { margin-top: 22px; padding: 18px; border-radius: 20px; background: linear-gradient(118deg,#E8F7F6 0%,#EDF3FF 58%,#F2EEFE 100%); border: 1px solid rgba(255,255,255,.9); }
+.q { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px 0 18px; border-radius: 14px; background: #fff; border: 1px solid rgba(214,227,239,.85); box-shadow: 0 10px 26px -20px rgba(30,60,120,.4); transition: border-color .15s, box-shadow .15s; }
+.q:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(0,168,168,.16); }
+.q svg { color: var(--text-3); flex: none; }
+.q input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font-size: 16px; }
+.q input::placeholder { color: var(--text-3); }
+.q .clear { width: 36px; height: 36px; border-radius: 10px; border: 0; background: transparent; color: var(--text-3); display: grid; place-items: center; }
+.q .clear:hover { background: var(--canvas); }
+.q .spin { width: 18px; height: 18px; border-radius: 99px; border: 2px solid #CFE3EA; border-top-color: var(--teal); animation: rot .8s linear infinite; flex: none; }
+@keyframes rot { to { transform: rotate(360deg); } }
+.hint { margin: 10px 2px 0; font-size: 12.5px; color: var(--text-2); }
+.fbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 99px; background: rgba(255,255,255,.8); border: 1px solid rgba(214,227,239,.95); }
+.seg button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 99px; background: transparent; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.seg button[aria-pressed="true"] { background: var(--teal-soft); color: var(--teal-ink); }
+.sel { position: relative; }
+.sel select { appearance: none; min-height: 40px; padding: 0 34px 0 14px; border-radius: 99px; border: 1px solid rgba(214,227,239,.95); background: #fff; font-size: 13px; color: var(--ink-2); }
+.sel select.on { border-color: #93D6CD; background: #F2FBF9; color: var(--teal-ink); font-weight: 500; }
+.sel::after { content: ''; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px; border-right: 1.5px solid var(--text-3); border-bottom: 1.5px solid var(--text-3); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+.sel label { position: absolute; left: -9999px; }
+.applied { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.applied .chip { background: #fff; border: 1px solid var(--line-2); height: 32px; padding: 0 6px 0 12px; color: var(--ink-2); }
+.applied .chip button { width: 24px; height: 24px; border: 0; border-radius: 99px; background: transparent; color: var(--text-3); display: grid; place-items: center; }
+.applied .chip button:hover { background: var(--slate-soft); }
+.linkbtn { border: 0; background: transparent; color: var(--blue-ink); font-weight: 500; font-size: 13px; min-height: 32px; padding: 0 6px; }
+
+/* ---------- list */
+.listwrap { margin-top: 18px; }
+.listmeta { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 4px 10px; font-size: 12.5px; color: var(--text-3); }
+.colhead, .row { display: grid; grid-template-columns: minmax(240px,2.3fr) minmax(150px,1fr) minmax(110px,.8fr) minmax(170px,1.2fr) 112px; gap: 16px; align-items: center; }
+.colhead { padding: 0 18px 8px; font-size: 11.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.colhead.single, .single .row { grid-template-columns: minmax(240px,2.3fr) minmax(150px,1fr) minmax(110px,.8fr) minmax(130px,.9fr) 112px; }
+.rows { display: grid; gap: 6px; }
+.row { position: relative; min-height: 66px; padding: 10px 18px; border-radius: 14px; background: var(--surface); border: 1px solid rgba(227,234,242,.95); box-shadow: 0 1px 2px rgba(15,23,42,.03); transition: border-color .15s, box-shadow .15s, transform .15s; }
+a.row:hover, a.row:focus-visible { border-color: #BFE3DE; box-shadow: var(--shadow-up); transform: translateY(-1px); }
+a.row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.row.muted { background: #FBFCFE; }
+.row.muted .nm { color: var(--ink-2); }
+.who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.av { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font-weight: 600; font-size: 14px; flex: none; }
+.av.c0 { background: linear-gradient(135deg,#DDF4F2,#CDEEE9); color: var(--teal-ink); }
+.av.c1 { background: linear-gradient(135deg,#EAF1FF,#DCE8FD); color: var(--blue-ink); }
+.av.c2 { background: linear-gradient(135deg,#F2EEFE,#E6DFFC); color: var(--violet-ink); }
+.row.muted .av { background: var(--slate-soft); color: var(--text-3); }
+.nm { font-size: 15px; font-weight: 600; letter-spacing: -.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: 12.5px; color: var(--text-3); min-width: 0; white-space: nowrap; }
+.cell { font-size: 13px; color: var(--ink-2); min-width: 0; }
+.cell small { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mlabel { display: none; }
+.phone { display: inline-flex; align-items: center; gap: 6px; letter-spacing: .02em; }
+.phone svg { color: var(--text-3); flex: none; }
+.phone .dots { color: #8A97A8; letter-spacing: .12em; }
+.end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.go { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; color: var(--text-3); transition: background .15s, color .15s; }
+a.row:hover .go, a.row:focus-visible .go { background: var(--teal-soft); color: var(--teal-ink); }
+.none { color: var(--text-3); }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.pager span { font-size: 12.5px; color: var(--text-3); }
+.state { padding: 52px 24px; text-align: center; border-radius: 18px; background: #fff; border: 1px solid rgba(227,234,242,.95); }
+.state .ic { width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 16px; display: grid; place-items: center; }
+.state h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.state p { margin: 8px auto 18px; max-width: 46ch; color: var(--text-2); font-size: 13.5px; line-height: 1.55; }
+.state .acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.note { margin-top: 12px; padding: 10px 14px; border-radius: 12px; background: #fff; border: 1px dashed var(--line-2); font-size: 12.5px; color: var(--text-2); }
+
+/* ---------- design-review panel (not part of the design) */
+.review { position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 320px; background: #0B1F33; color: #E8EEF6; border-radius: 16px; box-shadow: 0 20px 50px -20px rgba(0,0,0,.5); font-size: 12.5px; }
+.review header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
+.review header button { background: transparent; border: 0; color: #9FB3C8; min-height: 36px; padding: 0 8px; }
+.review .grid { padding: 0 14px 14px; display: grid; gap: 10px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 10px; }
+.review .grid[hidden] { display: none; }
+.review .lbl { display: block; color: #9FB3C8; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.review .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.review .opts button { min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.14); background: transparent; color: #E8EEF6; font-size: 12px; }
+.review .opts button[aria-pressed="true"] { background: #12A99A; border-color: #12A99A; }
+.review p { margin: 0; color: #9FB3C8; font-size: 11.5px; line-height: 1.45; }
+
+/* ---------- responsive */
+@media (max-width: 1279px) {
+  .top .who { display: none; }
+  .colhead, .row, .colhead.single, .single .row { grid-template-columns: minmax(200px,2fr) minmax(140px,1fr) minmax(96px,.8fr) minmax(120px,1.1fr) 40px; gap: 14px; }
+  .end .chip { display: none; }
+}
+@media (max-width: 1023px) {
+  .side { display: none; }
+  .top .menu { display: grid; border: 1px solid var(--line-2); }
+  .top .bar { height: 64px; padding: 0 24px; }
+  .page { padding: 22px 24px 140px; }
+}
+.row .sub .stchip { display: none; }
+@media (max-width: 1279px) { .row .sub .stchip { display: inline-flex; } }
+@media (max-width: 767px) {
+  .top .gsearch { display: none; } .brandm { display: block; }
+  .page { padding: 18px 16px 150px; }
+  .head h1 { font-size: 22px; }
+  .head .btn.pri { width: 100%; }
+  .finder { padding: 12px; border-radius: 18px; }
+  .q { height: 52px; }
+  .colhead { display: none; }
+  .row, .single .row { grid-template-columns: minmax(0,1fr) 32px; grid-template-areas: "who end" "meta meta"; row-gap: 10px; padding: 12px 14px; }
+  .row .who { grid-area: who; }
+  .row .end { grid-area: end; }
+  .row .c-phone, .row .c-seen, .row .c-reg { display: none; }
+  .row .mmeta { grid-area: meta; display: grid !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .mlabel { display: block; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  .pager .btn { flex: 1; } .pager span { order: -1; width: 100%; text-align: center; }
+  .review { left: 12px; right: 12px; width: auto; bottom: 12px; }
+  .fbar .sel { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .fbar .sel select { width: 100%; text-overflow: ellipsis; }
+  .fbar .seg { flex: 1 1 100%; } .fbar .seg button { flex: 1; }
+  .listmeta span + span { display: none; }
+}
+.mmeta { display: none !important; }
+</style>
+</head>
+<body>
+<!-- DESIGN REVIEW ONLY. Fictional data. Not routed, not imported by the app, no network calls except the web font. -->
+<div class="app">
+  <aside class="side" aria-label="Sidebar (approved shell, static context)">
+    <div class="brand"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav aria-label="Main">
+      <div class="grp">Main</div>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard</span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Appointments</span>
+      <span class="it on" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg>Patients</span>
+      <span class="it dim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 2h12M6 22h12M7 2c0 6 10 6 10 10S7 16 7 22M17 2c0 6-10 6-10 10s10 4 10 10"/></svg>Queue<span class="soon">Soon</span></span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Billing</span>
+      <div class="grp">Additional</div>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>Notifications</span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Support</span>
+    </nav>
+    <div class="clinic"><b style="font-weight:600">Lotus Smile &amp; Spine Care</b><div style="color:var(--text-3);font-size:12px;margin-top:2px" id="branchCtx">Bandra</div></div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="bar">
+        <button class="ib menu" aria-label="Open navigation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <b class="brandm">OralCares</b>
+        <div class="gsearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search patients and more…</div>
+        <div class="right">
+          <button class="ib" aria-label="Notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></button>
+          <span class="avatar" id="avatar">RK</span>
+          <span class="who"><b id="whoName">Riya Kapoor</b><small id="whoRole">Reception</small></span>
+        </div>
+      </div>
+    </header>
+    <main class="page" id="page"></main>
+  </div>
+</div>
+
+<aside class="review" aria-label="Design review controls">
+  <header><b>Design review · Patients Directory</b><button id="rvToggle" aria-expanded="true" aria-controls="rvGrid">Hide</button></header>
+  <div class="grid" id="rvGrid">
+    <div><span class="lbl">Signed in as</span><div class="opts" data-k="role"></div></div>
+    <div><span class="lbl">Branch context</span><div class="opts" data-k="branches"></div></div>
+    <div><span class="lbl">State</span><div class="opts" data-k="state"></div></div>
+    <div><span class="lbl">Patient record page</span><div class="opts" data-k="record"></div></div>
+    <p>Fictional patients. Mobile numbers are masked for every role: no permission in the current contract authorises an unmasked view (blueprint D1). Nothing here talks to the app.</p>
+  </div>
+</aside>
+
+<script>
+/* ---------------- fictional data (never real patients) */
+const BRANCHES = ['Bandra', 'Powai', 'Thane'];
+const PATIENTS = [
+  { id: 1, name: 'Aarav Mehta', uhid: 'LSS-2026-00418', age: 34, g: 'M', phone: '+91 98200 14521', reg: '21 Oct 2026', seen: '23 Oct 2026', branch: 'Bandra', status: 'active' },
+  { id: 2, name: 'Meera Iyer', uhid: 'LSS-2026-00417', age: 41, g: 'F', phone: '+91 99870 22310', reg: '20 Oct 2026', seen: '22 Oct 2026', branch: 'Powai', status: 'active' },
+  { id: 3, name: 'Kabir Shah', uhid: 'LSS-2026-00416', age: 9, g: 'M', phone: '+91 90040 55102', reg: '18 Oct 2026', seen: '18 Oct 2026', branch: 'Bandra', status: 'active' },
+  { id: 4, name: 'Ananya Rao', uhid: 'LSS-2026-00415', age: 27, g: 'F', phone: '+91 98670 33019', reg: '16 Oct 2026', seen: '20 Oct 2026', branch: 'Thane', status: 'active' },
+  { id: 5, name: 'Rohan Venkatesh Desai', uhid: 'LSS-2026-00414', age: 58, g: 'M', phone: '+91 97690 81234', reg: '14 Oct 2026', seen: '19 Oct 2026', branch: 'Powai', status: 'active' },
+  { id: 6, name: 'Sana Qureshi', uhid: 'LSS-2026-00409', age: 33, g: 'F', phone: '+91 98330 47120', reg: '09 Oct 2026', seen: '09 Oct 2026', branch: 'Bandra', status: 'inactive' },
+  { id: 7, name: 'Vikram Nair', uhid: null, age: 46, g: 'M', phone: null, reg: '02 Oct 2026', seen: null, branch: null, status: 'active' },
+  { id: 8, name: 'Ishita Banerjee', uhid: 'LSS-2026-00398', age: 22, g: 'F', phone: '+91 98190 30214', reg: '28 Sep 2026', seen: '15 Oct 2026', branch: 'Thane', status: 'active' },
+];
+const ARCHIVED = [
+  { id: 21, name: 'Farhan Ali', uhid: 'LSS-2025-00212', age: 52, g: 'M', phone: '+91 98111 40021', reg: '11 Mar 2025', seen: '02 Jun 2026', branch: 'Powai', status: 'archived' },
+  { id: 22, name: 'Neha Kulkarni', uhid: 'LSS-2025-00180', age: 30, g: 'F', phone: '+91 99300 71456', reg: '20 Feb 2025', seen: '14 Jan 2026', branch: 'Bandra', status: 'archived' },
+];
+
+/* What each role may do — from ClinicPermission::defaultRolePermissions + PatientPolicy (blueprint §2). */
+const ROLES = {
+  owner: { label: 'Owner', name: 'Dr. Arjun Malhotra', ini: 'AM', sub: 'Clinic owner', create: true, practitioner: false, desk: false, limited: false },
+  reception: { label: 'Reception', name: 'Riya Kapoor', ini: 'RK', sub: 'Reception', create: true, practitioner: false, desk: true, limited: true },
+  doctor: { label: 'Doctor', name: 'Dr. Kavya Rao', ini: 'KR', sub: 'Practitioner', create: false, practitioner: true, desk: false, limited: true },
+  billing: { label: 'Billing', name: 'Neel Joshi', ini: 'NJ', sub: 'Billing', create: false, practitioner: false, desk: false, limited: true },
+  staff: { label: 'Staff', name: 'Asha Pillai', ini: 'AP', sub: 'Staff', create: false, practitioner: false, desk: false, limited: true },
+};
+
+const S = { role: 'reception', branches: 'multi', state: 'populated', record: 'built', q: '', status: 'working', branch: '', registered: '', tab: 'mine' };
+
+const OPTS = {
+  role: Object.entries(ROLES).map(([k, v]) => [k, v.label]),
+  branches: [['multi', 'Multi-branch'], ['single', 'Single branch'], ['limited', 'Multi, limited to 1']],
+  state: [['populated', 'Populated'], ['loading', 'Loading'], ['searching', 'Searching'], ['noresults', 'No results'], ['empty', 'First-time empty'], ['error', 'Error'], ['archived', 'Archived filter']],
+  record: [['built', 'Built (rows open)'], ['missing', 'Not built yet']],
+};
+
+/* ---------------- helpers */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const initials = (n) => n.split(' ').filter(Boolean).map((w) => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('');
+const multi = () => S.branches === 'multi'; // accessible_branch_count > 1
+const I = {
+  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  phone: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2"/></svg>',
+  chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  user: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/></svg>',
+  alert: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+};
+
+/* Masking: country code + last four digits. Display only — the real fix is server-side (blueprint D1). */
+function maskedPhone(p) {
+  if (!p) return '<span class="none">No mobile</span>';
+  const digits = p.replace(/\D/g, '');
+  const cc = p.trim().startsWith('+') ? '+' + digits.slice(0, digits.length - 10) + ' ' : '';
+  return `<span class="phone">${I.phone}<span class="tab">${esc(cc)}<span class="dots" aria-hidden="true">••••••</span>${esc(digits.slice(-4))}</span><span class="sr">, mobile ending ${esc(digits.slice(-4).split('').join(' '))}</span></span>`;
+}
+const statusChip = (s) => (s === 'inactive' ? '<span class="chip">Inactive</span>' : s === 'deceased' ? '<span class="chip">Deceased</span>' : s === 'archived' ? '<span class="chip violet">Archived</span>' : '');
+
+function visible() {
+  let list = S.state === 'archived' ? ARCHIVED : PATIENTS;
+  if (S.branches !== 'multi') list = list.map((p) => ({ ...p, branch: p.branch ? 'Bandra' : null }));
+  if (S.branches === 'limited' || (S.role !== 'owner' && S.branches === 'single')) list = list.filter((p) => !p.branch || p.branch === 'Bandra');
+  if (S.branch) list = list.filter((p) => p.branch === S.branch);
+  const q = S.q.trim().toLowerCase();
+  if (!q) return list;
+  if (/^[\d\s+()-]+$/.test(q)) { const d = q.replace(/\D/g, ''); return list.filter((p) => (p.phone || '').replace(/\D/g, '').replace(/^91/, '').startsWith(d) || (p.uhid || '').startsWith(q)); }
+  const w = q.split(/\s+/); const parts = (p) => p.name.toLowerCase().split(' ');
+  return list.filter((p) => (p.uhid || '').toLowerCase().startsWith(q) || (parts(p).some((n) => n.startsWith(w[0])) && w.slice(1).every((x) => parts(p).some((n) => n.startsWith(x)))));
+}
+
+/* ---------------- render */
+function row(p, i) {
+  const open = S.record === 'built';
+  const tag = open ? 'a' : 'div';
+  const branchLine = multi() && p.branch ? `<small>${esc(p.branch)}</small>` : '';
+  const seen = p.seen ? `<span class="tab">${p.seen}</span>${branchLine}` : '<span class="none">No activity yet</span>';
+  const ag = [p.age != null ? p.age : null, p.g].filter((x) => x != null).join(' · ');
+  return `<${tag} class="row ${p.status === 'archived' ? 'muted' : ''}" ${open ? `href="#patient-${p.id}" aria-label="Open ${esc(p.name)}${p.uhid ? ', ' + p.uhid : ''}" onclick="return false"` : ''}>
+    <div class="who">
+      <span class="av c${i % 3}" aria-hidden="true">${esc(initials(p.name))}</span>
+      <div style="min-width:0">
+        <div class="nm" title="${esc(p.name)}">${esc(p.name)}</div>
+        <div class="sub">${p.uhid ? `<span class="uhid">${esc(p.uhid)}</span>` : '<span class="uhid" style="color:var(--text-3)">No ID</span>'}<span>${esc(ag)}</span><span class="stchip">${statusChip(p.status)}</span></div>
+      </div>
+    </div>
+    <div class="cell c-phone">${maskedPhone(p.phone)}</div>
+    <div class="cell c-reg tab">${p.reg}</div>
+    <div class="cell c-seen">${seen}</div>
+    <div class="mmeta"><div class="cell"><span class="mlabel">Mobile</span>${maskedPhone(p.phone)}</div><div class="cell"><span class="mlabel">Last activity</span>${seen}</div><div class="cell tab"><span class="mlabel">Registered</span>${p.reg}</div></div>
+    <div class="end">${statusChip(p.status)}${open ? `<span class="go">${I.chev}</span>` : ''}</div>
+  </${tag}>`;
+}
+
+function skeleton() {
+  return Array.from({ length: 6 }, () => `<div class="row" aria-hidden="true"><div class="who"><span class="skel" style="width:42px;height:42px;border-radius:13px"></span><div style="flex:1"><div class="skel" style="height:13px;width:55%"></div><div class="skel" style="height:11px;width:38%;margin-top:8px"></div></div></div><div class="c-phone"><div class="skel" style="height:11px;width:70%"></div></div><div class="c-reg"><div class="skel" style="height:11px;width:70%"></div></div><div class="c-seen"><div class="skel" style="height:11px;width:60%"></div></div><div></div></div>`).join('');
+}
+
+function render() {
+  const r = ROLES[S.role];
+  if (!r.practitioner) S.tab = 'all';
+  $('#avatar').textContent = r.ini; $('#whoName').textContent = r.name; $('#whoRole').textContent = r.sub;
+  $('#branchCtx').textContent = S.branches === 'single' ? 'Bandra · single branch' : S.branches === 'limited' ? 'Bandra · your only branch' : 'Bandra · 3 branches';
+  if (!multi()) S.branch = '';
+
+  const mine = r.practitioner && S.tab === 'mine';
+  const newBtn = r.create ? `<button class="btn pri" type="button" title="${r.desk ? 'Opens the existing New Case popup' : 'Opens the existing registration page'}">${I.plus}New Patient</button>` : '';
+
+  const loadingSearch = S.state === 'searching';
+  const filters = [];
+  if (r.practitioner) filters.push(`<div class="seg" role="group" aria-label="Whose patients"><button type="button" aria-pressed="${S.tab === 'mine'}" data-tab="mine">My patients</button><button type="button" aria-pressed="${S.tab === 'all'}" data-tab="all">All patients</button></div>`);
+  const statusVal = S.state === 'archived' ? 'archived' : S.status;
+  filters.push(`<div class="sel"><label for="fStatus">Status</label><select id="fStatus" class="${statusVal !== 'working' ? 'on' : ''}"><option value="working" ${statusVal === 'working' ? 'selected' : ''}>Status: Working</option><option value="active" ${statusVal === 'active' ? 'selected' : ''}>Status: Active</option><option value="inactive" ${statusVal === 'inactive' ? 'selected' : ''}>Status: Inactive</option><option value="deceased">Status: Deceased</option><option value="archived" ${statusVal === 'archived' ? 'selected' : ''}>Status: Archived</option></select></div>`);
+  filters.push(`<div class="sel"><label for="fReg">Registered</label><select id="fReg" class="${S.registered ? 'on' : ''}"><option value="">Registered: Any time</option><option value="7" ${S.registered === '7' ? 'selected' : ''}>Registered: Last 7 days</option><option value="30" ${S.registered === '30' ? 'selected' : ''}>Registered: Last 30 days</option><option value="custom">Registered: Custom range…</option></select></div>`);
+  if (multi()) filters.push(`<div class="sel"><label for="fBranch">Branch</label><select id="fBranch" class="${S.branch ? 'on' : ''}"><option value="">Branch: All my branches</option>${BRANCHES.map((b) => `<option value="${b}" ${S.branch === b ? 'selected' : ''}>Branch: ${b}</option>`).join('')}</select></div>`);
+
+  const applied = [];
+  if (statusVal !== 'working') applied.push(['status', `Status: ${statusVal[0].toUpperCase() + statusVal.slice(1)}`]);
+  if (S.registered) applied.push(['registered', `Registered: last ${S.registered} days`]);
+  if (S.branch) applied.push(['branch', `Branch: ${S.branch}`]);
+
+  const list = visible();
+  const single = !multi() ? 'single' : '';
+  let body;
+  if (S.state === 'loading') {
+    body = `<div class="colhead ${single}" aria-hidden="true"><div>Patient</div><div>Mobile</div><div class="c-reg">Registered</div><div>Last activity</div><div></div></div><div class="rows ${single}" aria-busy="true">${skeleton()}</div><p class="sr" role="status">Loading patients…</p>`;
+  } else if (S.state === 'empty') {
+    body = `<div class="state"><div class="ic" style="background:var(--teal-soft);color:var(--teal-ink)">${I.user}</div><h2>No patients yet</h2><p>Patients appear here as soon as they are registered at the front desk or through New Case.</p><div class="acts">${r.create ? `<button class="btn pri" type="button">${I.plus}New Patient</button>` : '<span class="chip">Reception registers new patients</span>'}</div></div>`;
+  } else if (S.state === 'error') {
+    body = `<div class="state" role="alert"><div class="ic" style="background:var(--rose-soft);color:var(--rose-ink)">${I.alert}</div><h2>Patients didn’t load</h2><p>Nothing was changed. Check the connection and try again.</p><div class="acts"><button class="btn" type="button">Try again</button></div></div>`;
+  } else if (S.state === 'noresults' || (S.state !== 'searching' && list.length === 0)) {
+    const q = S.q || 'Rahul Verma';
+    body = `<div class="state"><div class="ic" style="background:var(--blue-soft);color:var(--blue-ink)">${I.search}</div><h2>No patient matches “${esc(q)}”</h2><p>Names match from the start of a first or last name. For a number, type the start of the mobile or of the patient ID${applied.length ? ', or clear the filters' : ''}.</p><div class="acts"><button class="btn" type="button" data-act="clear">Clear search${applied.length ? ' and filters' : ''}</button>${r.create ? `<button class="btn pri" type="button">${I.plus}New Patient</button>` : ''}</div></div>`;
+  } else {
+    body = `<div class="colhead ${single}" aria-hidden="true"><div>Patient</div><div>Mobile</div><div class="c-reg">Registered</div><div>Last activity${multi() ? ' · branch' : ''}</div><div></div></div>
+      <div class="rows ${single}" ${loadingSearch ? 'style="opacity:.55;transition:opacity .2s"' : ''}>${list.map(row).join('')}</div>
+      <div class="pager"><button class="btn" type="button" disabled>← Newer</button><span>25 at a time · newest registrations first</span><button class="btn" type="button" ${S.q || applied.length || S.state === 'archived' ? 'disabled' : ''}>Older →</button></div>
+      ${S.record === 'missing' ? '<div class="note">The patient record page isn’t built yet, so rows don’t open (<code>clinic.patients.show</code> is not available). They become links the day it ships.</div>' : ''}`;
+  }
+
+  $('#page').innerHTML = `
+    <div class="head">
+      <div><h1>${mine ? 'My patients' : 'Patients'}</h1><p>${mine ? 'Patients assigned to you. Switch to All patients to search the whole clinic.' : 'Find anyone registered at this clinic by name, patient ID or mobile number.'}</p></div>
+      ${newBtn}
+    </div>
+    <section class="finder" aria-label="Search and filter patients">
+      <div class="q">${loadingSearch ? '<span class="spin" role="status" aria-label="Searching"></span>' : I.search}<label for="q" class="sr">Search patients</label><input id="q" type="search" autocomplete="off" placeholder="Name, patient ID or mobile number" value="${esc(S.q)}" />${S.q ? `<button class="clear" type="button" data-act="q" aria-label="Clear search">${I.x}</button>` : ''}</div>
+      <p class="hint">Numbers match the start of a mobile or patient ID · words match the start of a name.</p>
+      <div class="fbar">${filters.join('')}</div>
+      ${applied.length ? `<div class="applied" aria-label="Applied filters">${applied.map(([k, l]) => `<span class="chip">${esc(l)}<button type="button" data-rm="${k}" aria-label="Remove ${esc(l)}">${I.x}</button></span>`).join('')}<button class="linkbtn" type="button" data-act="clearf">Clear all</button></div>` : ''}
+    </section>
+    <section class="listwrap" aria-label="Patients">${S.state === 'populated' || S.state === 'searching' || S.state === 'archived' ? `<div class="listmeta"><span aria-live="polite">${S.state === 'archived' ? 'Archived records · read-only' : S.q ? 'Results for “' + esc(S.q) + '”' : 'Newest registrations first'}</span><span>${multi() ? 'Only patients seen at your branches' : ''}</span></div>` : ''}${body}</section>`;
+
+  wire();
+  renderReview();
+}
+
+function wire() {
+  const q = $('#q');
+  q.oninput = (e) => { const pos = e.target.selectionStart; S.q = e.target.value; if (S.state !== 'archived') S.state = 'populated'; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+  const st = $('#fStatus'); if (st) st.onchange = (e) => { S.status = e.target.value; S.state = e.target.value === 'archived' ? 'archived' : 'populated'; if (S.state !== 'archived') S.status = e.target.value; render(); };
+  const rg = $('#fReg'); if (rg) rg.onchange = (e) => { S.registered = e.target.value === 'custom' ? '30' : e.target.value; render(); };
+  const br = $('#fBranch'); if (br) br.onchange = (e) => { S.branch = e.target.value; render(); };
+  document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); }));
+  document.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { const k = b.dataset.rm; if (k === 'status') { S.status = 'working'; S.state = 'populated'; } if (k === 'registered') S.registered = ''; if (k === 'branch') S.branch = ''; render(); }));
+  document.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => { const a = b.dataset.act; if (a === 'q' || a === 'clear') S.q = ''; if (a === 'clear' || a === 'clearf') { S.status = 'working'; S.registered = ''; S.branch = ''; S.state = 'populated'; } render(); if (a === 'q') $('#q').focus(); }));
+}
+
+function renderReview() {
+  document.querySelectorAll('.review .opts').forEach((box) => {
+    const k = box.dataset.k;
+    box.innerHTML = OPTS[k].map(([v, l]) => `<button type="button" aria-pressed="${S[k] === v}" data-v="${v}">${l}</button>`).join('');
+    box.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+      S[k] = b.dataset.v;
+      if (k === 'state') { S.status = S.state === 'archived' ? 'archived' : 'working'; if (S.state === 'noresults') S.q = 'Rahul Verma'; else if (S.state === 'searching') S.q = 'Mee'; else S.q = ''; }
+      if (k === 'role') S.tab = ROLES[S.role].practitioner ? 'mine' : 'all';
+      render();
+    }));
+  });
+}
+$('#rvToggle').onclick = (e) => { const g = $('#rvGrid'); g.hidden = !g.hidden; e.target.textContent = g.hidden ? 'Show' : 'Hide'; e.target.setAttribute('aria-expanded', String(!g.hidden)); };
+
+/* Deep links for screenshots: #role=owner&branches=single&state=loading&record=missing&review=hidden */
+(function () {
+  const h = new URLSearchParams(location.hash.slice(1));
+  ['role', 'branches', 'state', 'record', 'q'].forEach((k) => { if (h.get(k)) S[k] = h.get(k); });
+  if (S.state === 'archived') S.status = 'archived';
+  if (h.get('review') === 'hidden') { $('#rvGrid').hidden = true; $('#rvToggle').textContent = 'Show'; $('#rvToggle').setAttribute('aria-expanded', 'false'); }
+})();
+render();
+</script>
+</body>
+</html>

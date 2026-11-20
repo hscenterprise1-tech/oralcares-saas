@@ -13,7 +13,10 @@ export function SectionNav({ sections, active, onSelect }: { sections: Patient36
   const built = sections.filter((section) => section.built);
 
   return (
-    <nav aria-label="Patient record" className="overflow-x-auto rounded-xl bg-[#EEF2F7] p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <nav
+      aria-label="Patient record"
+      className="inline-flex max-w-full overflow-x-auto rounded-full bg-white p-1 shadow-[inset_0_0_0_1px_rgba(213,219,230,0.9)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       <ul className="flex min-w-max gap-1">
         {built.map((section) => {
           const current = section.key === active;
@@ -25,9 +28,11 @@ export function SectionNav({ sections, active, onSelect }: { sections: Patient36
                 aria-current={current ? 'page' : undefined}
                 onClick={() => onSelect(section.key)}
                 className={cn(
-                  'inline-flex h-9 items-center whitespace-nowrap rounded-lg px-3.5 text-[13.5px] font-semibold motion-safe:transition-colors [@media(pointer:coarse)]:h-11',
+                  'inline-flex h-8 items-center whitespace-nowrap rounded-full px-4 text-[13px] font-semibold transition-colors [@media(pointer:coarse)]:h-10',
                   FOCUS_RING,
-                  current ? 'bg-white text-[#173B60] shadow-[0_1px_3px_rgba(15,23,42,0.12)]' : 'text-[#64748B] hover:text-[#173B60]',
+                  current
+                    ? 'bg-[#E7F0FD] text-[#1769AA] shadow-xs'
+                    : 'text-[#5F6B7E] hover:text-[#173B60]',
                 )}
               >
                 {section.label}

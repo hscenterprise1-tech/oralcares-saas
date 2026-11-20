@@ -24,16 +24,25 @@ class ClinicFrontend
         // Patient 360: the page and the sections in `PATIENT_360_SECTIONS`.
         'clinic.patients.show',
         'clinic.patients.edit',
+        // The Doctor Dashboard (Today): the practitioner's queue beside their appointments panel.
+        'clinic.consultations.index',
         // The consultation workspace (Patient 360 → consultations, prescribing with the allergy review).
         'clinic.consultations.show',
         // Investigations: the worklist and one order (result entry, review, cancellation).
         'clinic.orders.index',
         'clinic.orders.show',
+        // Follow-ups across patients (overdue, today, next 30 days, done) and the clinic's reports.
+        'clinic.follow-ups.index',
+        'clinic.reports.index',
         'admin.settings.patient-form',
+        'admin.settings.automation',
+        'admin.settings.physio',
         'clinic.notifications.index',
         'clinic.support.index',
         // Billing: one destination, its sections as in-page tabs (`BillingTabs`).
         'clinic.billing.index',
+        // One signed consultation's checkout: bill it and take (or defer) the payment in one step.
+        'clinic.billing.checkout',
         'clinic.billing.reversals',
         'clinic.billing.summary',
         'clinic.expenses.index',
@@ -49,7 +58,7 @@ class ClinicFrontend
      *
      * @var list<string>
      */
-    public const PATIENT_360_SECTIONS = ['overview', 'visits', 'clinical', 'dental', 'physio', 'treatment', 'appointments', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'communication', 'follow-ups', 'timeline', 'requests', 'audit'];
+    public const PATIENT_360_SECTIONS = ['overview', 'visits', 'clinical', 'dental', 'physio', 'cases', 'treatment', 'appointments', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'communication', 'follow-ups', 'timeline', 'requests', 'audit'];
 
     public static function available(string $routeName): bool
     {

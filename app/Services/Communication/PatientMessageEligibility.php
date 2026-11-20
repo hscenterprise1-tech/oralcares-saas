@@ -12,8 +12,8 @@ use App\PatientStatus;
  * just before WhatsApp hands it to the provider (`SendClinicWhatsAppMessage`)
  * and when a failed WhatsApp message is retried.
  *
- * A duplicate merged into another record and a patient recorded as deceased
- * are never messaged. A record that cannot be found is not messaged either.
+ * A duplicate merged into another record and a deleted record are never
+ * messaged. A record that cannot be found is not messaged either.
  * Everything else (today `active` and `inactive`) is.
  *
  * Consent, channel and provider checks stay where they are; this only answers
@@ -23,9 +23,9 @@ class PatientMessageEligibility
 {
     public const MERGED_REASON = 'Not sent: the patient record was merged into another record.';
 
-    public const DECEASED_REASON = 'Not sent: the patient is recorded as deceased.';
-
     public const MISSING_REASON = 'Not sent: the patient record was not found.';
+
+    public const DELETED_REASON = 'Not sent: the patient record was deleted.';
 
     /**
      * Why this patient may not be messaged, or null when they may.
@@ -38,7 +38,7 @@ class PatientMessageEligibility
 
         return match ($patient->status) {
             PatientStatus::Merged => self::MERGED_REASON,
-            PatientStatus::Deceased => self::DECEASED_REASON,
+            PatientStatus::Deleted => self::DELETED_REASON,
             default => null,
         };
     }

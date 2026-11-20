@@ -6,6 +6,7 @@ import { useClinic } from '@/clinic/context';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Button } from '@/clinic/ui/Button';
 import { Notice } from '@/clinic/ui/Notice';
+import { PageHeader } from '@/clinic/ui/PageHeader';
 import { BookingDialog } from './components/BookingDialog';
 import { CaseButtons } from './components/CaseButtons';
 import { CancelDialog, MoveScopeDialog, RescheduleDialog } from './components/ChangeDialogs';
@@ -152,20 +153,13 @@ export default function AppointmentsIndex(props: CalendarProps) {
 
   return (
     <ClinicPortalShell title="Appointments">
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-clinic-secondary">Appointments</p>
-          <h1 className="text-[22px] font-bold leading-tight tracking-tight text-cx-nav-ink sm:text-[24px]">
-            {rangeLabel(view, range.start, range.end, date)}
-          </h1>
-        </div>
-        {/*
-          The page's actions stay together at the right, wrapping as one group. Below sm the
-          group dissolves: the walk-in pair takes its own full-width row, as on the Reception header.
-        */}
-        <div className="max-sm:contents sm:ml-auto sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2">
+      <PageHeader
+        title="Appointments"
+        description={rangeLabel(view, range.start, range.end, date)}
+        actions={
+          <>
           {can.check_in && (
-            <div className="order-last w-full sm:order-none sm:w-auto">
+            <div className="w-full sm:w-auto">
               <CaseButtons
                 canRegister={can.register_patient}
                 onNewCase={() => setIntake({ mode: 'new', patient: null, appointmentId: null })}
@@ -191,8 +185,9 @@ export default function AppointmentsIndex(props: CalendarProps) {
               </Button>
             )}
           </div>
-        </div>
-      </div>
+        </>
+        }
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className={cn(CONTROL, 'flex items-center gap-0.5 rounded-full p-1')}>

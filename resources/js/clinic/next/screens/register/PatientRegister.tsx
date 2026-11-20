@@ -439,7 +439,7 @@ function PatientLine({
           <span className="min-w-0">
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <span className="truncate text-[14px] font-semibold text-[#173B60]">{row.name}</span>
-              {row.lifecycle && <Pill tone="slate">{row.lifecycle === 'deceased' ? 'Deceased' : 'Merged'}</Pill>}
+              {row.lifecycle && <Pill tone="slate">Merged</Pill>}
               {row.alerts > 0 && (
                 <Pill tone="rose" icon={ShieldAlert}>
                   {row.alerts} {row.alerts === 1 ? 'alert' : 'alerts'}
@@ -500,7 +500,7 @@ function PatientSummary({ row, doctorWord, showSpecialty, canCheckIn, onCheckIn 
           <p className="text-[12.5px] text-[#64748B]">{[row.uhid, row.facts].filter(Boolean).join(' · ') || 'No details recorded'}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {showSpecialty && row.specialties.map((specialty) => <SpecialtyPill key={specialty.key} specialty={specialty.key} label={specialty.label} />)}
-            {row.lifecycle && <Pill tone="slate">{row.lifecycle === 'deceased' ? 'Deceased' : 'Merged'}</Pill>}
+            {row.lifecycle && <Pill tone="slate">Merged</Pill>}
             {row.alerts > 0 && (
               <Pill tone="rose" icon={ShieldAlert}>
                 {row.alerts} safety {row.alerts === 1 ? 'alert' : 'alerts'}

@@ -11,6 +11,14 @@ import type { ClinicContextProps } from '@/clinic/types';
 export interface DeskMode {
   dental: boolean;
   physio: boolean;
+  /**
+   * Physiotherapy only: no waiting queue. A patient is checked in, the session
+   * is started (by the therapist, or at the desk for one without a login) and
+   * done, so there is no calling, no position, no wait time and no "not present".
+   */
+  physioOnly: boolean;
+  /** The first lane: "Checked in" for a physio-only desk, "Waiting" for a queue. */
+  arrived: string;
   toothChart: boolean;
   packages: boolean;
   canSeeBilling: boolean;
@@ -30,6 +38,8 @@ export function deskMode(clinic: ClinicContextProps | null): DeskMode {
   return {
     dental,
     physio,
+    physioOnly,
+    arrived: physioOnly ? 'Checked in' : 'Waiting',
     toothChart: dental && extensions.includes('odontogram'),
     packages: physio && extensions.includes('session_packages'),
     canSeeBilling: (clinic?.permissions ?? []).includes('billing.view'),

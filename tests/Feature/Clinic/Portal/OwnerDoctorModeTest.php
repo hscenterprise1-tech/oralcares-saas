@@ -49,8 +49,8 @@ test('in Doctor Mode the owner works with their own patients, and nothing clinic
     $this->getJson('/clinic/billing/summary')->assertForbidden()->assertHeader(OwnerModeRequired::HEADER, 'inactive')->assertJsonPath('owner_mode.executed', false);
     $this->getJson('/clinic/billing')->assertForbidden()->assertHeader(OwnerModeRequired::HEADER, 'inactive');
     $this->get('/clinic/admin/employees')->assertForbidden();
-    // In Doctor Mode their home is the Calendar, offering Owner Mode.
-    $this->followingRedirects()->get('/clinic/dashboard')->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Appointments/Index', false)
+    // In Doctor Mode their home is the Doctor Dashboard, offering Owner Mode.
+    $this->followingRedirects()->get('/clinic/dashboard')->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Today/Index', false)
         ->where('clinic.owner_mode', fn ($mode) => $mode['available'] === true && $mode['active'] === false && $mode['owner'] === true));
 });
 

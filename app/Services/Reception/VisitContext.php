@@ -7,6 +7,8 @@ use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\Clinical\ClinicalContext;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\PatientFieldConfigService;
+use App\Services\Physio\PhysioCareSummary;
+use App\Services\Physio\PhysioCatalogue;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use Illuminate\Validation\ValidationException;
 
@@ -128,6 +130,16 @@ final class VisitContext
             }
 
             return [self::OTHER_REASON, $text, null];
+        }
+
+        // A physiotherapy problem from the owner's list, with its side (`PhysioCatalogue::visitReasons`).
+        if ($key !== null && str_starts_with($key, 'physio:')) {
+            $problem = $specialtyKey === PhysioCareSummary::SPECIALTY ? app(PhysioCatalogue::class)->visitReason($clinic, $key) : null;
+            if ($problem === null) {
+                throw ValidationException::withMessages(['visit_reason_key' => 'That reason is not offered for this visit.']);
+            }
+
+            return [$key, $problem['name'], null];
         }
 
         if ($key !== null) {

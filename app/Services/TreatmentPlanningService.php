@@ -36,7 +36,7 @@ class TreatmentPlanningService
         string $title,
         array $procedures = []
     ): TreatmentPlan {
-        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        // A deleted patient gets no new care (`PatientCareGuard`), on this path too.
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
         return DB::transaction(function () use ($patient, $clinic, $title, $procedures) {
@@ -90,7 +90,7 @@ class TreatmentPlanningService
         Patient $patient,
         ?string $notes = null
     ): XrayRecord {
-        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        // A deleted patient gets no new care (`PatientCareGuard`), on this path too.
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
         return DB::transaction(function () use ($encounter, $patient, $notes) {
@@ -118,7 +118,7 @@ class TreatmentPlanningService
         Patient $patient,
         ?string $notes = null
     ): LabOrder {
-        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        // A deleted patient gets no new care (`PatientCareGuard`), on this path too.
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
         return DB::transaction(function () use ($encounter, $patient, $notes) {

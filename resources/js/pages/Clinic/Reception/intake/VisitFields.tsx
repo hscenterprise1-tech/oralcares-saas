@@ -322,7 +322,7 @@ export function emptyVisit(config: IntakeConfig | null, doctorId = '', specialty
   // A preselected doctor who cannot take a visit for the module asked for is not kept.
   const keepDoctor = doctor && (specialty === '' || config!.specialties.length === 1 || doctor.contexts.some((context) => context.specialty === specialty));
 
-  return { specialty, doctor_id: keepDoctor ? String(doctor.id) : '', area: '', visit_type: '', reason_key: '', visit_reason: '', priority: 'normal' };
+  return { specialty, doctor_id: keepDoctor ? String(doctor.id) : '', area: '', visit_type: '', reason_key: '', visit_reason: '', priority: 'normal', case_id: null, new_case: false };
 }
 
 /**
@@ -340,6 +340,8 @@ export function visitPayload(config: IntakeConfig, value: VisitForm): Record<str
     visit_reason_key: reasonShown ? value.reason_key || null : null,
     visit_reason: reasonShown && value.reason_key === OTHER ? value.visit_reason.trim() || null : null,
     priority: config.check_in.priority ? value.priority : 'normal',
+    case_id: value.case_id ?? null,
+    new_case: value.new_case ?? false,
   };
 }
 

@@ -12,6 +12,8 @@ use App\Http\Requests\Clinic\Consultation\StoreEncounterNoteRequest;
 use App\Http\Requests\Clinic\Consultation\StoreEncounterProcedureRequest;
 use App\Models\Appointment;
 use App\Models\AttachedDocument;
+use App\Models\Branch;
+use App\Models\Clinic;
 use App\Models\ClinicalDiagnosis;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicalEncounterAddendum;
@@ -28,15 +30,18 @@ use App\Models\PatientDentalChart;
 use App\Models\PatientFollowUp;
 use App\Models\PatientProcedure;
 use App\Models\PatientSessionPackage;
+use App\Models\PatientTreatment;
 use App\Models\PatientVisit;
 use App\Models\PhysioAssessment;
 use App\Models\PhysioCarePlan;
+use App\Models\PhysioExercise;
 use App\Models\PhysioSession;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Models\User;
+use App\QueueItemStatus;
 use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\Clinical\DoctorToday;
 use App\Services\Clinical\EncounterWorkspace;
@@ -44,20 +49,35 @@ use App\Services\Clinical\PrescriptionAllergyCheck;
 use App\Services\Clinical\StaleEncounterException;
 use App\Services\ClinicContext;
 use App\Services\Dental\DentalRecord;
+use App\Services\Patient\CrossBranchClinicalAccess;
+use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\PatientClinicalEntries;
+use App\Services\Dental\DentalConsultation;
+use App\Services\Physio\DeskPhysio;
+use App\Services\Physio\PhysioCareSummary;
+use App\Services\Physio\PhysioConsultation;
 use App\Services\Physio\PhysioRecord;
+use App\Services\Physio\SessionPackages;
+use App\Services\Reception\FrontDesk;
+use App\Services\Security\SecurityAudit;
 use App\Services\Treatment\ConsultationCare;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
 use App\Support\ClinicFrontend;
+use App\Support\ClinicNavigation;
 use App\Support\Specialty\SpecialtyRegistry;
 use App\VisitStatus;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\CarbonImmutable;
 use Closure;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
@@ -84,18 +104,30 @@ class ConsultationController extends Controller
      * is done, from Reception's check-ins. Polled for new arrivals; each row
      * starts or continues the visit in one step.
      */
-    public function index(DoctorToday $today): Response
+    public function index(Request $request, DoctorToday $today): Response
     {
         $this->authorize('viewAny', ClinicalEncounter::class);
         $clinic = $this->clinicContext->clinic() ?? abort(403);
         $branch = $this->clinicContext->requireBranch();
         $me = $this->clinicContext->currentEmployee();
         $isDoctor = $me?->practitionerProfile !== null;
+        // The appointments panel's day (`?date=`), within a year either side of today; the queue is always today's.
+        $clinicToday = CarbonImmutable::parse(ClinicClock::today()->toDateString(), ClinicClock::timezone());
+        $requested = is_string($request->query('date')) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $request->query('date')) ? CarbonImmutable::createFromFormat('!Y-m-d', $request->query('date'), ClinicClock::timezone()) : null;
+        $day = $requested && abs($requested->diffInDays($clinicToday)) <= 366 ? $requested : $clinicToday;
+        $calendar = $isDoctor && ClinicFrontend::available('clinic.appointments.index') && app(ClinicAccess::class)->allows(ClinicNavigation::CALENDAR);
 
         return Inertia::render('ClinicPortal/Today/Index', [
             'branch' => ['id' => $branch->id, 'name' => $branch->name],
             'is_doctor' => $isDoctor,
+            'doctor' => $isDoctor ? ['name' => $me->name, 'practice' => $me->practitionerProfile?->specialty] : null,
             'today' => fn () => $today->build($clinic, $branch, $isDoctor ? $me : null),
+            // The doctor's booked day for the panel beside the queue; the day changes without reloading the queue.
+            'schedule' => $calendar ? [
+                'date' => $day->toDateString(),
+                'today' => $clinicToday->toDateString(),
+                'appointments' => $today->appointments($clinic, $branch, $me, $day),
+            ] : null,
             // The practitioner's own patients (what the old dashboard's "My day" band showed): two counts and the way to them.
             'mine' => $isDoctor ? fn () => [
                 'assigned' => Patient::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('current_practitioner_id', $me->id)->count(),
@@ -108,10 +140,15 @@ class ConsultationController extends Controller
                     ->where('status', PatientFollowUp::DUE)->where('due_on', '<=', ClinicClock::now()->toDateString())->limit(1000)->count(),
                 'follow_ups_url' => route('clinic.follow-ups.index', ['tab' => 'overdue', 'mine' => '1']),
             ] : null,
+            // Results back for the orders they placed, waiting for their review.
+            'results' => $isDoctor ? fn () => $today->resultsToReview($clinic, request()->user()) : null,
             'encounter_label' => $this->specialties->encounterLabel($this->specialties->forBranch($branch, $clinic)),
             'links' => [
                 'self' => route('clinic.consultations.index'),
                 'call_next' => $isDoctor && app(ClinicAccess::class)->moduleEnabled('queue') ? route('clinic.queue.call-next') : null,
+                'calendar' => $calendar ? route('clinic.appointments.index', ['view' => 'day', 'date' => $day->toDateString()]) : null,
+                // Linked only once their page is built (`ClinicFrontend::AVAILABLE`).
+                'follow_ups' => ClinicFrontend::available('clinic.follow-ups.index') ? route('clinic.follow-ups.index') : null,
             ],
         ]);
     }
@@ -142,19 +179,509 @@ class ConsultationController extends Controller
     {
         $this->authorize('start', [ClinicalEncounter::class, $patient]);
         $validated = $request->validate(['specialty' => ['nullable', 'string', 'max:40']]);
+        $branch = $this->clinicContext->requireBranch();
+
+        // A patient checked in here today is seen from their queue entry, so the
+        // consultation, today's visit (and its check-in charge) and the queue stay one.
+        $queued = $this->todaysQueueEntry($patient, $branch);
+        if ($queued !== null) {
+            $doctor = $this->doctor();
+            if ($queued->doctor_id !== null && $queued->doctor_id !== $doctor->id) {
+                return back()->withErrors(['consultation' => 'This patient is waiting for another doctor today. Ask the front desk to reassign them first.']);
+            }
+
+            return $this->attempt(fn () => redirect()->route('clinic.consultations.show', $this->workspace->startFromQueue($queued, $doctor, $validated['specialty'] ?? null)));
+        }
 
         return $this->attempt(fn () => redirect()->route('clinic.consultations.show', $this->workspace->startForPatient(
             $patient,
-            $this->clinicContext->requireBranch(),
+            $branch,
             $this->doctor(),
             null,
             $validated['specialty'] ?? null,
         )));
     }
 
+    /**
+     * A physiotherapy visit: held in physiotherapy, or at a branch that
+     * practises physiotherapy and no dentistry (a physio-only clinic).
+     *
+     * @param  list<string>  $branchSpecialties
+     */
+    private function isPhysioVisit(ClinicalEncounter $encounter, array $branchSpecialties): bool
+    {
+        return $encounter->specialty === PhysioCareSummary::SPECIALTY
+            || ($encounter->specialty === null && in_array(PhysioCareSummary::SPECIALTY, $branchSpecialties, true) && ! in_array('dental', $branchSpecialties, true));
+    }
+
+    /**
+     * A dental visit has its own consultation (`DentalConsultation`): the visit was started for dentistry, or it has no specialty
+     * and the branch practises dentistry without physiotherapy.
+     *
+     * @param  list<string>  $branchSpecialties
+     */
+    private function isDentalVisit(ClinicalEncounter $encounter, array $branchSpecialties): bool
+    {
+        // The branch practises dentistry exactly when the odontogram extension is open to the user (the same gate the dental writes use).
+        return request()->user()->can('viewExtension', [$encounter, 'odontogram'])
+            && ($encounter->specialty === DentalConsultation::SPECIALTY
+                || ($encounter->specialty === null && ! in_array(PhysioCareSummary::SPECIALTY, $branchSpecialties, true)));
+    }
+
+    /** The dental workspace: complaint, tooth findings, plan, work done today, next visits (`DentalConsultation::payload`). */
+    private function renderDental(ClinicalEncounter $encounter, ConsultationCare $care): Response
+    {
+        $user = request()->user();
+        $patient = $encounter->patient;
+        $me = $this->clinicContext->currentEmployee();
+        $canEdit = $user->can('update', $encounter) && $me?->practitionerProfile !== null && $user->can('writeExtension', [$encounter, 'odontogram']);
+        $caseNumber = $encounter->patient_visit_id
+            ? PatientVisit::query()->withoutGlobalScopes()->where('clinic_id', $encounter->clinic_id)->with('caseNumber')->find($encounter->patient_visit_id)?->caseNumber?->case_number
+            : null;
+
+        return Inertia::render('ClinicPortal/Consultations/Dental', [
+            'encounter' => [
+                'id' => $encounter->id, 'number' => $encounter->encounter_number, 'started_at' => $encounter->started_at?->toIso8601String(),
+                'doctor' => $encounter->doctor?->name, 'branch' => $encounter->branch?->name, 'case_number' => $caseNumber,
+            ],
+            'patient' => [
+                'id' => $patient->id, 'name' => $patient->full_name, 'uhid' => $patient->uhid, 'age' => $patient->age, 'gender' => $patient->gender,
+            ],
+            'visit' => $this->visitContext($encounter),
+            'dental' => app(DentalConsultation::class)->payload($encounter, $user, $me),
+            // The treatments running for the patient (packages, stages, discharge), as in the full record; partial reloads ask for `care` alone.
+            'care' => fn () => $care->build($encounter, $patient, $user, $canEdit && ! $encounter->isFinalized()),
+            'can_edit' => $canEdit,
+            'links' => [
+                'finish' => route('clinic.consultations.dental.finish', $encounter),
+                'record' => route('clinic.consultations.show', $encounter).'?record=1',
+                'patient' => route('clinic.patients.show', $patient->id),
+                'calendar' => route('clinic.appointments.index'),
+                'today' => route('clinic.consultations.index'),
+                'checkout' => $user->hasClinicPermission(ClinicPermission::BillingCreate) ? route('clinic.billing.checkout', $encounter) : null,
+            ],
+        ]);
+    }
+
+    /** Finish a dental visit in one step: findings, plan, work done, signature, next visits. */
+    public function finishDental(Request $request, ClinicalEncounter $encounter, DentalConsultation $consultation): RedirectResponse
+    {
+        $this->authorize('update', $encounter);
+        $this->authorize('writeExtension', [$encounter, 'odontogram']);
+        $me = $this->doctor();
+        $surfaces = Rule::in(array_keys(config('clinic_dental.surfaces')));
+        $data = $request->validate([
+            'consultation' => ['nullable', 'array'],
+            'consultation.complaint' => ['nullable', 'string', 'max:2000'],
+            'consultation.findings' => ['nullable', 'string', 'max:5000'],
+            'consultation.diagnosis' => ['nullable', 'string', 'max:255'],
+            'consultation.advice' => ['nullable', 'string', 'max:2000'],
+            'findings' => ['nullable', 'array', 'max:40'],
+            'findings.*.tooth' => ['required', 'integer', 'between:11,85'],
+            'findings.*.condition' => ['required', Rule::in(array_keys(config('clinic_dental.conditions')))],
+            'findings.*.surfaces' => ['nullable', 'array'],
+            'findings.*.surfaces.*' => [$surfaces],
+            'findings.*.note' => ['nullable', 'string', 'max:500'],
+            'work' => ['nullable', 'array', 'max:40'],
+            'work.*.id' => ['nullable', 'integer'],
+            'work.*.procedure_id' => ['required_without:work.*.id', 'nullable', 'integer'],
+            'work.*.tooth' => ['nullable', 'integer', 'between:11,85'],
+            'work.*.surfaces' => ['nullable', 'array'],
+            'work.*.surfaces.*' => [$surfaces],
+            'work.*.notes' => ['nullable', 'string', 'max:255'],
+            'work.*.done' => ['boolean'],
+            'work.*.condition' => ['nullable', Rule::in(array_keys(config('clinic_dental.conditions')))],
+            'booking' => ['nullable', 'array'],
+            'booking.date' => ['nullable', 'date_format:Y-m-d'],
+            'booking.time' => ['nullable', 'date_format:H:i'],
+            'booking.step' => ['nullable', 'integer', 'min:1', 'max:60'],
+            'booking.count' => ['nullable', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        try {
+            $result = $consultation->finish($encounter, $data, $me, $request->user());
+        } catch (DomainException|InvalidArgumentException $e) {
+            return back()->withErrors(['dental' => $e->getMessage()]);
+        }
+
+        $message = 'Visit saved'.($result['done'] > 0 ? ' · '.$result['done'].' '.($result['done'] === 1 ? 'treatment' : 'treatments').' done' : '')
+            .($result['planned'] > 0 ? ' · '.$result['planned'].' planned' : '')
+            .($result['booked'] > 0 ? ' · '.$result['booked'].' '.($result['booked'] === 1 ? 'visit' : 'visits').' booked' : '').'.';
+        $response = back()->with('success', $message);
+
+        return $result['booking_problem'] ? $response->withErrors(['booking' => $result['booking_problem']]) : $response;
+    }
+
+    /**
+     * Finish a physiotherapy visit (`PhysioConsultation::finish`): each
+     * course's session, its payment, the signature, the next visit.
+     */
+    public function finishPhysio(Request $request, ClinicalEncounter $encounter, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        $data = $request->validate([
+            // What the consultation found: a visit may be a consultation only, with no treatment given.
+            'consultation' => ['nullable', 'array'],
+            'consultation.complaint' => ['nullable', 'string', 'max:2000'],
+            'consultation.history' => ['nullable', 'string', 'max:5000'],
+            'consultation.findings' => ['nullable', 'string', 'max:5000'],
+            'consultation.diagnosis' => ['nullable', 'string', 'max:255'],
+            'consultation.advice' => ['nullable', 'string', 'max:2000'],
+            // Each started course whose session was done today: its type (if that day was different), add-ons, who gave it.
+            'courses' => ['present', 'array', 'max:8'],
+            'courses.*.id' => ['required', 'integer'],
+            'courses.*.done' => ['boolean'],
+            'courses.*.type' => ['nullable', 'string', 'max:64'],
+            'courses.*.given' => ['nullable', 'array', 'max:20'],
+            'courses.*.given.*.key' => ['required', 'string', 'max:64'],
+            'courses.*.given.*.minutes' => ['required', 'integer', 'min:1', 'max:180'],
+            'courses.*.given.*.status' => ['nullable', 'in:'.implode(',', array_keys(PhysioConsultation::TREATMENT_STATUSES))],
+            'courses.*.addons' => ['nullable', 'array', 'max:10'],
+            'courses.*.addons.*' => ['string', 'max:64'],
+            'courses.*.therapist_id' => ['nullable', 'integer'],
+            'courses.*.feel' => ['nullable', 'in:better,same,worse'],
+            'courses.*.note' => ['nullable', 'string', 'max:1000'],
+            // The prescribed exercises as done today; those not sent were done as prescribed.
+            'courses.*.exercises' => ['nullable', 'array', 'max:30'],
+            'courses.*.exercises.*.id' => ['required', 'integer'],
+            'courses.*.exercises.*.status' => ['required', 'in:performed,partial,skipped'],
+            'courses.*.exercises.*.sets' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'courses.*.exercises.*.reps' => ['nullable', 'integer', 'min:0', 'max:500'],
+            // The coming visits, booked by the frequency from the first day at one time.
+            'booking' => ['nullable', 'array'],
+            'booking.date' => ['nullable', 'date_format:Y-m-d'],
+            'booking.time' => ['nullable', 'date_format:H:i'],
+            'booking.frequency' => ['nullable', 'string', 'max:20'],
+            'booking.count' => ['nullable', 'integer', 'min:1', 'max:30'],
+        ]);
+
+        try {
+            $result = $consultation->finish($encounter, $data, $me, $request->user());
+        } catch (DomainException|InvalidArgumentException $e) {
+            return back()->withErrors(['physio' => $e->getMessage()]);
+        }
+
+        $message = $result['sessions'].' '.($result['sessions'] === 1 ? 'session' : 'sessions').' saved'
+            .($result['booked'] > 0 ? ' · '.$result['booked'].' '.($result['booked'] === 1 ? 'visit' : 'visits').' booked' : '').'.';
+
+        $response = back()->with('success', $message);
+
+        return $result['booking_problem'] ? $response->withErrors(['booking' => $result['booking_problem']]) : $response;
+    }
+
+    /** A problem found in a physio consultation: a course suggested for it, on a side (`PhysioConsultation::suggest`). */
+    public function suggestPhysio(Request $request, ClinicalEncounter $encounter, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        $data = $request->validate(['problem' => ['required', 'string', 'max:64'], 'side' => ['nullable', 'in:left,right,both']]);
+
+        return $this->physioStep(fn () => $consultation->suggest($encounter, $data['problem'], $data['side'] ?? null, $me, $request->user()), 'Problem added.');
+    }
+
+    /**
+     * A problem's whole plan in one step — found, assessed, planned and
+     * (`start`) started — or a running treatment's plan changed
+     * (`PhysioConsultation::plan`).
+     */
+    public function physioPlan(Request $request, ClinicalEncounter $encounter, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        $keys = fn (array $options) => 'in:'.implode(',', array_keys($options));
+        $data = $request->validate([
+            'course_id' => ['nullable', 'integer'],
+            'problem' => ['required_without:course_id', 'nullable', 'string', 'max:64'],
+            'side' => ['nullable', 'in:left,right,both'],
+            'complaint' => ['sometimes', 'array'],
+            'complaint.duration' => ['nullable', $keys(PhysioConsultation::DURATIONS)],
+            'complaint.severity' => ['nullable', $keys(PhysioConsultation::SEVERITIES)],
+            'complaint.difficulties' => ['nullable', 'array', 'max:8'],
+            'complaint.difficulties.*' => [$keys(PhysioConsultation::DIFFICULTIES)],
+            'complaint.previous' => ['nullable', 'array', 'max:5'],
+            'complaint.previous.*' => [$keys(PhysioConsultation::PREVIOUS)],
+            'complaint.description' => ['nullable', 'string', 'max:2000'],
+            'complaint.remarks' => ['nullable', 'string', 'max:2000'],
+            'diagnosis' => ['nullable', 'string', 'max:255'],
+            'category' => ['sometimes', 'nullable', $keys(PhysioConsultation::CATEGORIES)],
+            'goals' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'instructions' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'type' => ['nullable', 'string', 'max:64'],
+            'frequency' => ['nullable', 'string', 'max:20'],
+            'sessions' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'package' => ['nullable', 'string', 'max:20'],
+            'start' => ['boolean'],
+            // The exercises prescribed, from the clinic's library (the list as it should now be).
+            'exercises' => ['sometimes', 'array', 'max:30'],
+            'exercises.*.key' => ['required', 'string', 'max:64'],
+            'exercises.*.sets' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'exercises.*.reps' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'exercises.*.hold' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'exercises.*.per_day' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'exercises.*.instructions' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return $this->physioStep(fn () => $consultation->plan($encounter, $data, $me, $request->user()), ! empty($data['start']) ? 'Treatment started.' : 'Plan saved.');
+    }
+
+    /** A problem's progress: a goal reached, a progress note or review, the next review date (`PhysioConsultation::progress`). */
+    public function physioProgress(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $data = $request->validate([
+            'goal' => ['nullable', 'string', 'max:1000'],
+            'done' => ['boolean'],
+            'note' => ['nullable', 'string', 'max:2000'],
+            'review' => ['boolean'],
+            'review_on' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
+        ]);
+
+        return $this->physioStep(fn () => $consultation->progress($encounter, $course, $data, $me), 'Progress saved.');
+    }
+
+    /**
+     * One physiotherapy report of a problem, made only from what is recorded
+     * (spec §22): the assessment and diagnosis, the treatment plan, a session
+     * (the latest, or `?session=`), the progress, or the packages — to
+     * preview and print, or (`?download=1`) as a PDF. The same record the
+     * workspace shows (`PhysioConsultation::payload`), nothing typed into it.
+     */
+    public function physioReport(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, string $kind): HttpResponse
+    {
+        $me = $this->physioGate($encounter, false);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        abort_unless(in_array($kind, PhysioConsultation::REPORTS, true), 404);
+        $physio = app(PhysioConsultation::class)->payload($encounter, $request->user(), $me);
+        $entry = collect($physio['courses'])->firstWhere('id', $course->id) ?? abort(404);
+        $sessions = collect($physio['history'])->where('course_id', $course->id)->values();
+        $session = $kind === 'session' ? ($request->filled('session') ? $sessions->firstWhere('id', (int) $request->query('session')) : $sessions->first()) : null;
+        abort_if($kind === 'session' && ! $session, 404);
+        $labels = collect($physio['choices'])->map(fn (array $options) => collect($options)->pluck('label', 'key')->all())->all();
+        $problem = collect($physio['problems'])->firstWhere('key', $course->physio_problem);
+        $treatments = collect($physio['treatments'])->keyBy('key');
+
+        $data = [
+            'kind' => $kind,
+            'title' => PhysioConsultation::REPORT_TITLES[$kind],
+            'clinic' => Clinic::query()->findOrFail($course->clinic_id),
+            'branch' => Branch::query()->withoutGlobalScopes()->find($encounter->branch_id),
+            'patient' => Patient::query()->withoutGlobalScopes()->findOrFail($course->patient_id),
+            'course' => $entry,
+            'type' => collect($problem['types'] ?? [])->firstWhere('key', $entry['type']),
+            'treatments' => $treatments,
+            'frequency' => collect($physio['frequencies'])->firstWhere('key', $entry['frequency'])['label'] ?? null,
+            'labels' => $labels,
+            'sessions' => $sessions,
+            'session' => $session,
+            'therapist' => $me->name,
+            'printedOn' => ClinicClock::now(),
+            'forDownload' => $request->boolean('download'),
+        ];
+        app(SecurityAudit::class)->record('physio.report_printed', $course, ['kind' => $kind, 'download' => $data['forDownload']]);
+
+        return $data['forDownload']
+            ? Pdf::loadView('clinic.physio_report', $data)->setPaper('a4')->download(Str::slug("{$entry['title']}-{$kind}").'.pdf')
+            : response()->view('clinic.physio_report', $data);
+    }
+
+    /** The patient's home exercise sheet for one problem: the exercises prescribed now, ready to print. */
+    public function physioExerciseSheet(ClinicalEncounter $encounter, PatientTreatment $course): HttpResponse
+    {
+        $me = $this->physioGate($encounter, false);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $plan = PhysioCarePlan::query()->withoutGlobalScopes()->where('clinic_id', $course->clinic_id)->where('patient_treatment_id', $course->id)
+            ->where('status', PhysioCarePlan::ACTIVE)->first();
+
+        return response()->view('clinic.physio_exercise_sheet', [
+            'clinic' => Clinic::query()->findOrFail($course->clinic_id),
+            'branch' => Branch::query()->withoutGlobalScopes()->find($encounter->branch_id),
+            'patient' => Patient::query()->withoutGlobalScopes()->findOrFail($course->patient_id),
+            'course' => $course,
+            'exercises' => $plan ? PhysioExercise::query()->withoutGlobalScopes()->where('care_plan_id', $plan->id)->orderBy('sort_order')->orderBy('id')->get() : collect(),
+            'diagnosis' => $course->primary_diagnosis_id ? ClinicalDiagnosis::query()->withoutGlobalScopes()->whereKey($course->primary_diagnosis_id)->value('description') : null,
+            'goals' => $course->goal,
+            'advice' => $course->physio_details['plan']['instructions'] ?? null,
+            'therapist' => $course->practitioner_id ? ClinicEmployee::query()->withoutGlobalScopes()->whereKey($course->practitioner_id)->value('name') : null,
+            'printedOn' => ClinicClock::now(),
+        ]);
+    }
+
+    /** A problem's complaint, diagnosis and plan, as tapped (`PhysioConsultation::saveDetails`). */
+    public function physioDetails(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $keys = fn (array $options) => 'in:'.implode(',', array_keys($options));
+        $data = $request->validate([
+            'complaint' => ['sometimes', 'array'],
+            'complaint.duration' => ['nullable', $keys(PhysioConsultation::DURATIONS)],
+            'complaint.severity' => ['nullable', $keys(PhysioConsultation::SEVERITIES)],
+            'complaint.difficulties' => ['nullable', 'array', 'max:8'],
+            'complaint.difficulties.*' => [$keys(PhysioConsultation::DIFFICULTIES)],
+            'complaint.previous' => ['nullable', 'array', 'max:5'],
+            'complaint.previous.*' => [$keys(PhysioConsultation::PREVIOUS)],
+            'complaint.description' => ['nullable', 'string', 'max:2000'],
+            'complaint.remarks' => ['nullable', 'string', 'max:2000'],
+            'diagnosis' => ['nullable', 'string', 'max:255'],
+            'category' => ['sometimes', 'nullable', $keys(PhysioConsultation::CATEGORIES)],
+            'goals' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'instructions' => ['sometimes', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        return $this->physioStep(fn () => $consultation->saveDetails($encounter, $course, $data, $me), 'Saved.');
+    }
+
+    /** A package of the course's problem, bought while it runs or to renew one that ran out (`PhysioConsultation::buyPackage`). */
+    public function physioPackage(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $package = $request->validate(['package' => ['required', 'string', 'max:20']])['package'];
+
+        return $this->physioStep(fn () => $consultation->buyPackage($course, $package, $me, $request->user(), $encounter), 'Package added. Its bill is at the desk.');
+    }
+
+    /** Start a suggested course: its session type, frequency, sessions and package (`PhysioConsultation::start`). */
+    public function startPhysio(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $data = $request->validate([
+            'type' => ['required', 'string', 'max:64'], 'frequency' => ['nullable', 'string', 'max:20'],
+            'sessions' => ['nullable', 'integer', 'min:1', 'max:500'], 'package' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        return $this->physioStep(fn () => $consultation->start($course, $data, $me, $request->user(), $encounter), 'Course started.');
+    }
+
+    /** From now on the course runs at another session type (`PhysioConsultation::changeType`). */
+    public function physioType(Request $request, ClinicalEncounter $encounter, PatientTreatment $course, PhysioConsultation $consultation): RedirectResponse
+    {
+        $me = $this->physioGate($encounter, true);
+        abort_unless($course->clinic_id === $encounter->clinic_id && $course->patient_id === $encounter->patient_id, 404);
+        $type = $request->validate(['type' => ['required', 'string', 'max:64']])['type'];
+
+        return $this->physioStep(fn () => $consultation->changeType($course, $type), 'Session type changed.');
+    }
+
+    /** @param  Closure(): mixed  $step */
+    private function physioStep(Closure $step, string $success): RedirectResponse
+    {
+        try {
+            $step();
+        } catch (DomainException|InvalidArgumentException $e) {
+            return back()->withErrors(['physio' => $e->getMessage()]);
+        }
+
+        return back()->with('success', $success);
+    }
+
+    /**
+     * Who does the physiotherapy work on this visit, after checking they may:
+     * the treating physiotherapist, or the desk working for a therapist who
+     * has no login (`DeskPhysio`), in whose name the work is recorded.
+     */
+    private function physioGate(ClinicalEncounter $encounter, bool $write): ClinicEmployee
+    {
+        if (app(DeskPhysio::class)->runs(request()->user(), $encounter)) {
+            abort_if($write && ! $encounter->isEditable(), 403, 'This visit is finished.');
+
+            return ClinicEmployee::query()->withoutGlobalScopes()->findOrFail($encounter->doctor_id);
+        }
+        $this->authorize($write ? 'update' : 'view', $encounter);
+
+        return $this->clinicContext->currentEmployee() ?? ($write ? abort(403) : ClinicEmployee::query()->withoutGlobalScopes()->findOrFail($encounter->doctor_id));
+    }
+
+    /**
+     * The desk opens today's physiotherapy visit of a checked-in patient for
+     * a therapist who has no login, and works it as the therapist would.
+     */
+    public function deskStartPhysio(ClinicQueueItem $item): RedirectResponse
+    {
+        $clinic = $this->clinicContext->clinic() ?? abort(403);
+        $branch = $this->clinicContext->requireBranch();
+        $queue = $item->queue()->withoutGlobalScopes()->first();
+        abort_unless($queue && $queue->clinic_id === $clinic->id && $queue->branch_id === $branch->id, 404);
+        $doctor = $item->doctor_id ? ClinicEmployee::query()->withoutGlobalScopes()->find($item->doctor_id) : null;
+        abort_unless(app(DeskPhysio::class)->mayRunFor(request()->user(), $doctor), 403, 'The desk opens the visit only for a physiotherapist who has no login.');
+
+        return $this->attempt(function () use ($item, $doctor) {
+            $encounter = $this->workspace->startFromQueue($item, $doctor);
+            if ($encounter->specialty === null) {
+                $encounter->forceFill(['specialty' => PhysioCareSummary::SPECIALTY])->save();
+            }
+
+            return redirect()->route('clinic.desk-physio.show', $encounter);
+        });
+    }
+
+    /** The physiotherapy workspace, run by the desk for a therapist without a login. */
+    public function deskPhysio(ClinicalEncounter $encounter): Response
+    {
+        abort_unless(app(DeskPhysio::class)->runs(request()->user(), $encounter), 403);
+
+        return $this->renderPhysio($encounter->load(['patient' => fn ($query) => $query->withoutGlobalScopes(), 'doctor:id,name', 'branch:id,name']), true);
+    }
+
+    /** The physiotherapy workspace (`PhysioConsultation::payload`), for the therapist or (`$desk`) the desk working for one. */
+    private function renderPhysio(ClinicalEncounter $encounter, bool $desk): Response
+    {
+        $user = request()->user();
+        $patient = $encounter->patient;
+        $me = $desk ? ClinicEmployee::query()->withoutGlobalScopes()->findOrFail($encounter->doctor_id) : $this->clinicContext->currentEmployee();
+        $canEdit = $desk ? $encounter->isEditable() : ($user->can('update', $encounter) && $me?->practitionerProfile !== null);
+        // The same actions on either path; the desk's are under the front desk, gated by its own permission.
+        $r = $desk ? 'clinic.desk-physio.' : 'clinic.consultations.physio.';
+
+        // This year's case number (one per patient per year; the UHID is for life), through today's visit.
+        $caseNumber = $encounter->patient_visit_id
+            ? PatientVisit::query()->withoutGlobalScopes()->where('clinic_id', $encounter->clinic_id)->with('caseNumber')->find($encounter->patient_visit_id)?->caseNumber?->case_number
+            : null;
+
+        return Inertia::render('ClinicPortal/Consultations/Physio', [
+            'encounter' => [
+                'id' => $encounter->id, 'number' => $encounter->encounter_number, 'started_at' => $encounter->started_at?->toIso8601String(),
+                'doctor' => $encounter->doctor?->name, 'branch' => $encounter->branch?->name, 'case_number' => $caseNumber,
+            ],
+            'patient' => [
+                'id' => $patient->id, 'name' => $patient->full_name, 'uhid' => $patient->uhid, 'age' => $patient->age, 'gender' => $patient->gender,
+                'phone' => $patient->phone ? substr($patient->phone, 0, 2).'••••'.substr($patient->phone, -4) : null,
+                'registered_on' => $patient->created_at?->toDateString(),
+            ],
+            // Why the patient came today (reason, specialty), as the desk recorded it.
+            'visit' => $this->visitContext($encounter),
+            'physio' => app(PhysioConsultation::class)->payload($encounter, $user, $me),
+            'can_edit' => $canEdit,
+            // What the desk collects from this page once the visit is finished (null for the therapist's own page).
+            'payment' => $desk && $encounter->isFinalized() ? app(FrontDesk::class)->visitPayment($encounter, $user) : null,
+            // The desk working for a therapist without a login: shown so, and the work is in the therapist's name.
+            'desk' => $desk ? ['therapist' => $me->name] : null,
+            'links' => [
+                'finish' => route($r.'finish', $encounter),
+                'patient' => route('clinic.patients.show', $patient->id),
+                // The whole plan of a problem in one step: found, assessed, planned, started.
+                'plan' => route($r.'plan', $encounter),
+                // With the course id in place of 0.
+                'package' => route($r.'courses.package', [$encounter, 0]),
+                'sheet' => route($r.'courses.sheet', [$encounter, 0]),
+                'progress' => route($r.'courses.progress', [$encounter, 0]),
+                'report' => route($r.'courses.report', [$encounter, 0, 'assessment']),
+                // Supporting documents live in Patient 360's documents.
+                'documents' => route('clinic.patients.show', ['patient' => $patient->id, 'zone' => 'docs']),
+                // A follow-up through the patient's own follow-ups; the coming visits are moved in the calendar.
+                'follow_up' => app(Patient360Access::class)->canManageFollowUps($user) ? route('clinic.patients.follow-ups.store', $patient->id) : null,
+                'calendar' => route('clinic.appointments.index'),
+                'today' => $desk ? route('clinic.reception') : route('clinic.consultations.index'),
+                // Once the visit is finished, its bill is taken here (the clinic's one checkout), by whoever may bill.
+                'checkout' => $user->hasClinicPermission(ClinicPermission::BillingCreate) ? route('clinic.billing.checkout', $encounter) : null,
+            ],
+        ]);
+    }
+
     public function show(ClinicalEncounter $encounter, ConsultationCare $care): Response
     {
         $this->authorize('view', $encounter);
+        app(CrossBranchClinicalAccess::class)->record(request()->user(), $encounter);
 
         $encounter->load([
             'patient' => fn ($query) => $query->withoutGlobalScopes()->with('alerts'),
@@ -172,6 +699,15 @@ class ConsultationController extends Controller
         $patient = $encounter->patient;
         $branchSpecialties = $encounter->branch ? $this->specialties->forBranch($encounter->branch) : [];
         $canEdit = $user->can('update', $encounter);
+        // A physiotherapy visit has its own consultation: courses, the day's treatments, packages, the next visit.
+        if ($this->isPhysioVisit($encounter, $branchSpecialties)) {
+            return $this->renderPhysio($encounter, false);
+        }
+        // `?record=1` opens the full consultation record (prescriptions, investigations, addenda) of a dental visit.
+        if (! request()->boolean('record') && $this->isDentalVisit($encounter, $branchSpecialties)) {
+            return $this->renderDental($encounter, $care);
+        }
+
         // The patient's allergy record, once, for the prescriptions' signing check (clinical roles reach this page).
         $allergyState = app(PrescriptionAllergyCheck::class)->stateFor($patient);
 
@@ -559,7 +1095,7 @@ class ConsultationController extends Controller
                 'plans' => route('clinic.consultations.physio.plans.store', $encounter),
                 'sell_package' => route('clinic.patients.session-packages.store', $patient->id),
             ],
-            'can_sell_package' => in_array('session_packages', $extensions, true) && $user->hasClinicPermission(ClinicPermission::BillingCreate),
+            'can_sell_package' => in_array('session_packages', $extensions, true) && SessionPackages::maySell($user),
         ];
     }
 
@@ -581,6 +1117,17 @@ class ConsultationController extends Controller
             'type' => $type['name'] ?? null,
             'reason' => $visit?->visit_reason,
         ];
+    }
+
+    /** The patient's open entry in today's queue at this branch (waiting, called or being seen), if any. */
+    private function todaysQueueEntry(Patient $patient, Branch $branch): ?ClinicQueueItem
+    {
+        return ClinicQueueItem::query()->withoutGlobalScopes()
+            ->whereIn('status', [QueueItemStatus::Waiting, QueueItemStatus::Called, QueueItemStatus::InConsultation])
+            ->whereHas('queue', fn ($queue) => $queue->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('branch_id', $branch->id)
+                ->whereOnDate('queue_date', ClinicClock::now()->toDateString()))
+            ->whereHas('patientVisit', fn ($visit) => $visit->withoutGlobalScopes()->where('patient_id', $patient->id))
+            ->latest('id')->first();
     }
 
     private function doctor(): ClinicEmployee

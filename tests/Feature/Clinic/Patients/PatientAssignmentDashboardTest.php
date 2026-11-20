@@ -64,7 +64,8 @@ test('Today shows a practitioner their own patients: booked with them today and 
         ->where('mine.booked_today', 1)
         ->where('mine.assigned', 1));
 
-    $this->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
+    // A doctor-owner in Doctor Mode lands on the Doctor Dashboard (Today).
+    $this->get('/clinic/dashboard')->assertRedirect(route('clinic.consultations.index'));
 
     $this->withSession(withOwnerMode([ClinicContext::SESSION_CLINIC_MEMBERSHIP_ID => $membership->id, ClinicContext::SESSION_BRANCH_ID => $this->branch->id]))
         ->get('/clinic/dashboard')->assertOk()

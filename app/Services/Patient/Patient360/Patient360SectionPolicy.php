@@ -8,6 +8,7 @@ use App\Models\ClinicalEncounter;
 use App\Models\DeletionRequest;
 use App\Models\Patient;
 use App\Models\User;
+use App\Services\Billing\EncounterCheckout;
 use App\Services\ClinicContext;
 use App\Services\Governance\DeletionGovernance;
 use App\Services\OwnerMode\OwnerMode;
@@ -42,6 +43,7 @@ class Patient360SectionPolicy
         'dental' => ['Dental', 'specialty'],
         'physio' => ['Physiotherapy', 'specialty'],
         'appointments' => ['Appointments', 'primary'],
+        'cases' => ['Cases', 'primary'],
         'treatment' => ['Treatment', 'primary'],
         'prescriptions' => ['Prescriptions', 'primary'],
         'investigations' => ['Investigations', 'primary'],
@@ -57,15 +59,44 @@ class Patient360SectionPolicy
 
     /** Workspace order per persona; sections the user may not open are dropped. */
     private const ORDER = [
-        'reception' => ['overview', 'visits', 'dental', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests'],
+        'reception' => ['overview', 'visits', 'cases', 'dental', 'appointments', 'follow-ups', 'billing', 'investigations', 'documents', 'consents', 'communication', 'timeline', 'requests'],
         'billing' => ['billing', 'dental', 'overview', 'communication', 'timeline', 'requests'],
-        'dental' => ['overview', 'visits', 'dental', 'clinical', 'treatment', 'prescriptions', 'investigations', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'physio' => ['overview', 'visits', 'physio', 'clinical', 'treatment', 'follow-ups', 'appointments', 'prescriptions', 'investigations', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'clinical' => ['overview', 'visits', 'clinical', 'prescriptions', 'investigations', 'treatment', 'dental', 'physio', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
-        'admin' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
-        'owner' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
-        'staff' => ['overview', 'visits', 'appointments', 'timeline'],
+        'dental' => ['overview', 'visits', 'dental', 'clinical', 'cases', 'treatment', 'prescriptions', 'investigations', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'physio' => ['overview', 'visits', 'physio', 'clinical', 'cases', 'treatment', 'follow-ups', 'appointments', 'prescriptions', 'investigations', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'clinical' => ['overview', 'visits', 'clinical', 'prescriptions', 'investigations', 'cases', 'treatment', 'dental', 'physio', 'follow-ups', 'appointments', 'documents', 'consents', 'billing', 'timeline', 'communication', 'requests'],
+        'admin' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'cases', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
+        'owner' => ['overview', 'visits', 'clinical', 'dental', 'physio', 'appointments', 'cases', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit'],
+        'staff' => ['overview', 'visits', 'cases', 'appointments', 'timeline'],
     ];
+
+    /**
+     * Patient 360's seven zones, in this order, each made of the sections
+     * above (their endpoints and gates unchanged). A zone is shown when the
+     * member may open at least one of its sections.
+     */
+    public const ZONES = [
+        'overview' => ['Overview', ['overview']],
+        'clinical' => ['Clinical', ['clinical', 'dental', 'physio']],
+        'cases' => ['Cases & Plans', ['cases', 'treatment']],
+        'visits' => ['Visits', ['visits', 'appointments', 'follow-ups']],
+        'docs' => ['Docs', ['documents', 'prescriptions', 'investigations', 'consents']],
+        'billing' => ['Billing', ['billing']],
+        'timeline' => ['Timeline', ['timeline', 'communication', 'requests', 'audit']],
+    ];
+
+    /**
+     * The zones this member gets, each with its open sections in zone order.
+     *
+     * @param  list<string>  $openKeys  sections the member may open and whose screen is built
+     * @return list<array{key: string, label: string, sections: list<string>}>
+     */
+    public static function zonesFor(array $openKeys): array
+    {
+        return collect(self::ZONES)
+            ->map(fn (array $zone, string $key) => ['key' => $key, 'label' => $zone[0], 'sections' => array_values(array_intersect($zone[1], $openKeys))])
+            ->filter(fn (array $zone) => $zone['sections'] !== [])
+            ->values()->all();
+    }
 
     private const DEFAULT_SECTION = ['billing' => 'billing', 'dental' => 'dental', 'physio' => 'physio'];
 
@@ -196,6 +227,10 @@ class Patient360SectionPolicy
         if ($fields['financial'] && $user->hasClinicPermission(ClinicPermission::PaymentCollect)) {
             $actions[] = ['key' => 'collect_payment', 'label' => 'Collect payment', 'section' => 'billing'];
         }
+        // A signed consultation here still to bill opens its checkout (billing work, not the ledger).
+        if ($user->hasClinicPermission(ClinicPermission::BillingCreate) && ($toBill = $this->consultationToBill($patient)) !== null) {
+            $actions[] = ['key' => 'checkout', 'label' => 'Bill consultation', 'url' => route('clinic.billing.checkout', $toBill), 'method' => 'get'];
+        }
         if ($fields['follow_ups'] && $this->access->canManageFollowUps($user)) {
             $actions[] = ['key' => 'follow_up', 'label' => 'Add follow-up', 'section' => 'follow-ups'];
         }
@@ -217,11 +252,11 @@ class Patient360SectionPolicy
 
         $primary = match ($persona) {
             'reception' => ['check_in', 'book'],
-            'billing' => ['collect_payment'],
+            'billing' => ['checkout', 'collect_payment'],
             default => ['continue_consultation', 'start_consultation', 'book', 'check_in', 'collect_payment'],
         };
         $desk = match ($persona) {
-            'reception' => ['book', 'collect_payment', 'follow_up'],
+            'reception' => ['checkout', 'book', 'collect_payment', 'follow_up'],
             'billing' => ['communication'],
             'dental', 'physio', 'clinical' => ['prescribe', 'order_investigation', 'treatment_plan', 'follow_up'],
             default => ['book', 'check_in', 'collect_payment'],
@@ -233,6 +268,25 @@ class Patient360SectionPolicy
             ...$action,
             'kind' => $action['key'] === $primaryKey ? 'primary' : (in_array($action['key'], $desk, true) ? 'desk' : 'more'),
         ])->values()->all();
+    }
+
+    /**
+     * The patient's latest signed consultation at the working branch, in the
+     * last week, that still has something to bill (`EncounterCheckout`), if any.
+     */
+    private function consultationToBill(Patient $patient): ?ClinicalEncounter
+    {
+        $branch = $this->clinicContext->branch();
+        if ($branch === null) {
+            return null;
+        }
+        $checkout = app(EncounterCheckout::class);
+
+        return ClinicalEncounter::query()->withoutGlobalScopes()
+            ->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)->where('branch_id', $branch->id)
+            ->whereNotNull('finalized_at')->where('finalized_at', '>=', now()->subDays(7))
+            ->latest('finalized_at')->limit(5)->get()
+            ->first(fn (ClinicalEncounter $encounter) => $checkout->lines($encounter) !== []);
     }
 
     /** Open requests the owner must decide (owner) or this user made (others). */
@@ -272,6 +326,8 @@ class Patient360SectionPolicy
             'physio' => $workspaces['physio'],
             'appointments' => $appointments,
             'financial' => $financial,
+            // A practitioner's own fees only (`Patient360Sections::ownFees`), never the ledger.
+            'own_fees' => $this->access->canViewOwnFeesOnly($user),
             'refunds' => $financial && $user->hasClinicPermission(ClinicPermission::RefundProcess),
             'clinical_documents' => $clinical,
             'admin_documents' => $clinical || $user->hasClinicPermission(ClinicPermission::DocumentsManage) || $user->hasClinicPermission(ClinicPermission::PatientEdit),
@@ -293,11 +349,13 @@ class Patient360SectionPolicy
             'dental' => $fields['dental'] || $fields['dental_operational'] || $fields['dental_financial'],
             'physio' => $fields['physio'],
             'appointments' => $fields['appointments'],
+            // Cases: who leads and treats the patient's episodes, for whoever sees their visits; plan details stay clinical.
+            'cases' => $fields['visits'],
             'treatment' => $fields['clinical'],
             'prescriptions' => $fields['prescriptions'],
             'investigations' => $fields['investigation_status'],
             'visits' => $fields['visits'],
-            'billing' => $fields['financial'],
+            'billing' => $fields['financial'] || $fields['own_fees'],
             'documents' => $fields['admin_documents'] || $fields['clinical_documents'],
             // Whoever opens the patient sees what they agreed to; recording one needs `consent.manage`.
             'consents' => true,

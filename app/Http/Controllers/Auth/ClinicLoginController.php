@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\ClinicMembershipStatus;
+use App\ClinicPermission;
 use App\ClinicStatus;
 use App\EmploymentStatus;
 use App\Http\Controllers\Controller;
@@ -118,6 +119,14 @@ class ClinicLoginController extends Controller
         // memberships in several clinics lands in this one and not whichever
         // the session happened to hold before.
         $this->clinicContext->activateMembership($membership);
+
+        $intended = $request->session()->get('url.intended');
+        if ($intended) {
+            $isOwnerOrAdmin = (bool) $membership->is_primary_owner || $user->hasClinicPermission(ClinicPermission::StaffManage);
+            if ($isOwnerOrAdmin && (str_contains($intended, '/clinic/reception') || str_contains($intended, '/reception'))) {
+                $request->session()->forget('url.intended');
+            }
+        }
 
         if (config('app.routing_mode') === 'domain') {
             return redirect()->intended(route('dashboard', array_filter(['clinic' => $request->route('clinic')])));

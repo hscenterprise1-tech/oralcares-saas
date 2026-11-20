@@ -56,8 +56,8 @@ class RegisterPatientRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:100'],
             'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => [$rule('last_name'), 'string', 'max:100'],
-            'date_of_birth' => [$rule('date_of_birth'), 'date', 'before:today'],
-            'age' => ['nullable', 'integer', 'min:0', 'max:150'],
+            'date_of_birth' => [$rule('date_of_birth'), 'date', 'before_or_equal:today'],
+            'age' => ['nullable', 'integer', 'min:0', 'max:120'],
             'gender' => [$rule('gender'), 'string', 'in:male,female,other'],
             'blood_group' => [$rule('blood_group'), 'string', 'in:A+,A-,B+,B-,AB+,AB-,O+,O-'],
 
@@ -103,7 +103,15 @@ class RegisterPatientRequest extends FormRequest
             'duplicate_acknowledged_ids.*' => ['integer'],
             'duplicate_reason' => ['nullable', 'string', 'max:500'],
 
+            // Initial uploaded documents (prescriptions, reports, scans).
+            'documents' => ['nullable', 'array', 'max:5'],
+            'documents.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'document_types' => ['nullable', 'array', 'max:5'],
+            'document_types.*' => ['string', 'in:medical_report,id_proof,xray,intraoral_photo,lab_report,other,prescription'],
+
             // First visit / check-in.
+            'case_id' => ['nullable', 'integer'],
+            'new_case' => ['nullable', 'boolean'],
             'department_id' => ['nullable', 'integer', Rule::exists('clinic_departments', 'id')->where('clinic_id', $clinic?->id)],
             'doctor_id' => [$rule('doctor_id'), 'integer', Rule::exists('clinic_employees', 'id')->where('clinic_id', $clinic?->id)],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -117,9 +125,13 @@ class RegisterPatientRequest extends FormRequest
             'appointment_id' => ['nullable', 'integer'],
             'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
             // Payment at check-in, when the clinic charges then. The amount charged is never sent: it is the doctor's fee.
-            // Money is never taken at check-in: the check-in stands on its own, and a charge it raised is
-            // paid afterwards through the billing payment endpoint. A payment sent here is dropped.
-            'payment' => ['exclude'],
+            // Payment first: it is taken in the registration's own transaction, and a refused payment registers
+            // and checks in nobody. Pay later is the explicit unpaid check-in.
+            'payment' => ['nullable', 'array'],
+            'payment.method' => ['required_with:payment', 'string', 'max:30'],
+            'payment.amount' => ['required_with:payment', 'numeric', 'gt:0'],
+            'payment.reference' => ['nullable', 'string', 'max:100'],
+            'pay_later' => ['nullable', 'boolean'],
             // What the desk showed would be charged at check-in (null: nothing); verified by `CheckInCharges`.
             'expected_charge' => ['nullable', 'numeric', 'min:0'],
             'priority' => ['nullable', Rule::enum(VisitPriority::class)],

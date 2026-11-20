@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patients v2 — Design review (fictional data)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ---------------------------------------------------------------- tokens (the Command Center's language) */
+:root {
+  --canvas: #F5F8FC; --surface: #FFFFFF; --line: #E3EAF2; --line-2: #D6E3EF;
+  --ink: #0B1F33; --ink-2: #33445E; --text-2: #475467; --text-3: #5F6B7E;
+  --teal: #0E9F87; --teal-ink: #0B7A68; --teal-soft: #E3F6F4; --nav-teal: #007A7B;
+  --blue: #2B6FD8; --blue-ink: #1F57B3; --blue-soft: #EAF1FF;
+  --violet: #6B48DE; --violet-ink: #5536C2; --violet-soft: #F0ECFE;
+  --amber: #E9821A; --amber-ink: #A2560B; --amber-soft: #FFF3DC;
+  --rose: #E5484D; --rose-ink: #B4232C; --rose-soft: #FDECEC;
+  --green-ink: #13795B; --green-soft: #E7F6EC; --slate-soft: #EEF1F5;
+  --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -14px rgba(15,23,42,.14);
+  --shadow-up: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -18px rgba(15,23,42,.22);
+  --r-card: 16px; --r-in: 12px; --r-sm: 8px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--canvas); color: var(--ink); font-size: 14px; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid #00A8A8; outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.tab { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------------------------------------------------------------- shell (static replica of the approved shell) */
+.app { display: flex; min-height: 100vh; }
+.side { width: 240px; flex: none; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(214,227,239,.8); background: linear-gradient(180deg,#F1FAFA 0%,#FFFFFF 160px); display: flex; flex-direction: column; }
+.side .brand { height: 73px; border-bottom: 1px solid rgba(214,227,239,.8); padding: 0 24px; display: flex; flex-direction: column; justify-content: center; }
+.side .brand b { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.side .brand small { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+.side nav { padding: 12px; flex: 1; }
+.side .grp { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 12px 12px 6px; }
+.side .it { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: var(--r-in); font-weight: 500; color: var(--ink); }
+.side .it svg { width: 18px; height: 18px; color: #4A5D73; }
+.side .it.on { background: linear-gradient(90deg,#DDF4F2,#E6F0FD); color: var(--nav-teal); }
+.side .it.on svg { color: var(--nav-teal); }
+.side .it .soon { margin-left: auto; font-size: 10.5px; background: var(--slate-soft); color: var(--text-3); border-radius: 99px; padding: 2px 8px; }
+.side .it.dim { color: var(--text-3); }
+.side .clinic { margin: 12px; padding: 12px; border-radius: var(--r-card); background: #fff; box-shadow: var(--shadow); display: flex; gap: 12px; align-items: center; }
+.side .clinic i { width: 40px; height: 40px; border-radius: var(--r-in); background: linear-gradient(135deg,#DDF4F2,#E6E9FD); display: grid; place-items: center; color: var(--nav-teal); font-style: normal; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.95); border-bottom: 1px solid rgba(214,227,239,.8); backdrop-filter: blur(4px); }
+.top .bar { max-width: 1600px; margin: 0 auto; height: 72px; padding: 0 32px; display: flex; align-items: center; gap: 16px; }
+.top .menu { display: none; }
+.top .gsearch { flex: 1; max-width: 560px; height: 44px; border-radius: var(--r-in); border: 1px solid rgba(214,227,239,.7); background: var(--canvas); display: flex; align-items: center; gap: 10px; padding: 0 14px; color: var(--text-3); }
+.top .gsearch kbd { margin-left: auto; font-size: 11px; border: 1px solid var(--line-2); background: #fff; border-radius: 6px; padding: 2px 6px; font-family: inherit; }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.top .clock { text-align: right; } .top .clock small { display: block; font-size: 12px; color: var(--text-3); } .top .clock b { font-size: 14px; font-weight: 500; }
+.top .ib { width: 44px; height: 44px; border-radius: var(--r-in); display: grid; place-items: center; color: #4A5D73; border: 0; background: transparent; }
+.top .avatar { width: 44px; height: 44px; border-radius: 99px; background: linear-gradient(135deg,#D6F2EF,#E4DEFC); display: grid; place-items: center; font-weight: 600; font-size: 14px; }
+.top .who { line-height: 1.2; } .top .who b { display: block; font-size: 13.5px; } .top .who small { font-size: 12px; color: var(--text-3); }
+.page { max-width: 1600px; width: 100%; margin: 0 auto; padding: 24px 32px 96px; }
+
+/* ---------------------------------------------------------------- generic pieces */
+.card { background: var(--surface); border: 1px solid rgba(227,234,242,.9); border-radius: var(--r-card); box-shadow: var(--shadow); }
+.btn { height: 44px; padding: 0 16px; border-radius: var(--r-in); border: 1px solid var(--line-2); background: #fff; display: inline-flex; align-items: center; gap: 8px; font-weight: 500; font-size: 13.5px; transition: background .15s, box-shadow .15s, transform .15s; white-space: nowrap; }
+.btn:hover { background: var(--canvas); }
+.btn.pri { background: linear-gradient(135deg,#12A99A,#0B8C80); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -10px rgba(11,140,128,.9); }
+.btn.pri:hover { transform: translateY(-1px); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.sm { height: 36px; padding: 0 12px; font-size: 12.5px; }
+.btn.danger { color: var(--rose-ink); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 99px; font-size: 12px; font-weight: 500; background: var(--slate-soft); color: var(--text-2); white-space: nowrap; }
+.chip.teal { background: var(--teal-soft); color: var(--teal-ink); } .chip.blue { background: var(--blue-soft); color: var(--blue-ink); }
+.chip.violet { background: var(--violet-soft); color: var(--violet-ink); } .chip.amber { background: var(--amber-soft); color: var(--amber-ink); }
+.chip.rose { background: var(--rose-soft); color: var(--rose-ink); } .chip.green { background: var(--green-soft); color: var(--green-ink); }
+.chip.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; background: #F2F5F9; color: var(--ink-2); }
+.dot { width: 8px; height: 8px; border-radius: 99px; display: inline-block; }
+.muted { color: var(--text-3); } .t2 { color: var(--text-2); }
+.h1 { font-size: 24px; font-weight: 600; letter-spacing: -.02em; margin: 0; }
+.cap { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+.sechead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 0; }
+.sechead h3 { margin: 0; font-size: 15px; font-weight: 600; } .sechead p { margin: 2px 0 0; font-size: 12px; color: var(--text-3); }
+.icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none; }
+.icon.teal { background: linear-gradient(135deg,#2CC6B4,#0E9F87); } .icon.blue { background: linear-gradient(135deg,#4F9BF0,#2B6FD8); }
+.icon.violet { background: linear-gradient(135deg,#9B7BF2,#6B48DE); } .icon.amber { background: linear-gradient(135deg,#F7B451,#E9821A); }
+.icon.rose { background: linear-gradient(135deg,#F58A94,#E5484D); } .icon.mint { background: linear-gradient(135deg,#5FD9A6,#12A877); }
+.icon svg { width: 18px; height: 18px; }
+.skel { background: linear-gradient(90deg,#EEF2F7 0%,#F7F9FC 50%,#EEF2F7 100%); background-size: 200% 100%; animation: sh 1.2s infinite linear; border-radius: 8px; }
+@keyframes sh { to { background-position: -200% 0; } }
+
+/* ---------------------------------------------------------------- directory */
+.dir-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.dir-grid { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 24px; margin-top: 20px; align-items: start; }
+.finder { padding: 20px; background: linear-gradient(118deg,#E9F8F7 0%,#EEF3FF 55%,#F3EFFE 100%); border: 1px solid rgba(255,255,255,.8); }
+.finder .q { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 10px 26px -18px rgba(30,60,120,.35); border: 1px solid rgba(214,227,239,.8); }
+.finder .q input { flex: 1; border: 0; outline: 0; font-size: 16px; background: transparent; min-width: 0; }
+.finder .q input::placeholder { color: var(--text-3); }
+.finder .q kbd { font-size: 11px; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 7px; color: var(--text-3); font-family: inherit; }
+.finder .hint { font-size: 12px; color: var(--text-2); margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+.filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.seg { display: inline-flex; padding: 4px; border-radius: 99px; background: rgba(255,255,255,.75); border: 1px solid rgba(214,227,239,.9); }
+.seg button { height: 36px; padding: 0 14px; border-radius: 99px; border: 0; background: transparent; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.seg button.on { background: var(--teal-soft); color: var(--teal-ink); }
+.fchip { height: 36px; padding: 0 12px; border-radius: 99px; border: 1px solid rgba(214,227,239,.95); background: #fff; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.fchip.on { border-color: #9ADAD2; background: #F1FBF9; color: var(--teal-ink); }
+.fchip svg { width: 14px; height: 14px; color: var(--text-3); }
+.list { margin-top: 16px; overflow: hidden; }
+.list-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-3); }
+.cols { display: grid; grid-template-columns: minmax(260px,2.4fr) minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr); gap: 16px; align-items: center; }
+.colhead { padding: 10px 20px; font-size: 11.5px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); background: #FAFCFE; border-bottom: 1px solid var(--line); }
+.row { padding: 12px 20px; border-bottom: 1px solid var(--line); position: relative; transition: background .15s; cursor: pointer; }
+.row:last-child { border-bottom: 0; }
+.row:hover, .row:focus-visible, .row.kb { background: #F7FBFD; }
+.who-c { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.av { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 600; font-size: 13.5px; flex: none; }
+.av.dental { background: linear-gradient(135deg,#DDF4F2,#CDEEE9); color: var(--teal-ink); }
+.av.physio { background: linear-gradient(135deg,#EFEAFE,#E3DBFC); color: var(--violet-ink); }
+.av.general { background: linear-gradient(135deg,#EAF1FF,#DCE8FD); color: var(--blue-ink); }
+.who-c .nm { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.who-c .nm span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-c .meta { font-size: 12.5px; color: var(--text-3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--rose); box-shadow: 0 0 0 3px var(--rose-soft); flex: none; }
+.ra { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; gap: 6px; padding-left: 40px; background: linear-gradient(90deg, rgba(247,251,253,0), #F7FBFD 40px); opacity: 0; pointer-events: none; transition: opacity .15s; }
+.row:hover .ra, .row:focus-within .ra, .row.kb .ra { pointer-events: auto; }
+.row:hover .ra, .row:focus-within .ra, .row.kb .ra { opacity: 1; }
+.care { font-size: 12.5px; } .care b { font-weight: 500; display: block; } .care small { color: var(--text-3); }
+.pager { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text-3); }
+.aside-card { padding: 18px 18px 8px; }
+.aside-card h4 { margin: 0 0 10px; font-size: 13.5px; font-weight: 600; }
+.recent { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.recent:first-of-type { border-top: 0; }
+.tip { padding: 16px 18px; margin-top: 16px; background: linear-gradient(135deg,#F4F0FF,#EAF1FF); border: 0; }
+.tip b { font-size: 13px; } .tip p { margin: 6px 0 0; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.empty { padding: 48px 24px; text-align: center; }
+.empty .icon { margin: 0 auto 12px; }
+.empty h4 { margin: 0; font-size: 15px; } .empty p { margin: 6px auto 16px; max-width: 42ch; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+
+/* ---------------------------------------------------------------- patient 360 */
+.crumb { font-size: 12.5px; color: var(--text-3); display: flex; gap: 6px; align-items: center; margin-bottom: 14px; }
+.crumb a { color: var(--blue-ink); font-weight: 500; display: inline-flex; align-items: center; min-height: 44px; margin: -10px 0; }
+.idcard { position: relative; overflow: hidden; padding: 22px 24px; background: #fff; }
+.idcard::before { content: ''; position: absolute; inset: 0; background: linear-gradient(118deg,rgba(226,246,245,.9) 0%,rgba(232,240,255,.75) 50%,rgba(239,233,254,.7) 100%); pointer-events: none; height: 118px; }
+.idcard > * { position: relative; }
+.idtop { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.idtop .av { width: 64px; height: 64px; border-radius: 18px; font-size: 20px; box-shadow: 0 0 0 4px #fff; }
+.idname { font-size: 24px; font-weight: 600; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.idmeta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-2); }
+.idmeta span { display: inline-flex; align-items: center; gap: 6px; }
+.idmeta svg { width: 14px; height: 14px; color: var(--text-3); }
+.actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.more { position: relative; }
+.more-menu { position: absolute; right: 0; top: 50px; width: 240px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-up); padding: 6px; display: none; z-index: 20; }
+.more-menu.open { display: block; }
+.more-menu button { width: 100%; text-align: left; height: 40px; border: 0; background: transparent; border-radius: 10px; padding: 0 12px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.more-menu button:hover { background: var(--canvas); }
+.safety { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.safety .lbl { font-size: 12px; font-weight: 500; color: var(--text-3); margin-right: 4px; }
+.state { margin-top: 16px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.st { padding: 12px 14px; border-radius: var(--r-in); background: var(--canvas); }
+.st small { font-size: 12px; color: var(--text-3); display: block; } .st b { display: block; font-size: 15px; font-weight: 600; margin-top: 4px; } .st span { font-size: 12px; color: var(--text-2); }
+.st.money { background: linear-gradient(135deg,#FFF7EA,#FFEDD2); } .st.money small { color: var(--amber-ink); }
+.banner { margin-top: 14px; padding: 12px 14px; border-radius: var(--r-in); background: var(--slate-soft); display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.p360 { display: grid; grid-template-columns: 232px minmax(0,1fr); gap: 24px; margin-top: 20px; align-items: start; }
+.rail { position: sticky; top: 96px; padding: 10px; }
+.rail .g { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 10px 10px 4px; }
+.rail button { width: 100%; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 0; background: transparent; border-radius: var(--r-in); font-size: 13.5px; font-weight: 500; color: var(--ink); text-align: left; }
+.rail button:hover { background: #F2F6FA; }
+.rail button.on { background: linear-gradient(90deg,#DDF4F2,#E6F0FD); color: var(--nav-teal); }
+.rail button .n { margin-left: auto; font-size: 11.5px; color: var(--text-3); background: var(--slate-soft); border-radius: 99px; padding: 1px 8px; }
+.rail svg { width: 16px; height: 16px; color: #4A5D73; flex: none; }
+.rail button.on svg { color: var(--nav-teal); }
+.content { display: grid; gap: 20px; min-width: 0; }
+.content > *, .two > * { min-width: 0; }
+.two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; }
+.body { padding: 16px 20px 20px; }
+.li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.li:first-child { border-top: 0; padding-top: 4px; }
+.li .k { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+.li .k svg { width: 16px; height: 16px; }
+.li .t { flex: 1; min-width: 0; } .li .t b { font-weight: 500; font-size: 13.5px; display: block; } .li .t small { font-size: 12px; color: var(--text-3); }
+.li .r { text-align: right; font-size: 13px; }
+.k.teal { background: var(--teal-soft); color: var(--teal-ink); } .k.blue { background: var(--blue-soft); color: var(--blue-ink); }
+.k.violet { background: var(--violet-soft); color: var(--violet-ink); } .k.amber { background: var(--amber-soft); color: var(--amber-ink); }
+.k.rose { background: var(--rose-soft); color: var(--rose-ink); } .k.slate { background: var(--slate-soft); color: var(--text-2); }
+.prog { height: 6px; border-radius: 99px; background: var(--slate-soft); overflow: hidden; margin-top: 8px; }
+.prog i { display: block; height: 100%; border-radius: 99px; }
+.now { padding: 16px; border-radius: var(--r-in); background: linear-gradient(135deg,#EAFAF6,#E2ECFD); }
+.now + .now { margin-top: 10px; }
+.now.violet { background: linear-gradient(135deg,#F4F0FF,#EAF1FF); }
+
+/* dental chart */
+.chart { padding: 8px 0 4px; overflow-x: auto; }
+.arch { display: grid; grid-template-columns: repeat(16, minmax(30px,1fr)); gap: 6px; min-width: 560px; }
+.arch + .arch { margin-top: 14px; }
+.mid { height: 1px; background: var(--line); margin: 14px 0 0; min-width: 560px; }
+.tooth { border: 1px solid var(--line-2); background: #fff; border-radius: 10px 10px 14px 14px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; color: var(--text-2); position: relative; transition: transform .12s, box-shadow .12s; }
+.arch.lower .tooth { border-radius: 14px 14px 10px 10px; }
+.tooth:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.tooth.sel { outline: 2px solid var(--teal); outline-offset: 1px; }
+.tooth i { width: 14px; height: 14px; border-radius: 4px; display: block; }
+.tooth.caries i { background: var(--amber); } .tooth.filled i { background: var(--blue); } .tooth.rct i { background: var(--violet); }
+.tooth.crown i { background: var(--teal); } .tooth.missing { background: repeating-linear-gradient(135deg,#F3F5F8 0 4px,#fff 4px 8px); color: #9AA5B4; }
+.tooth.planned { border-style: dashed; border-color: #8C79E8; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-2); margin-top: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; } .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.toothpanel { padding: 16px; border-radius: var(--r-in); background: var(--canvas); }
+.stages { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-top: 10px; }
+.stages div { font-size: 11.5px; padding: 8px; border-radius: 8px; background: #fff; border: 1px solid var(--line); text-align: center; color: var(--text-2); }
+.stages div.done { background: var(--violet-soft); border-color: transparent; color: var(--violet-ink); font-weight: 500; }
+.stages div.now { background: #fff; border: 1.5px solid var(--violet); color: var(--violet-ink); font-weight: 600; }
+
+/* physio */
+.pain { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.pain b { width: 26px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 12px; }
+.pb-hi { background: var(--rose-soft); color: var(--rose-ink); } .pb-mid { background: var(--amber-soft); color: var(--amber-ink); } .pb-lo { background: var(--green-soft); color: var(--green-ink); }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tbl th { text-align: left; font-size: 11.5px; font-weight: 500; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+table.tbl td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.tbl tr:last-child td { border-bottom: 0; }
+.ring { width: 92px; height: 92px; flex: none; }
+
+/* register */
+.reg { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 24px; margin-top: 20px; align-items: start; }
+.fgroup { padding: 20px; }
+.fgroup + .fgroup { border-top: 1px solid var(--line); }
+.fgroup h3 { margin: 0 0 4px; font-size: 14.5px; font-weight: 600; } .fgroup p.d { margin: 0 0 14px; font-size: 12.5px; color: var(--text-3); }
+.fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 14px; }
+.f label { display: block; font-size: 12.5px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+.f label em { font-style: normal; color: var(--rose-ink); margin-left: 2px; } .f label span { font-weight: 400; color: var(--text-3); }
+.f input, .f select { width: 100%; height: 44px; border-radius: var(--r-in); border: 1px solid var(--line-2); background: #fff; padding: 0 12px; font-size: 14px; }
+.f input:focus, .f select:focus { outline: 0; border-color: #00A8A8; box-shadow: 0 0 0 3px rgba(0,168,168,.15); }
+.f .err { font-size: 12px; color: var(--rose-ink); margin-top: 6px; }
+.f.wide { grid-column: span 2; } .f.full { grid-column: 1 / -1; }
+.collapse { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 20px; border-top: 1px solid var(--line); font-size: 13.5px; font-weight: 500; color: var(--ink-2); background: transparent; border-left: 0; border-right: 0; border-bottom: 0; width: 100%; }
+.sticky { position: sticky; top: 96px; }
+.match { padding: 14px; border-radius: var(--r-in); border: 1px solid #F5C9A0; background: linear-gradient(135deg,#FFF9F0,#FFF1DD); }
+.match + .match { margin-top: 10px; }
+.match.masked { border-color: var(--line-2); background: var(--canvas); }
+.ack { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.ack input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--teal); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--text-2); padding: 5px 0; }
+.check .ok { color: var(--green-ink); } .check .no { color: var(--text-3); }
+
+/* ---------------------------------------------------------------- review panel (design review only) */
+.review { position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 300px; background: #0B1F33; color: #E8EEF6; border-radius: 16px; box-shadow: 0 20px 50px -20px rgba(0,0,0,.5); font-size: 12.5px; }
+.review header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.review header b { font-size: 12.5px; } .review header button { background: transparent; border: 0; color: #9FB3C8; height: 32px; }
+.review .grid { padding: 10px 14px 14px; display: grid; gap: 10px; }
+.review .grid.hide { display: none; }
+.review label { display: block; color: #9FB3C8; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.review .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.review .opts button { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: transparent; color: #E8EEF6; font-size: 12px; }
+.review .opts button.on { background: #12A99A; border-color: #12A99A; }
+.review p { margin: 0; color: #9FB3C8; font-size: 11.5px; line-height: 1.45; }
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width: 1279px) {
+  .dir-grid { grid-template-columns: minmax(0,1fr); }
+  .dir-aside { display: none; }
+  .p360 { grid-template-columns: 208px minmax(0,1fr); }
+  .two { grid-template-columns: minmax(0,1fr); }
+  .cols { grid-template-columns: minmax(240px,2.2fr) minmax(0,1fr) minmax(0,1.3fr); }
+  .col-seen { display: none; }
+  .top .who { display: none; }
+  .actions { margin-left: 0; width: 100%; }
+}
+@media (max-width: 1023px) {
+  .side { display: none; }
+  .top .menu { display: grid; border: 1px solid var(--line-2); }
+  .top .bar { height: 64px; padding: 0 24px; }
+  .top .clock { display: none; }
+  .page { padding: 20px 24px 120px; }
+  .p360 { grid-template-columns: minmax(0,1fr); }
+  .rail { position: static; display: flex; gap: 6px; overflow-x: auto; padding: 6px; scrollbar-width: none; }
+  .rail .g { display: none; }
+  .rail button { width: auto; flex: none; padding: 0 14px; }
+  .rail button .n { display: none; }
+  .reg { grid-template-columns: minmax(0,1fr); }
+  .sticky { position: static; }
+}
+@media (max-width: 767px) {
+  .top .gsearch { display: none; }
+  .top .brandm { display: block !important; }
+  .page { padding: 16px 16px 140px; }
+  .colhead, .list-head span + span { display: none; }
+  .cols { grid-template-columns: minmax(0,1fr); }
+  .col-care, .col-spec { display: none; }
+  .ra { display: none; }
+  .row::after { content: '›'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 22px; color: var(--text-3); }
+  .row .who-c { padding-right: 20px; }
+  .state { grid-template-columns: minmax(0,1fr); }
+  .idcard { padding: 18px 16px; }
+  .idtop .av { width: 52px; height: 52px; font-size: 17px; }
+  .idname { font-size: 20px; }
+  .actions { margin-left: 0; width: 100%; }
+  .actions .btn.pri { flex: 1; justify-content: center; }
+  .actions .desk { display: none; }
+  .fields { grid-template-columns: minmax(0,1fr); }
+  .f.wide { grid-column: auto; }
+  .stages { grid-template-columns: repeat(2,1fr); }
+  .review { left: 16px; right: 16px; width: auto; }
+  .h1 { font-size: 21px; }
+  .finder { padding: 14px; }
+  .finder .q { height: 52px; }
+  .finder .q kbd, .finder .hint .kb { display: none; }
+  table.tbl .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<!-- Design review artifact. Fictional data only. Not routed, not imported by the application, no network calls except the font. -->
+<div class="app">
+  <aside class="side" aria-label="Sidebar (approved shell, static replica)">
+    <div class="brand"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav aria-label="Main">
+      <div class="grp">Main</div>
+      <a class="it" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard</a>
+      <a class="it" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Appointments</a>
+      <a class="it on" href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg>Patients</a>
+      <span class="it dim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 2h12M6 22h12M7 2c0 6 10 6 10 10S7 16 7 22M17 2c0 6-10 6-10 10s10 4 10 10"/></svg>Queue<span class="soon">Soon</span></span>
+      <a class="it" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Billing</a>
+      <span class="it dim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Reports<span class="soon">Soon</span></span>
+      <div class="grp">Additional</div>
+      <span class="it dim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/></svg>Follow-ups<span class="soon">Soon</span></span>
+      <a class="it" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>Notifications</a>
+      <a class="it" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6l3.6 3.6M14.8 14.8l3.6 3.6M18.4 5.6l-3.6 3.6M9.2 14.8l-3.6 3.6"/></svg>Support</a>
+    </nav>
+    <div class="clinic"><i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M3 21h18M8 7h4M8 11h4M8 15h4"/></svg></i><div><b style="font-size:13.5px;font-weight:600">Lotus Smile &amp; Spine Care</b><div class="muted" style="font-size:12px">Fictional clinic</div></div></div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="bar">
+        <button class="ib menu" aria-label="Open navigation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <b class="brandm" style="display:none;font-size:18px;font-weight:600">OralCares</b>
+        <div class="gsearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search patients and more…<kbd>Ctrl K</kbd></div>
+        <div class="right">
+          <div class="clock"><small>Sat, 24 Oct 2026</small><b class="tab">10:42 AM</b></div>
+          <button class="ib" aria-label="Notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></button>
+          <span class="avatar" id="avatar">RK</span>
+          <span class="who"><b id="whoName">Riya Kapoor</b><small id="whoRole">Receptionist</small></span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page" id="page" tabindex="-1"></main>
+  </div>
+</div>
+
+<aside class="review" aria-label="Design review controls">
+  <header><b>Design review · Patients v2</b><button id="rvToggle" aria-expanded="true">Hide</button></header>
+  <div class="grid" id="rvGrid">
+    <div><label>Screen</label><div class="opts" data-k="view"></div></div>
+    <div><label>Signed in as</label><div class="opts" data-k="role"></div></div>
+    <div><label>Clinic practises</label><div class="opts" data-k="clinic"></div></div>
+    <div><label>State</label><div class="opts" data-k="state"></div></div>
+    <p>Fictional patients. Visibility follows the repository's permissions and the Patient 360 lens (blueprint §9). Nothing here talks to the app.</p>
+  </div>
+</aside>
+
+<script>
+/* ============================================================== fictional data */
+const PATIENTS = [
+  { id: 1, name: 'Aarav Mehta', uhid: 'LSS-2025-00142', age: 34, g: 'M', phone: '+91 98200 14521', spec: ['dental'], care: { t: 'Root canal · 46', s: 'Stage 2 of 4' }, seen: '12 Oct 2026', branch: 'Bandra', alert: true, status: 'active' },
+  { id: 2, name: 'Meera Iyer', uhid: 'LSS-2025-00139', age: 41, g: 'F', phone: '+91 99870 22310', spec: ['physio'], care: { t: 'Lower back plan', s: '6 of 10 sessions' }, seen: '22 Oct 2026', branch: 'Bandra', alert: false, status: 'active' },
+  { id: 3, name: 'Kabir Shah', uhid: 'LSS-2025-00137', age: 9, g: 'M', phone: '+91 90040 55102', spec: ['dental'], care: null, seen: '03 Oct 2026', branch: 'Powai', alert: false, status: 'active' },
+  { id: 4, name: 'Ananya Rao', uhid: 'LSS-2025-00131', age: 27, g: 'F', phone: '+91 98670 33019', spec: ['dental', 'physio'], care: { t: 'Aligners', s: 'Tray 7 of 18' }, seen: '20 Oct 2026', branch: 'Bandra', alert: false, status: 'active' },
+  { id: 5, name: 'Rohan Desai', uhid: 'LSS-2025-00128', age: 58, g: 'M', phone: '+91 97690 81234', spec: ['physio'], care: { t: 'Knee rehab', s: '3 of 12 sessions' }, seen: '18 Oct 2026', branch: 'Powai', alert: true, status: 'active' },
+  { id: 6, name: 'Sana Qureshi', uhid: 'LSS-2025-00120', age: 33, g: 'F', phone: '+91 98330 47120', spec: ['dental'], care: null, seen: '29 Sep 2026', branch: 'Bandra', alert: false, status: 'inactive' },
+  { id: 7, name: 'Vikram Nair', uhid: 'LSS-2025-00117', age: 46, g: 'M', phone: '+91 99200 61845', spec: ['general'], care: null, seen: '14 Sep 2026', branch: 'Bandra', alert: false, status: 'active' },
+  { id: 8, name: 'Ishita Banerjee', uhid: 'LSS-2025-00109', age: 22, g: 'F', phone: '+91 98190 30214', spec: ['dental'], care: { t: 'Implant · 36', s: 'Healing, 6 weeks' }, seen: '15 Oct 2026', branch: 'Powai', alert: false, status: 'active' },
+];
+const RECENT = [1, 2, 4, 8];
+
+const ROLES = {
+  owner: { label: 'Owner', name: 'Dr. Arjun Malhotra', initials: 'AM', role: 'Clinic owner' },
+  doctor: { label: 'Doctor', name: 'Dr. Kavya Rao', initials: 'KR', role: 'Doctor · Dental' },
+  reception: { label: 'Reception', name: 'Riya Kapoor', initials: 'RK', role: 'Receptionist' },
+  billing: { label: 'Billing', name: 'Neel Joshi', initials: 'NJ', role: 'Billing staff' },
+};
+
+/* What each role may see and do — mirrors blueprint §9 (from ClinicPermission + Patient360SectionPolicy). */
+const LENS = {
+  owner: { clinical: true, financial: true, dental: 'clinical', physio: true, appointments: true, audit: true, edit: true, archive: 'direct',
+    primary: 'Book appointment', desk: ['Check in', 'Collect payment'], more: ['Edit details', 'Assign doctor', 'Upload document', 'Record consent', 'Archive patient', 'Approval queue'] },
+  doctor: { clinical: true, financial: true, dental: 'clinical', physio: true, appointments: true, audit: false, edit: false, archive: null,
+    primary: 'Start consultation', desk: ['Add follow-up'], more: ['Check in', 'Upload document', 'Record consent'] },
+  reception: { clinical: false, financial: true, dental: 'operational', physio: false, appointments: true, audit: false, edit: true, archive: null,
+    primary: 'Check in', desk: ['Book appointment', 'Collect payment', 'Add follow-up'], more: ['Edit details', 'Assign doctor', 'Upload document', 'Record consent', 'Messages'] },
+  billing: { clinical: false, financial: true, dental: 'financial', physio: false, appointments: false, audit: false, edit: false, archive: null,
+    primary: 'Collect payment', desk: ['Messages'], more: [] },
+};
+
+const S = { view: 'directory', role: 'reception', clinic: 'both', state: 'normal', patient: 1, section: null, filters: { status: true, care: false, spec: '' }, q: '', kb: -1, tooth: 46 };
+
+/* ============================================================== helpers */
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const initials = (n) => n.split(' ').map((w) => w[0]).slice(0, 2).join('');
+const ic = {
+  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/></svg>',
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+  steth: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 3v6a5 5 0 0 0 10 0V3M11 14v2a5 5 0 0 0 10 0v-2"/><circle cx="21" cy="12" r="0"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>',
+  pill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M9.2 9.2l5.6 5.6"/></svg>',
+  flask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/></svg>',
+  tooth: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M7 3c-2.5 0-4 2-4 4.5 0 3 1.5 4 2 7 .4 2.6 1 6.5 2.5 6.5S9.5 17 12 17s3 4 4.5 4 2.1-3.9 2.5-6.5c.5-3 2-4 2-7C21 5 19.5 3 17 3c-2 0-3 1-5 1S9 3 7 3z"/></svg>',
+  spine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="9" y="2" width="6" height="4" rx="1.5"/><rect x="8.5" y="7.5" width="7" height="4" rx="1.5"/><rect x="8" y="13" width="8" height="4" rx="1.5"/><path d="M12 18.5V22"/></svg>',
+  wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>',
+  sign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 21h18M5 17l9.5-9.5a2.1 2.1 0 0 1 3 3L8 20H5z"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 12a8 8 0 0 1-11.7 7.1L3 21l1.9-6.3A8 8 0 1 1 21 12z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  alert: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+  archive: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>',
+};
+const specChip = (s) => s === 'dental' ? '<span class="chip teal">Dental</span>' : s === 'physio' ? '<span class="chip violet">Physio</span>' : '<span class="chip blue">General</span>';
+const specOf = (p) => p.spec.includes('dental') ? 'dental' : p.spec.includes('physio') ? 'physio' : 'general';
+const clinicAllows = (s) => S.clinic === 'both' || s === 'general' || s === S.clinic;
+
+/* ============================================================== directory */
+function visiblePatients() {
+  const q = S.q.trim().toLowerCase();
+  return PATIENTS.filter((p) => p.spec.some(clinicAllows))
+    .filter((p) => (S.filters.status ? p.status !== 'archived' : true))
+    .filter((p) => (S.filters.care ? !!p.care : true))
+    .filter((p) => (S.filters.spec ? p.spec.includes(S.filters.spec) : true))
+    .filter((p) => {
+      if (!q) return true;
+      if (/^[\d\s+()-]+$/.test(q)) { const d = q.replace(/\D/g, ''); return p.phone.replace(/\D/g, '').includes(d) || p.uhid.replace(/\D/g, '').startsWith(d); }
+      if (q.startsWith('lss')) return p.uhid.toLowerCase().startsWith(q);
+      const words = q.split(/\s+/); const parts = p.name.toLowerCase().split(' ');
+      return words.every((w) => parts.some((n) => n.startsWith(w)));
+    });
+}
+
+function rowActions(p) {
+  const l = LENS[S.role]; const out = [];
+  if (S.role === 'reception' || S.role === 'owner') out.push('<button class="btn sm" onclick="event.stopPropagation()">Check in</button>');
+  if (l.appointments && S.role !== 'doctor') out.push('<button class="btn sm" onclick="event.stopPropagation()">Book</button>');
+  out.push(`<button class="btn sm open" aria-label="Open ${esc(p.name)}">Open →</button>`);
+  return out.join('');
+}
+
+function directory() {
+  const role = S.role; const practitioner = role === 'doctor';
+  const canRegister = role === 'owner' || role === 'reception';
+  const list = visiblePatients();
+  let body;
+  if (S.state === 'loading') {
+    body = Array.from({ length: 6 }, () => `<div class="row cols" style="cursor:default"><div class="who-c"><span class="skel" style="width:40px;height:40px;border-radius:12px"></span><div style="flex:1"><div class="skel" style="height:12px;width:60%"></div><div class="skel" style="height:10px;width:40%;margin-top:8px"></div></div></div><div class="skel col-spec" style="height:12px;width:70%"></div><div class="skel col-care" style="height:12px;width:80%"></div><div class="skel col-seen" style="height:12px;width:60%"></div></div>`).join('');
+  } else if (S.state === 'empty') {
+    body = `<div class="empty"><div class="icon teal">${ic.user}</div><h4>No patients registered yet</h4><p>Patients appear here as soon as the front desk registers them or a New Case is checked in.</p>${canRegister ? `<button class="btn pri">${ic.plus}Register the first patient</button>` : ''}</div>`;
+  } else if (S.state === 'error') {
+    body = `<div class="empty"><div class="icon rose">${ic.alert}</div><h4>The list did not load</h4><p>Nothing was changed. Check the connection and try again.</p><button class="btn">Try again</button></div>`;
+  } else if (list.length === 0 || S.state === 'noresults') {
+    const q = S.q || 'Rahul Verma';
+    body = `<div class="empty"><div class="icon blue">${ic.search}</div><h4>No patient matches “${esc(q)}”</h4><p>Names match from the start of a first or last name. Try the phone number or the patient ID, or clear the filters.</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn" onclick="S.q='';S.state='normal';S.filters={status:true,care:false,spec:''};render()">Clear search and filters</button>${canRegister ? `<button class="btn pri">${ic.plus}Register “${esc(q)}”</button>` : ''}</div></div>`;
+  } else {
+    body = list.map((p, i) => `
+      <div class="row cols ${S.kb === i ? 'kb' : ''}" tabindex="0" role="link" aria-label="Open ${esc(p.name)}" onclick="openPatient(${p.id})" onkeydown="if(event.key==='Enter')openPatient(${p.id})">
+        <div class="who-c">
+          <span class="av ${specOf(p)}">${initials(p.name)}</span>
+          <div style="min-width:0">
+            <div class="nm"><span>${esc(p.name)}</span>${p.alert && LENS[S.role].clinical ? '<span class="alert-dot" title="Critical alert on record"></span>' : ''}${p.status === 'inactive' ? '<span class="chip">Inactive</span>' : ''}</div>
+            <div class="meta"><span class="chip id">${p.uhid}</span> · ${p.age} · ${p.g} · <span class="tab">${p.phone}</span></div>
+          </div>
+        </div>
+        <div class="col-spec" style="display:flex;gap:6px;flex-wrap:wrap">${p.spec.filter(clinicAllows).map(specChip).join('')}</div>
+        <div class="col-care care">${p.care ? `<b>${esc(p.care.t)}</b><small>${esc(p.care.s)}</small>` : '<small class="muted">No active care</small>'}</div>
+        <div class="col-seen care"><b class="tab">${p.seen}</b><small>${p.branch}</small></div>
+        <div class="ra">${rowActions(p)}</div>
+      </div>`).join('');
+  }
+
+  const spec = S.filters.spec;
+  return `
+  <div class="dir-head">
+    <div><h1 class="h1">Patients</h1><div class="cap">Everyone you may see at this clinic · newest registrations first</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${role === 'reception' || role === 'owner' ? `<button class="btn">${ic.plus}New Case</button>` : ''}
+      ${canRegister ? `<button class="btn pri" onclick="go('register')">${ic.plus}Register patient</button>` : ''}
+    </div>
+  </div>
+  <div class="dir-grid">
+    <div style="min-width:0">
+      <section class="card finder" aria-label="Find a patient">
+        <label class="q">${ic.search}<span class="sr">Search patients</span><input id="q" value="${esc(S.q)}" placeholder="Name, phone or patient ID" autocomplete="off" /><kbd>/</kbd></label>
+        <div class="hint"><span>Digits search phone and ID · words search names</span><span class="kb">↑ ↓ to move · Enter to open</span></div>
+        <div class="filters">
+          ${practitioner ? '<div class="seg" role="group" aria-label="Scope"><button class="on">My patients</button><button>All patients</button></div>' : ''}
+          <button class="fchip ${S.filters.status ? 'on' : ''}" onclick="S.filters.status=!S.filters.status;render()">Status: ${S.filters.status ? 'Working' : 'Any'} ${ic.chev}</button>
+          ${S.clinic === 'both' ? `<button class="fchip ${spec ? 'on' : ''}" onclick="S.filters.spec=S.filters.spec===''?'dental':S.filters.spec==='dental'?'physio':'';render()">Specialty: ${spec ? spec[0].toUpperCase() + spec.slice(1) : 'All'} ${ic.chev}</button>` : ''}
+          <button class="fchip">Branch: All ${ic.chev}</button>
+          <button class="fchip ${S.filters.care ? 'on' : ''}" onclick="S.filters.care=!S.filters.care;render()">In active care</button>
+        </div>
+      </section>
+      <section class="card list" aria-label="Patients">
+        <div class="list-head"><span id="live" aria-live="polite">${S.state === 'normal' && list.length ? `${list.length} shown · newest first` : ''}</span><span>Branch-limited staff see their branches only</span></div>
+        <div class="cols colhead"><div>Patient</div><div class="col-spec">Specialties</div><div class="col-care">Active care</div><div class="col-seen">Last seen</div></div>
+        ${body}
+        ${S.state === 'normal' && list.length ? '<div class="pager"><button class="btn sm" disabled style="opacity:.5">← Back</button><span>Showing the newest 25 · no page numbers at this scale</span><button class="btn sm">Show next 25 →</button></div>' : ''}
+      </section>
+    </div>
+    <aside class="dir-aside">
+      <section class="card aside-card"><h4>Recently opened</h4>
+        ${RECENT.map((id) => PATIENTS.find((p) => p.id === id)).filter((p) => p.spec.some(clinicAllows)).map((p) => `<a class="recent" href="#" onclick="openPatient(${p.id});return false"><span class="av ${specOf(p)}" style="width:32px;height:32px;border-radius:10px;font-size:12px">${initials(p.name)}</span><span style="min-width:0"><b style="font-weight:500;display:block">${esc(p.name)}</b><small class="muted">${p.uhid}</small></span></a>`).join('')}
+        <p class="muted" style="font-size:11.5px;margin:10px 0 8px">Kept on this device only.</p>
+      </section>
+      <section class="card tip"><b>Find faster</b><p>Type the last digits of a phone number or the patient ID — numbers never search names, so results come straight from the index.</p></section>
+    </aside>
+  </div>`;
+}
+
+/* ============================================================== patient 360 */
+function sectionsFor() {
+  const l = LENS[S.role]; const showDental = S.clinic !== 'physio' && l.dental; const showPhysio = S.clinic !== 'dental' && l.physio;
+  const g = [];
+  g.push({ g: '', items: [{ k: 'overview', l: 'Overview', i: ic.grid }] });
+  if (l.clinical) g.push({ g: 'Clinical', items: [{ k: 'encounters', l: 'Encounters', i: ic.steth, n: 14 }, { k: 'prescriptions', l: 'Prescriptions', i: ic.pill, n: 6 }, { k: 'investigations', l: 'Investigations', i: ic.flask, n: 3 }, { k: 'treatment', l: 'Treatment', i: ic.pulse, n: 2 }] });
+  else if (S.role === 'reception') g.push({ g: 'Clinical', items: [{ k: 'investigations', l: 'Investigations', i: ic.flask, n: 3 }] });
+  const sp = [];
+  if (showDental) sp.push({ k: 'dental', l: 'Dental', i: ic.tooth });
+  if (showPhysio) sp.push({ k: 'physio', l: 'Physiotherapy', i: ic.spine });
+  if (sp.length) g.push({ g: 'Specialty', items: sp });
+  const care = [];
+  if (l.appointments) care.push({ k: 'appointments', l: 'Appointments', i: ic.cal, n: 2 });
+  if (l.clinical || l.appointments) care.push({ k: 'follow-ups', l: 'Follow-ups', i: ic.clock, n: 1 });
+  if (care.length) g.push({ g: 'Care', items: care });
+  if (l.financial) g.push({ g: 'Money', items: [{ k: 'billing', l: 'Billing', i: ic.wallet }] });
+  const rec = [];
+  if (S.role !== 'billing') rec.push({ k: 'documents', l: 'Documents', i: ic.doc, n: 5 }, { k: 'consents', l: 'Consents', i: ic.sign, n: 2 });
+  rec.push({ k: 'communication', l: 'Communication', i: ic.chat }, { k: 'timeline', l: 'Timeline', i: ic.clock });
+  g.push({ g: 'Records', items: rec });
+  if (l.audit) g.push({ g: 'Governance', items: [{ k: 'requests', l: 'Requests', i: ic.shield }, { k: 'audit', l: 'Audit', i: ic.shield }] });
+  return g;
+}
+function defaultSection() {
+  if (S.role === 'billing') return 'billing';
+  return 'overview';
+}
+
+function idCard(p) {
+  const l = LENS[S.role]; const archived = S.state === 'archived';
+  const actions = archived ? '' : `
+    <div class="actions">
+      <button class="btn pri">${esc(l.primary)}</button>
+      ${l.desk.map((d) => `<button class="btn desk">${esc(d)}</button>`).join('')}
+      ${l.more.length ? `<div class="more"><button class="btn" aria-haspopup="menu" aria-expanded="false" onclick="toggleMore(this)">More ${ic.chev.replace('<svg', '<svg width="14" height="14"')}</button><div class="more-menu" role="menu">${l.more.map((m) => `<button role="menuitem" class="${/Archive/.test(m) ? 'danger btn ghost' : ''}" style="${/Archive/.test(m) ? 'color:var(--rose-ink)' : ''}">${/Archive/.test(m) ? ic.archive : ''}${esc(m)}</button>`).join('')}</div></div>` : ''}
+    </div>`;
+  return `
+  <section class="card idcard" aria-label="Patient identity">
+    <div class="idtop">
+      <span class="av ${specOf(p)}">${initials(p.name)}</span>
+      <div style="min-width:min(100%,360px);flex:1">
+        <div class="idname">${esc(p.name)} <span class="chip id">${p.uhid}</span> ${archived ? '<span class="chip">Archived</span>' : '<span class="chip green">Active</span>'}</div>
+        <div class="idmeta">
+          <span>${ic.user.replace('<svg', '<svg width="14" height="14"')} ${p.age} yrs · ${p.g === 'M' ? 'Male' : 'Female'}${l.clinical ? ' · B+' : ''}</span>
+          <span>${ic.phone.replace('<svg', '<svg width="14" height="14"')}<span class="tab">${p.phone}</span></span>
+          <span>${ic.pin.replace('<svg', '<svg width="14" height="14"')} Registered 3 Mar 2025 · ${p.branch}</span>
+          <span>${ic.steth.replace('<svg', '<svg width="14" height="14"')} Dr. Kavya Rao</span>
+        </div>
+      </div>
+      ${actions}
+    </div>
+    ${archived ? `<div class="banner">${ic.archive}<span><b>Archived on 21 Oct 2026</b> · “Moved abroad” · read-only. Records are kept; nothing can be changed or booked.</span></div>` : ''}
+    <div class="safety">
+      ${l.clinical ? `<span class="lbl">Safety</span><span class="chip rose">${ic.alert} Penicillin allergy · severe</span><span class="chip amber">Type 2 diabetes</span><span class="chip">Metformin 500 mg</span>` : `<span class="lbl">Safety</span><span class="chip rose">${ic.alert} Allergy on record — ask the doctor</span>`}
+    </div>
+    <div class="state">
+      <div class="st"><small>Last visit</small><b class="tab">12 Oct 2026</b><span>${l.clinical ? 'Dental review · Dr. Rao' : 'Bandra'}</span></div>
+      <div class="st"><small>Next appointment</small><b class="tab">28 Oct · 10:30 AM</b><span>Dr. Rao · Bandra</span></div>
+      ${l.financial ? '<div class="st money"><small>Outstanding</small><b class="tab">₹4,200</b><span>1 open bill</span></div>' : '<div class="st"><small>Follow-up</small><b>Due 2 Nov</b><span>Check healing</span></div>'}
+    </div>
+  </section>`;
+}
+
+function overview() {
+  const l = LENS[S.role]; const dental = S.clinic !== 'physio'; const physio = S.clinic !== 'dental';
+  const now = `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon teal">${ic.pulse}</span><div><h3>Now</h3><p>Care in progress</p></div></div></div>
+      <div class="body">
+        ${dental ? `<div class="now"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">Root canal · tooth 46</b><span class="chip violet">Stage 2 of 4</span></div><div class="cap">Cleaning &amp; shaping done 12 Oct · obturation next</div><div class="prog"><i style="width:50%;background:linear-gradient(90deg,#9B7BF2,#6B48DE)"></i></div></div>` : ''}
+        ${physio ? `<div class="now violet"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">Lower back — plan of care</b><span class="chip blue">6 of 10 sessions</span></div><div class="cap">Pain 7 → 3 since the first session</div><div class="prog"><i style="width:60%;background:linear-gradient(90deg,#4F9BF0,#2B6FD8)"></i></div></div>` : ''}
+      </div></section>`;
+  const next = `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon blue">${ic.cal}</span><div><h3>Next</h3><p>What is booked or due</p></div></div></div>
+      <div class="body">
+        <div class="li"><span class="k blue">${ic.cal}</span><div class="t"><b>Appointment · 28 Oct, 10:30 AM</b><small>Dr. Kavya Rao · Bandra · Root canal stage 3</small></div></div>
+        <div class="li"><span class="k amber">${ic.clock}</span><div class="t"><b>Follow-up due 2 Nov</b><small>Check healing after obturation</small></div><div class="r"><span class="chip amber">In 9 days</span></div></div>
+      </div></section>`;
+  const dx = l.clinical ? `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon violet">${ic.steth}</span><div><h3>Recent diagnoses</h3><p>From finalised consultations</p></div></div><a class="btn ghost sm" href="#">All encounters</a></div>
+      <div class="body">
+        <div class="li"><span class="k violet">${ic.tooth}</span><div class="t"><b>Irreversible pulpitis · 46</b><small>12 Oct 2026 · Dr. Rao</small></div></div>
+        <div class="li"><span class="k violet">${ic.tooth}</span><div class="t"><b>Dental caries · 16, 26</b><small>04 Aug 2026 · Dr. Rao</small></div></div>
+      </div></section>` : '';
+  const inv = `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon amber">${ic.flask}</span><div><h3>Investigations</h3><p>Awaiting results</p></div></div></div>
+      <div class="body">
+        <div class="li"><span class="k amber">${ic.flask}</span><div class="t"><b>IOPA X-ray · 46</b><small>Ordered 12 Oct · ${l.clinical ? 'Result due' : 'Status only'}</small></div><div class="r"><span class="chip amber">Ordered</span></div></div>
+        <div class="li"><span class="k slate">${ic.flask}</span><div class="t"><b>HbA1c</b><small>Ordered 04 Aug</small></div><div class="r"><span class="chip green">${l.clinical ? 'Reviewed' : 'Resulted'}</span></div></div>
+      </div></section>`;
+  const pay = l.financial ? `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon mint">${ic.wallet}</span><div><h3>Latest payments</h3><p>Receipts for this patient</p></div></div><a class="btn ghost sm" href="#" onclick="setSection('billing');return false">Billing</a></div>
+      <div class="body">
+        <div class="li"><span class="k teal">${ic.wallet}</span><div class="t"><b>₹3,000 · UPI</b><small>12 Oct 2026 · RCP-2026-0412</small></div></div>
+        <div class="li"><span class="k teal">${ic.wallet}</span><div class="t"><b>₹1,500 · Cash</b><small>04 Aug 2026 · RCP-2026-0287</small></div></div>
+      </div></section>` : '';
+  return `<div class="two">${now}${next}</div><div class="two">${dx || inv}${dx ? inv : pay}</div>${dx && pay ? `<div class="two">${pay}<div></div></div>` : ''}`;
+}
+
+const TEETH_U = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+const TEETH_L = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
+const TSTATE = { 16: 'filled', 26: 'caries', 46: 'rct planned', 36: 'crown', 18: 'missing', 38: 'missing', 24: 'filled', 47: 'caries' };
+function dental() {
+  const view = LENS[S.role].dental;
+  const label = view === 'clinical' ? 'Clinical view' : view === 'operational' ? 'Front-desk view · no clinical notes' : 'Billing view · estimates only';
+  const tooth = (n, lower) => `<button class="tooth ${TSTATE[n] || ''} ${S.tooth === n ? 'sel' : ''}" aria-label="Tooth ${n}${TSTATE[n] ? ', ' + TSTATE[n] : ''}" ${view === 'clinical' ? `onclick="S.tooth=${n};render()"` : 'disabled'}>${lower ? `<i></i><span>${n}</span>` : `<span>${n}</span><i></i>`}</button>`;
+  const chart = view !== 'financial' ? `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon teal">${ic.tooth}</span><div><h3>Tooth chart</h3><p>FDI numbering · ${label}</p></div></div>${view === 'clinical' ? '<div class="seg"><button class="on">2D</button><button>3D</button></div>' : ''}</div>
+      <div class="body">
+        <div class="chart"><div class="arch">${TEETH_U.map((n) => tooth(n, false)).join('')}</div><div class="mid"></div><div class="arch lower" style="margin-top:14px">${TEETH_L.map((n) => tooth(n, true)).join('')}</div></div>
+        <div class="legend"><span><i style="background:var(--amber)"></i>Caries</span><span><i style="background:var(--blue)"></i>Filled</span><span><i style="background:var(--violet)"></i>Root canal</span><span><i style="background:var(--teal)"></i>Crown</span><span><i style="background:repeating-linear-gradient(135deg,#E3E8EF 0 3px,#fff 3px 6px)"></i>Missing</span><span><i style="border:1.5px dashed #8C79E8;background:#fff"></i>Planned</span></div>
+      </div></section>` : '';
+  const detail = view === 'clinical' ? `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon violet">${ic.tooth}</span><div><h3>Tooth ${S.tooth}</h3><p>${S.tooth === 46 ? 'Root canal in progress' : TSTATE[S.tooth] ? TSTATE[S.tooth] : 'No findings recorded'}</p></div></div></div>
+      <div class="body"><div class="toothpanel">
+        ${S.tooth === 46 ? `<b style="font-size:13px">Endodontic treatment</b><div class="cap">Diagnosis: irreversible pulpitis · 3 canals · started 04 Oct</div><div class="stages"><div class="done">Access</div><div class="done">Shaping</div><div class="now">Obturation</div><div>Crown</div></div>` : '<div class="cap">Select a tooth on the chart to see its history and current work.</div>'}
+      </div></div></section>` : '';
+  const plan = `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon blue">${ic.doc}</span><div><h3>Treatment plan</h3><p>Accepted 04 Oct · ${view === 'financial' ? 'estimate and billed' : '2 of 4 items done'}</p></div></div></div>
+      <div class="body"><table class="tbl"><thead><tr><th>Item</th><th>Tooth</th><th>Status</th>${view !== 'operational' ? '<th class="tab" style="text-align:right">Estimate</th>' : ''}</tr></thead><tbody>
+        <tr><td>Scaling &amp; polishing</td><td>—</td><td><span class="chip green">Done</span></td>${view !== 'operational' ? '<td class="tab" style="text-align:right">₹1,500</td>' : ''}</tr>
+        <tr><td>Composite filling</td><td>16</td><td><span class="chip green">Done</span></td>${view !== 'operational' ? '<td class="tab" style="text-align:right">₹2,000</td>' : ''}</tr>
+        <tr><td>Root canal treatment</td><td>46</td><td><span class="chip violet">In progress</span></td>${view !== 'operational' ? '<td class="tab" style="text-align:right">₹7,500</td>' : ''}</tr>
+        <tr><td>Zirconia crown</td><td>46</td><td><span class="chip">Planned</span></td>${view !== 'operational' ? '<td class="tab" style="text-align:right">₹9,000</td>' : ''}</tr>
+      </tbody></table></div></section>`;
+  const lab = view !== 'financial' ? `
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon amber">${ic.flask}</span><div><h3>Lab work</h3><p>Crown for 46</p></div></div></div>
+      <div class="body"><div class="li"><span class="k amber">${ic.flask}</span><div class="t"><b>Zirconia crown · Precision Dental Lab</b><small>Impression due after obturation</small></div><div class="r"><span class="chip">Not sent</span></div></div></div></section>` : '';
+  return `${chart}<div class="two">${detail || lab}${detail ? plan : ''}</div>${detail ? `<div class="two">${lab}<div></div></div>` : plan}`;
+}
+
+function physio() {
+  return `
+  <div class="two">
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon violet">${ic.spine}</span><div><h3>Plan of care · lower back</h3><p>Started 01 Oct · 2× a week · Dr. Sameer Kulkarni</p></div></div><span class="chip violet">Active</span></div>
+      <div class="body">
+        <div class="li"><span class="k violet">${ic.pulse}</span><div class="t"><b>Sit for 30 minutes without pain</b><div class="prog"><i style="width:70%;background:linear-gradient(90deg,#9B7BF2,#6B48DE)"></i></div></div><div class="r tab">70%</div></div>
+        <div class="li"><span class="k violet">${ic.pulse}</span><div class="t"><b>Forward bend to mid-shin</b><div class="prog"><i style="width:45%;background:linear-gradient(90deg,#9B7BF2,#6B48DE)"></i></div></div><div class="r tab">45%</div></div>
+        <div class="li"><span class="k violet">${ic.pulse}</span><div class="t"><b>Return to evening walks</b><div class="prog"><i style="width:30%;background:linear-gradient(90deg,#9B7BF2,#6B48DE)"></i></div></div><div class="r tab">30%</div></div>
+      </div></section>
+    <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon blue">${ic.wallet}</span><div><h3>Session package</h3><p>10-session package · valid until 30 Dec</p></div></div></div>
+      <div class="body" style="display:flex;gap:18px;align-items:center">
+        <svg class="ring" viewBox="0 0 100 100" aria-label="6 of 10 sessions used"><circle cx="50" cy="50" r="40" fill="none" stroke="#EDF1F7" stroke-width="10"/><circle cx="50" cy="50" r="40" fill="none" stroke="url(#pg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="100" transform="rotate(-90 50 50)"/><defs><linearGradient id="pg" x1="0" x2="1"><stop offset="0" stop-color="#4F9BF0"/><stop offset="1" stop-color="#6B48DE"/></linearGradient></defs><text x="50" y="49" text-anchor="middle" font-size="20" font-weight="600" fill="#0B1F33">6/10</text><text x="50" y="65" text-anchor="middle" font-size="9" fill="#5F6B7E">used</text></svg>
+        <div><b style="font-size:13.5px">4 sessions remaining</b><div class="cap">Next booked: 26 Oct, 6:00 PM</div><div class="cap">Home programme: 4 exercises · daily</div></div>
+      </div></section>
+  </div>
+  <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon teal">${ic.clock}</span><div><h3>Sessions</h3><p>Pain is 0–10, before → after</p></div></div></div>
+    <div class="body" style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Date</th><th class="hide-sm">Therapist</th><th>Pain</th><th class="hide-sm">Treatment</th></tr></thead><tbody>
+      <tr><td class="tab">6</td><td class="tab">22 Oct</td><td class="hide-sm">Dr. Kulkarni</td><td><span class="pain"><b class="pb-mid">4</b>→<b class="pb-lo">3</b></span></td><td class="hide-sm">McKenzie extension · core activation</td></tr>
+      <tr><td class="tab">5</td><td class="tab">18 Oct</td><td class="hide-sm">Dr. Kulkarni</td><td><span class="pain"><b class="pb-mid">5</b>→<b class="pb-mid">4</b></span></td><td class="hide-sm">IFT · bird-dog · bridges</td></tr>
+      <tr><td class="tab">1</td><td class="tab">01 Oct</td><td class="hide-sm">Dr. Kulkarni</td><td><span class="pain"><b class="pb-hi">7</b>→<b class="pb-mid">6</b></span></td><td class="hide-sm">Assessment · hot pack · education</td></tr>
+    </tbody></table></div></section>`;
+}
+
+function billing() {
+  return `
+  <div class="two">
+    <section class="card" style="padding:18px 20px;background:linear-gradient(135deg,#FFF7EA,#FFEDD2);border:0"><small style="color:var(--amber-ink);font-weight:500">Outstanding</small><div style="font-size:24px;font-weight:600" class="tab">₹4,200</div><div class="cap" style="color:var(--text-2)">On 1 open bill · BIL-2026-0390</div><button class="btn pri" style="margin-top:12px">Collect payment</button></section>
+    <section class="card" style="padding:18px 20px;background:linear-gradient(135deg,#EAFAF6,#DCF3EE);border:0"><small style="color:var(--teal-ink);font-weight:500">Paid to date</small><div style="font-size:24px;font-weight:600" class="tab">₹8,500</div><div class="cap" style="color:var(--text-2)">4 payments since March 2025</div></section>
+  </div>
+  <section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon mint">${ic.wallet}</span><div><h3>Bills</h3><p>Newest first · each opens its detail</p></div></div></div>
+    <div class="body" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Bill</th><th>Date</th><th class="hide-sm">For</th><th style="text-align:right">Total</th><th style="text-align:right">Due</th><th>Status</th></tr></thead><tbody>
+      <tr><td class="tab">BIL-2026-0390</td><td class="tab">12 Oct</td><td class="hide-sm">Root canal · stage 2</td><td class="tab" style="text-align:right">₹7,200</td><td class="tab" style="text-align:right">₹4,200</td><td><span class="chip amber">Part paid</span></td></tr>
+      <tr><td class="tab">BIL-2026-0274</td><td class="tab">04 Aug</td><td class="hide-sm">Scaling · filling 16</td><td class="tab" style="text-align:right">₹3,500</td><td class="tab" style="text-align:right">₹0</td><td><span class="chip green">Paid</span></td></tr>
+    </tbody></table></div></section>`;
+}
+
+function timeline() {
+  const l = LENS[S.role];
+  const rows = [
+    { k: 'violet', i: ic.steth, t: 'Consultation finalised', s: '12 Oct · Dr. Rao · Root canal stage 2', c: true },
+    { k: 'teal', i: ic.wallet, t: 'Payment received · ₹3,000', s: '12 Oct · UPI · Riya Kapoor', f: true },
+    { k: 'blue', i: ic.cal, t: 'Appointment booked for 28 Oct', s: '12 Oct · Riya Kapoor' },
+    { k: 'slate', i: ic.doc, t: 'Document uploaded · OPG scan', s: '04 Oct · Dr. Rao' },
+    { k: 'amber', i: ic.sign, t: 'Consent recorded · Root canal', s: '04 Oct · signed in clinic' },
+  ].filter((r) => (r.c ? l.clinical : true) && (r.f ? l.financial : true));
+  return `<section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon blue">${ic.clock}</span><div><h3>Timeline</h3><p>Everything that happened, newest first</p></div></div><div class="seg"><button class="on">All</button>${l.clinical ? '<button>Clinical</button>' : ''}<button>Visits</button>${l.financial ? '<button>Money</button>' : ''}</div></div>
+    <div class="body">${rows.map((r) => `<div class="li"><span class="k ${r.k}">${r.i}</span><div class="t"><b>${r.t}</b><small>${r.s}</small></div></div>`).join('')}</div></section>`;
+}
+
+function placeholder(k) {
+  const titles = { encounters: 'Encounters', prescriptions: 'Prescriptions', investigations: 'Investigations', treatment: 'Treatment', appointments: 'Appointments', 'follow-ups': 'Follow-ups', documents: 'Documents', consents: 'Consents', communication: 'Communication', requests: 'Requests', audit: 'Audit' };
+  return `<section class="card"><div class="sechead"><div style="display:flex;gap:12px;align-items:center"><span class="icon blue">${ic.doc}</span><div><h3>${titles[k] || k}</h3><p>Same list anatomy as Timeline: icon · title · meta · status · action</p></div></div></div>
+    <div class="body">${[0, 1, 2].map(() => '<div class="li"><span class="skel" style="width:32px;height:32px;border-radius:10px"></span><div class="t"><div class="skel" style="height:12px;width:55%"></div><div class="skel" style="height:10px;width:35%;margin-top:8px"></div></div></div>').join('')}<p class="cap">Loading state shown — each section fetches its own page when opened (lazy, as the server already does).</p></div></section>`;
+}
+
+function patient360() {
+  const p = PATIENTS.find((x) => x.id === S.patient) || PATIENTS[0];
+  const groups = sectionsFor(); const keys = groups.flatMap((g) => g.items.map((i) => i.k));
+  if (!S.section || !keys.includes(S.section)) S.section = defaultSection();
+  const sec = S.section;
+  let content;
+  if (S.state === 'restricted') {
+    content = `<section class="card"><div class="empty"><div class="icon slate" style="background:linear-gradient(135deg,#94A3B8,#64748B)">${ic.shield}</div><h4>This part is not available to your role</h4><p>Your access does not include it. Ask the clinic owner if you need it — nothing is hidden by mistake.</p></div></section>`;
+  } else if (S.state === 'loading') content = placeholder(sec);
+  else if (sec === 'overview') content = overview();
+  else if (sec === 'dental') content = dental();
+  else if (sec === 'physio') content = physio();
+  else if (sec === 'billing') content = billing();
+  else if (sec === 'timeline') content = timeline();
+  else content = placeholder(sec);
+  return `
+  <nav class="crumb" aria-label="Breadcrumb"><a href="#" onclick="go('directory');return false">Patients</a><span>/</span><span>${esc(p.name)}</span></nav>
+  ${idCard(p)}
+  <div class="p360">
+    <nav class="card rail" aria-label="Patient sections">
+      ${groups.map((g) => `${g.g ? `<div class="g">${g.g}</div>` : ''}${g.items.map((i) => `<button class="${i.k === sec ? 'on' : ''}" aria-current="${i.k === sec ? 'page' : 'false'}" onclick="setSection('${i.k}')">${i.i}${i.l}${i.n ? `<span class="n tab">${i.n}</span>` : ''}</button>`).join('')}`).join('')}
+    </nav>
+    <div class="content">${content}</div>
+  </div>`;
+}
+
+/* ============================================================== register */
+function register() {
+  return `
+  <nav class="crumb" aria-label="Breadcrumb"><a href="#" onclick="go('directory');return false">Patients</a><span>/</span><span>Register patient</span></nav>
+  <div class="dir-head"><div><h1 class="h1">Register patient</h1><div class="cap">Only what is needed now · everything else can be added later</div></div></div>
+  <div class="reg">
+    <form class="card" onsubmit="return false" style="overflow:hidden">
+      <div class="fgroup"><h3>Identity</h3><p class="d">Fields marked <span style="color:var(--rose-ink)">*</span> are required by this clinic's settings.</p>
+        <div class="fields">
+          <div class="f"><label for="fn">First name<em>*</em></label><input id="fn" value="Aarav" /></div>
+          <div class="f"><label for="mn">Middle name <span>optional</span></label><input id="mn" /></div>
+          <div class="f"><label for="ln">Last name<em>*</em></label><input id="ln" value="Mehta" /></div>
+          <div class="f"><label for="g">Gender<em>*</em></label><select id="g"><option>Male</option><option>Female</option><option>Other</option></select></div>
+          <div class="f"><label for="dob">Date of birth <span>or age</span></label><input id="dob" placeholder="DD / MM / YYYY" /></div>
+          <div class="f"><label for="age">Age <span>if DOB unknown</span></label><input id="age" inputmode="numeric" value="34" /></div>
+        </div></div>
+      <div class="fgroup"><h3>Contact</h3><p class="d">Used for reminders and receipts.</p>
+        <div class="fields">
+          <div class="f wide"><label for="ph">Mobile number<em>*</em></label><input id="ph" inputmode="tel" value="+91 98200 14521" /></div>
+          <div class="f"><label for="ph2">Alternate number <span>optional</span></label><input id="ph2" inputmode="tel" /></div>
+          <div class="f wide"><label for="em">Email <span>optional</span></label><input id="em" type="email" placeholder="name@example.com" /><div class="err" hidden>Enter a valid email</div></div>
+        </div></div>
+      <button class="collapse" type="button">Address &amp; emergency contact <span class="muted">Optional · add</span></button>
+      <button class="collapse" type="button">Allergies &amp; medical alerts <span class="muted">${LENS[S.role].clinical ? 'Optional · add' : 'Clinical staff record these'}</span></button>
+    </form>
+    <aside class="sticky">
+      <section class="card" style="padding:18px">
+        <h3 style="margin:0 0 4px;font-size:14.5px">Before you save</h3><p class="cap" style="margin-top:0">We check for the same person as you type.</p>
+        <div class="match" style="margin-top:12px">
+          <div style="display:flex;gap:10px;align-items:center"><span class="av dental" style="width:36px;height:36px;border-radius:10px;font-size:12.5px">AM</span><div><b style="font-size:13.5px">Aarav Mehta</b><div class="cap" style="margin-top:0">LSS-2025-00142 · 34 · M · same mobile</div></div></div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sm pri" onclick="openPatient(1)">Open this record</button><button class="btn sm">Check in instead</button></div>
+        </div>
+        <div class="match masked"><div style="display:flex;gap:10px;align-items:center"><span class="av general" style="width:36px;height:36px;border-radius:10px;font-size:12.5px">A·M</span><div><b style="font-size:13.5px">A. M.</b><div class="cap" style="margin-top:0">Registered at another branch · details hidden</div></div></div></div>
+        <label class="ack"><input type="checkbox" /> <span>This is a different person. I checked the matches above. <span class="muted">(Recorded in the audit trail.)</span></span></label>
+        <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+          <div class="check"><span class="ok">✓</span>Name</div><div class="check"><span class="ok">✓</span>Gender</div><div class="check"><span class="ok">✓</span>Mobile number</div><div class="check"><span class="no">○</span>Date of birth or age</div>
+        </div>
+        <button class="btn pri" style="width:100%;justify-content:center;margin-top:12px" disabled title="Confirm the duplicate check first">Register patient</button>
+        <p class="cap" style="text-align:center">After saving: Check in · Book · Open Patient 360</p>
+      </section>
+    </aside>
+  </div>`;
+}
+
+/* ============================================================== wiring */
+function render() {
+  const r = ROLES[S.role];
+  $('#avatar').textContent = r.initials; $('#whoName').textContent = r.name; $('#whoRole').textContent = r.role;
+  const html = S.view === 'directory' ? directory() : S.view === 'patient' ? patient360() : register();
+  $('#page').innerHTML = html;
+  const q = $('#q');
+  if (q) {
+    q.oninput = (e) => { S.q = e.target.value; S.kb = -1; const pos = e.target.selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+    q.onkeydown = (e) => {
+      const list = visiblePatients();
+      if (e.key === 'ArrowDown') { S.kb = Math.min(list.length - 1, S.kb + 1); e.preventDefault(); keepFocus(); }
+      if (e.key === 'ArrowUp') { S.kb = Math.max(0, S.kb - 1); e.preventDefault(); keepFocus(); }
+      if (e.key === 'Enter' && list[S.kb]) openPatient(list[S.kb].id);
+    };
+  }
+  renderReview();
+}
+function keepFocus() { const pos = $('#q').selectionStart; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); }
+function go(view) { S.view = view; S.section = null; if (S.state === 'archived' && view !== 'patient') S.state = 'normal'; render(); window.scrollTo(0, 0); }
+function openPatient(id) { S.patient = id; S.view = 'patient'; S.section = null; if (['empty', 'noresults', 'error'].includes(S.state)) S.state = 'normal'; render(); window.scrollTo(0, 0); }
+function setSection(k) { S.section = k; render(); }
+function toggleMore(b) { const m = b.nextElementSibling; const open = !m.classList.contains('open'); m.classList.toggle('open', open); b.setAttribute('aria-expanded', open); }
+document.addEventListener('click', (e) => { if (!e.target.closest('.more')) document.querySelectorAll('.more-menu.open').forEach((m) => m.classList.remove('open')); });
+document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement?.id !== 'q' && S.view === 'directory') { e.preventDefault(); $('#q')?.focus(); } if (e.key === 'Escape') document.querySelectorAll('.more-menu.open').forEach((m) => m.classList.remove('open')); });
+
+const OPTS = {
+  view: [['directory', 'Directory'], ['patient', 'Patient 360'], ['register', 'Register']],
+  role: Object.entries(ROLES).map(([k, v]) => [k, v.label]),
+  clinic: [['both', 'Dental + Physio'], ['dental', 'Dental only'], ['physio', 'Physio only']],
+  state: [['normal', 'Normal'], ['loading', 'Loading'], ['noresults', 'No results'], ['empty', 'Empty'], ['error', 'Error'], ['archived', 'Archived'], ['restricted', 'Restricted']],
+};
+function renderReview() {
+  document.querySelectorAll('.review .opts').forEach((box) => {
+    const k = box.dataset.k;
+    box.innerHTML = OPTS[k].map(([v, l]) => `<button class="${S[k] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('');
+    box.querySelectorAll('button').forEach((b) => (b.onclick = () => { S[k] = b.dataset.v; if (k === 'view') S.section = null; if (k === 'state' && ['archived', 'restricted'].includes(S.state)) S.view = 'patient'; if (k === 'state' && ['noresults', 'empty', 'error'].includes(S.state)) S.view = 'directory'; render(); }));
+  });
+}
+$('#rvToggle').onclick = (e) => { const g = $('#rvGrid'); const hide = !g.classList.contains('hide'); g.classList.toggle('hide', hide); e.target.textContent = hide ? 'Show' : 'Hide'; e.target.setAttribute('aria-expanded', !hide); };
+
+/* Deep links for screenshots: #view=patient&role=doctor&clinic=dental&state=normal&section=dental */
+(function fromHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  ['view', 'role', 'clinic', 'state', 'section'].forEach((k) => { if (h.get(k)) S[k] = h.get(k); });
+  if (h.get('q')) S.q = h.get('q');
+  if (h.get('review') === 'hidden') { $('#rvGrid').classList.add('hide'); $('#rvToggle').textContent = 'Show'; }
+})();
+render();
+</script>
+</body>
+</html>

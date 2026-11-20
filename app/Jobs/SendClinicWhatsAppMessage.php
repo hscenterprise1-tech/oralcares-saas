@@ -55,8 +55,8 @@ class SendClinicWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        // The last moment before the provider: a patient merged or marked
-        // deceased since this was queued is not contacted. Skipped with
+        // The last moment before the provider: a patient merged or deleted
+        // since this was queued is not contacted. Skipped with
         // the reason, not failed, so it is never offered for retry.
         if ($claimed->patient_id !== null
             && ($reason = app(PatientMessageEligibility::class)->blockReasonFor((int) $claimed->clinic_id, (int) $claimed->patient_id)) !== null) {

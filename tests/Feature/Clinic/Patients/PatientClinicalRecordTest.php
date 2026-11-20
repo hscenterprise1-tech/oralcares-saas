@@ -47,14 +47,14 @@ test('quick context shows diagnoses and medicines exactly as recorded, never inv
 
 test('the overview tells now, next and recent from the record', function () {
     ($this->asDoctor)()->get("/clinic/patients/{$this->patient->id}")
-        ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $reload) => $reload
+        ->assertInertia(fn (Assert $page) => $page
             ->where('overview.current.open_consultation', null)
             ->where('overview.recent.consultation.number', 'ENC-2627-000001')
             ->where('overview.recent.consultation.diagnosis', 'Irreversible pulpitis')
             ->where('overview.recent.consultation.signed', true)
             ->where('overview.recent.investigation.name', 'CBC')
             ->where('overview.recent.investigation.is_abnormal', true)
-            ->where('overview.next.investigations.0.name', 'CBC')));
+            ->where('overview.next.investigations.0.name', 'CBC'));
 });
 
 test('encounters, prescriptions and investigations come back from their sections as written', function () {

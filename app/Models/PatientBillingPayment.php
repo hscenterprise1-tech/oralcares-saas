@@ -17,6 +17,10 @@ class PatientBillingPayment extends Model
 {
     use ClinicScoped, InheritsBillOwnership;
 
+    protected $attributes = [
+        'status' => 'successful',
+    ];
+
     protected $fillable = [
         'patient_billing_id',
         'clinic_id',
@@ -24,6 +28,7 @@ class PatientBillingPayment extends Model
         'receipt_number',
         'payment_method',
         'amount',
+        'status',
         'transaction_reference',
         'paid_at',
         'notes',

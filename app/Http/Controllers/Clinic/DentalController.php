@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Clinic;
 
+use App\ClinicPermission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Clinic\Consultation\ChartToothRequest;
 use App\Http\Requests\Clinic\Consultation\ProposeTreatmentPlanRequest;
+use App\Models\Branch;
+use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
@@ -16,11 +19,13 @@ use App\Services\Dental\DentalRecord;
 use App\Services\Dental\PeriodontalRecord;
 use App\Services\Patient\Patient360\Patient360SectionPolicy;
 use App\Services\Security\SecurityAudit;
+use App\TreatmentStatus;
 use Closure;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
@@ -166,6 +171,29 @@ class DentalController extends Controller
      * the desk, a pause, a decline, a cancellation). Doing treatment still
      * happens in a consultation.
      */
+    /**
+     * A plan as an estimate the patient takes home: its treatments at today's prices, never a bill. For whoever may read the patient and
+     * works with plans or money (the dentist, the desk, billing).
+     */
+    public function estimate(Request $request, Patient $patient, TreatmentPlan $plan): HttpResponse
+    {
+        $this->authorize('view', $patient);
+        abort_unless($patient->clinic_id === $this->clinicContext->clinic()?->id, 404);
+        abort_unless($plan->clinic_id === $patient->clinic_id && $plan->patient_id === $patient->id, 404);
+        $user = $request->user();
+        abort_unless(collect([ClinicPermission::ClinicalView, ClinicPermission::BillingView, ClinicPermission::BillingCreate])->contains(fn (ClinicPermission $permission) => $user->hasClinicPermission($permission)), 403);
+
+        $items = $plan->records()->where('status', '!=', TreatmentStatus::Aborted->value)->orderBy('sort_order')->orderBy('id')->get();
+        $branchId = $plan->encounter_id ? ClinicalEncounter::query()->withoutGlobalScopes()->whereKey($plan->encounter_id)->value('branch_id') : null;
+        app(SecurityAudit::class)->record('dental.plan.estimate_printed', $plan, ['patient_id' => $patient->id]);
+
+        return response()->view('clinic.treatment_estimate', [
+            'plan' => $plan, 'items' => $items, 'patient' => $patient,
+            'clinic' => Clinic::query()->findOrFail($plan->clinic_id),
+            'branch' => $branchId ? Branch::query()->withoutGlobalScopes()->find($branchId) : null,
+        ]);
+    }
+
     public function transitionPlan(Request $request, Patient $patient, TreatmentPlan $plan, string $transition): RedirectResponse
     {
         $this->authorize('writeClinicalData', $patient);

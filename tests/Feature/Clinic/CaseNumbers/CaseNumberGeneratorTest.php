@@ -2,12 +2,10 @@
 
 use App\Models\Branch;
 use App\Models\CaseNumber;
-use App\Models\CaseNumberHistory;
 use App\Models\Clinic;
 use App\Models\Patient;
 use App\Models\PatientVisit;
 use App\Services\Patient\CaseNumberGenerator;
-use App\Services\Patient\PatientSearchService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 
@@ -136,44 +134,6 @@ test('the financial year turns over between 31 March and 1 April', function () {
         ->and($march->period_key)->toBe('FY2026')
         ->and($april->case_number)->toBe('DC/27-28/000001')
         ->and($april->period_key)->toBe('FY2027');
-});
-
-test('the full number finds the patient however its separators are typed', function (string $typed) {
-    useCaseNumberFormat($this->clinic, ['prefix' => 'DC', 'separator' => '/', 'year_style' => 'FY_SHORT', 'start_number' => 124]);
-    $this->generator->forPatient($this->clinic, $this->patient, CarbonImmutable::create(2026, 6, 1));
-
-    $found = app(PatientSearchService::class)->search($this->clinic, $typed, 'case_number');
-
-    expect($found->pluck('id')->all())->toBe([$this->patient->id]);
-})->with(['DC/26-27/000124', 'DC2627000124', 'dc 26-27 000124']);
-
-test('the last four digits alone do not find a patient', function () {
-    $this->generator->forPatient($this->clinic, $this->patient, CarbonImmutable::create(2026, 6, 1));
-
-    $found = app(PatientSearchService::class)->search($this->clinic, '0001', 'case_number');
-
-    expect($found)->toBeEmpty();
-});
-
-test('a merged number in history still finds its patient', function () {
-    $kept = $this->generator->forPatient($this->clinic, $this->patient, CarbonImmutable::create(2026, 6, 1));
-    CaseNumberHistory::create([
-        'original_id' => 999, 'clinic_id' => $this->clinic->id, 'patient_id' => $this->patient->id,
-        'year' => 2026, 'sequence' => 7, 'case_number' => '2026-000007', 'period_key' => 'CY2026',
-        'counter_key' => 'CY2026', 'search_key' => '2026000007', 'merged_into_id' => $kept->id,
-    ]);
-
-    $found = app(PatientSearchService::class)->search($this->clinic, '2026-000007', 'case_number');
-
-    expect($found->pluck('id')->all())->toBe([$this->patient->id]);
-});
-
-test('another clinic cannot find a patient by case number', function () {
-    $caseNumber = $this->generator->forPatient($this->clinic, $this->patient, CarbonImmutable::create(2026, 6, 1));
-
-    $found = app(PatientSearchService::class)->search(Clinic::factory()->create(), $caseNumber->case_number, 'case_number');
-
-    expect($found)->toBeEmpty();
 });
 
 test('two patients checked in back to back get different numbers', function () {

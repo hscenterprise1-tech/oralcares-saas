@@ -24,7 +24,7 @@ class EncounterManagementService
         ?ClinicEmployee $doctor = null,
         ?string $encounterType = 'consultation'
     ): ClinicalEncounter {
-        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        // A deleted patient gets no new care (`PatientCareGuard`), on this path too.
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
         if ($patient->clinic_id && $branch->clinic_id && (int) $patient->clinic_id !== (int) $branch->clinic_id) {
             throw new \InvalidArgumentException('Branch does not belong to the patient clinic.');

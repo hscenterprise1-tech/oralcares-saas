@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Clinic;
 
-use App\ClinicPermission;
 use App\Http\Controllers\Concerns\AnswersDomainErrors;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
@@ -81,7 +80,7 @@ class ConsultationTreatmentController extends Controller
         ]);
 
         // Selling a package is billing work; refuse before anything is written.
-        abort_if(! empty($data['package']) && ! $request->user()->hasClinicPermission(ClinicPermission::BillingCreate), 403, 'Selling a package needs billing rights.');
+        abort_if(! empty($data['package']) && ! SessionPackages::maySell($request->user()), 403, 'Selling a package needs the package-selling permission.');
 
         // A request key made when the dialog opened starts the treatment (and
         // sells its package) once, however often the request is sent.

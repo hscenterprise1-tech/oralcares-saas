@@ -11,6 +11,7 @@ import { Notice } from '../ui/Notice';
 import { Skeleton } from '../ui/Spinner';
 import { formatMoney } from '../ui/visuals';
 import { when, requestKey } from './BillingFrame';
+import { PaymentPlan, type InstalmentRow } from './PaymentPlan';
 import { PaymentForm, paymentFor, paymentPayloadOf, paymentProblem, type PaymentMethodOption, type PaymentValue } from './PaymentForm';
 
 /** One bill in full, as `CheckoutController::bill()` sends it. */
@@ -29,10 +30,11 @@ interface BillDetail {
   discount: number;
   tax: number;
   items: { description: string; quantity: number; unit_price: number; discount: number; tax: number; amount: number }[];
-  payments: { id: number; receipt: string; amount: number; method: string | null; reference: string | null; date: string | null }[];
+  payments: { id: number; receipt: string; amount: number; method: string | null; reference: string | null; date: string | null; receipt_url: string | null }[];
   refunds: { number: string; amount: number; reason: string | null; date: string | null }[];
   payment_methods: PaymentMethodOption[];
-  actions: { pay_url: string | null; refund_url: string | null; adjust_url: string | null; print_url: string; owner_mode_needed?: boolean };
+  instalments: InstalmentRow[];
+  actions: { pay_url: string | null; instalments_url?: string | null; refund_url: string | null; adjust_url: string | null; print_url: string; owner_mode_needed?: boolean };
 }
 
 type Action = 'pay' | 'refund' | 'adjust' | null;
@@ -108,8 +110,10 @@ export function BillDetailDialog({ billId, url, onClose }: { billId: number; url
             </p>
           </section>
 
-          <History title="Payments" empty="Nothing collected yet." rows={bill.payments.map((p) => ({ key: `p${p.id}`, left: `${p.receipt}${p.method ? ` · ${p.method}` : ''}${p.reference ? ` · ${p.reference}` : ''}`, when: p.date, amount: p.amount }))} />
+          <History title="Payments" empty="Nothing collected yet." rows={bill.payments.map((p) => ({ key: `p${p.id}`, left: `${p.receipt}${p.method ? ` · ${p.method}` : ''}${p.reference ? ` · ${p.reference}` : ''}`, when: p.date, amount: p.amount, receipt: p.receipt_url }))} />
           <History title="Refunds" empty="No refunds on this bill." rows={bill.refunds.map((r) => ({ key: r.number, left: `${r.number}${r.reason ? ` · ${r.reason}` : ''}`, when: r.date, amount: -r.amount }))} />
+
+          <PaymentPlan rows={bill.instalments ?? []} outstanding={bill.outstanding} url={bill.actions.instalments_url ?? null} onChanged={load} />
 
           {bill.actions.owner_mode_needed && (
             <Notice tone="info" title="Refunds and adjustments need Owner Mode">
@@ -161,7 +165,7 @@ function Amount({ label, value, strong }: { label: string; value: number; strong
   );
 }
 
-function History({ title, empty, rows }: { title: string; empty: string; rows: { key: string; left: string; when: string | null; amount: number }[] }) {
+function History({ title, empty, rows }: { title: string; empty: string; rows: { key: string; left: string; when: string | null; amount: number; receipt?: string | null }[] }) {
   return (
     <section aria-label={title}>
       <h3 className={SECTION_TITLE}>{title}</h3>
@@ -175,6 +179,12 @@ function History({ title, empty, rows }: { title: string; empty: string; rows: {
               <span className="flex shrink-0 items-center gap-3">
                 <span className="text-[12px] text-cx-text-3">{when(row.when)}</span>
                 <span className="tabular-nums">{formatMoney(row.amount)}</span>
+                {row.receipt && (
+                  <a href={row.receipt} target="_blank" rel="noreferrer" aria-label={`Print receipt ${row.left.split(' · ')[0]}`} className="inline-flex h-7 items-center gap-1 rounded-full px-2 text-[12px] font-semibold text-cx-nav-blue hover:bg-cx-nav-hover">
+                    <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                    Receipt
+                  </a>
+                )}
               </span>
             </li>
           ))}

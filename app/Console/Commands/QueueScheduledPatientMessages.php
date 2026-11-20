@@ -9,14 +9,16 @@ use App\Models\PatientBilling;
 use App\Models\PatientFollowUp;
 use App\Models\PatientSessionPackage;
 use App\Services\Communication\PatientMessaging;
+use App\Services\Patient\PatientAutomation;
 use App\Services\WhatsApp\ClinicWhatsApp;
 use App\Support\ClinicClock;
 use Illuminate\Console\Command;
 
 /**
  * Patient messages that no single change triggers, only the calendar:
- * balance due, balance overdue, a follow-up's own day, and a package about
- * to expire. Only clinics whose WhatsApp carries that message are read (a
+ * balance due, balance overdue (again at 15 and 30 days), a follow-up's own
+ * day, and a package about to expire. It also runs `PatientAutomation`'s
+ * missed-appointment step for every clinic. Only clinics whose WhatsApp carries that message are read (a
  * small set), each bounded per run; event keys make reruns harmless.
  */
 class QueueScheduledPatientMessages extends Command
@@ -27,7 +29,10 @@ class QueueScheduledPatientMessages extends Command
 
     private const PER_CLINIC = 500;
 
-    public function handle(PatientMessaging $messages, ClinicWhatsApp $whatsApp): int
+    /** Days after the bill when an overdue balance is reminded again. */
+    public const OVERDUE_STAGES = [15, 30];
+
+    public function handle(PatientMessaging $messages, ClinicWhatsApp $whatsApp, PatientAutomation $automation): int
     {
         $today = ClinicClock::now()->startOfDay();
         $overdueDays = (int) config('clinic_whatsapp.overdue_after_days', 7);
@@ -52,7 +57,10 @@ class QueueScheduledPatientMessages extends Command
                     }
                     if ($whatsApp->carries($clinic, 'payment_overdue')) {
                         foreach ($open()->where('issued_at', '<', $today->subDays($overdueDays - 1))->get() as $bill) {
-                            $messages->balanceOpen($bill, overdue: true);
+                            // The latest stage the bill has reached: the first overdue reminder, then again at 15 and 30 days.
+                            $age = (int) $bill->issued_at->copy()->startOfDay()->diffInDays($today);
+                            $stage = collect([$overdueDays, ...self::OVERDUE_STAGES])->filter(fn (int $days) => $age >= $days)->max() ?? $overdueDays;
+                            $messages->balanceOpen($bill, overdue: true, stage: $stage);
                             $queued++;
                         }
                     }
@@ -76,7 +84,15 @@ class QueueScheduledPatientMessages extends Command
                 }
             }, 'id');
 
-        $this->info("Checked scheduled patient messages ({$queued} considered).");
+        // Missed bookings, for every clinic (the message that follows still needs the clinic's WhatsApp).
+        $missed = 0;
+        Clinic::query()->select(['id', 'appointment_config'])->chunkById(200, function ($clinics) use ($automation, &$missed) {
+            foreach ($clinics as $clinic) {
+                $missed += $automation->markMissedAppointments($clinic);
+            }
+        });
+
+        $this->info("Checked scheduled patient messages ({$queued} considered); {$missed} missed appointments marked.");
 
         return self::SUCCESS;
     }

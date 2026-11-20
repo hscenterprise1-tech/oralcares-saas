@@ -5,6 +5,7 @@ use App\Models\ClinicEmployee;
 use App\Models\HealthcareSpecialtyMaster;
 use App\Models\Patient;
 use App\Models\PatientBilling;
+use App\Models\PatientTreatment;
 use App\Models\PatientVisit;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\PatientFieldConfigService;
@@ -93,8 +94,8 @@ test('Dental: a fee charged at check-in is the one the desk was shown; register-
         ->assertStatus(422)->assertJsonValidationErrors('expected_charge');
     expect(Patient::count())->toBe(2)->and(PatientVisit::count())->toBe($visits)->and(($this->bills)())->toBe(0);
 
-    // Shown ₹500: one bill for exactly that, owing — the payment is a separate step.
-    ($this->newCase)(['phone' => '9811100780', 'check_in' => true, 'doctor_id' => $raj->id, 'expected_charge' => 500])
+    // Shown ₹500 and left to pay later: one bill for exactly that, owing.
+    ($this->newCase)(['phone' => '9811100780', 'check_in' => true, 'doctor_id' => $raj->id, 'expected_charge' => 500, 'pay_later' => true])
         ->assertCreated()->assertJsonPath('billing.total', 500)->assertJsonPath('billing.outstanding', 500);
     expect(($this->bills)())->toBe(1);
 });
@@ -163,4 +164,30 @@ test('the owner\'s field settings are enforced on both registration surfaces', f
     ($this->asOwner)()->get('/clinic/patients/create')->assertInertia(fn ($page) => $page->where('form.fields.email.state', 'required')->where('form.fields.blood_group.state', 'hidden'));
     $intake = ($this->asOwner)()->getJson('/clinic/reception/intake')->json('fields');
     expect($intake['email']['state'])->toBe('required')->and($intake['blood_group']['state'])->toBe('hidden');
+});
+
+test('the desk chooses the physiotherapy problem and side, and the doctor finds it suggested', function () {
+    $this->f->clinic->update(['specialties' => ['physiotherapy']]);
+    $neha = ($this->practitioner)('Dr. Neha Shah', 'sports_rehabilitation');
+
+    $reasons = collect(($this->asOwner)()->getJson('/clinic/reception/intake')->assertOk()->json('catalogue.visit_reasons'));
+    expect($reasons->firstWhere('key', 'physio:knee_pain:right')['name'])->toBe('Knee pain · Right')
+        // The owner's problems are the physiotherapy reasons: no general "Knee pain" offered beside them.
+        ->and($reasons->filter(fn (array $reason) => $reason['specialty_keys'] === ['physiotherapy'] && ! str_starts_with($reason['key'], 'physio:')))->toBeEmpty();
+
+    $patientId = ($this->newCase)()->assertCreated()->json('patient.id');
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', ['patient_id' => $patientId, 'practitioner_id' => $neha->id, 'visit_reason_key' => 'physio:knee_pain:right'])
+        ->assertCreated();
+
+    $course = PatientTreatment::query()->withoutGlobalScopes()->where('patient_id', $patientId)->sole();
+    expect([$course->physio_problem, $course->body_side, $course->status, $course->title])->toBe(['knee_pain', 'right', PatientTreatment::PLANNED, 'Knee pain · Right'])
+        ->and(PatientVisit::sole()->visit_reason)->toBe('Knee pain · Right');
+
+    // A problem not on the list is refused; the same problem again the next day is not suggested twice.
+    $this->travel(1)->days();
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', ['patient_id' => $patientId, 'practitioner_id' => $neha->id, 'visit_reason_key' => 'physio:ankle:left'])
+        ->assertStatus(422)->assertJsonValidationErrors('visit_reason_key');
+    ($this->asOwner)()->postJson('/clinic/reception/check-in', ['patient_id' => $patientId, 'practitioner_id' => $neha->id, 'visit_reason_key' => 'physio:knee_pain:right'])
+        ->assertCreated();
+    expect(PatientTreatment::query()->withoutGlobalScopes()->where('patient_id', $patientId)->count())->toBe(1);
 });

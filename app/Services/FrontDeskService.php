@@ -56,7 +56,7 @@ class FrontDeskService
      */
     public function addWalkIn(Patient $patient, ?User $provider = null, ?int $branchId = null): QueueEntry
     {
-        // A patient recorded as deceased gets no new care (`PatientCareGuard`), on this path too.
+        // A deleted patient gets no new care (`PatientCareGuard`), on this path too.
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
         return QueueEntry::create([

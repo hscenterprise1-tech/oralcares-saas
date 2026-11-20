@@ -2,14 +2,19 @@
 
 namespace App\Services\Clinical;
 
+use App\AppointmentStatus;
+use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicalEncounter;
+use App\Models\ClinicalOrderItem;
 use App\Models\ClinicEmployee;
 use App\Models\ClinicQueue;
 use App\Models\ClinicQueueItem;
 use App\Models\Patient;
+use App\Models\User;
 use App\QueueItemStatus;
+use App\Services\Appointments\AppointmentPresenter;
 use App\Services\Patient\CaseNumberFormatter;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\Patient\PatientClinicalEntries;
@@ -116,6 +121,71 @@ class DoctorToday
             'in_consultation' => $inConsultation->take(self::LIMIT)->values()->all(),
             'completed' => $completed->take(self::LIMIT)->values()->all(),
         ];
+    }
+
+    /**
+     * Results back from the lab or imaging for orders this member placed,
+     * still waiting for their review (`ClinicalOrderItem::RESULTED`), oldest
+     * first: the first ten, and how many there are.
+     *
+     * @return array{total: int, rows: list<array<string, mixed>>}
+     */
+    public function resultsToReview(Clinic $clinic, User $user): array
+    {
+        $query = ClinicalOrderItem::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('status', ClinicalOrderItem::RESULTED)
+            ->whereHas('order', fn ($order) => $order->withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('ordered_by', $user->id));
+
+        $rows = (clone $query)->with(['order' => fn ($order) => $order->withoutGlobalScopes()->select(['id', 'patient_id'])->with(['patient' => fn ($patient) => $patient->withoutGlobalScopes()->select(['id', 'first_name', 'last_name', 'uhid'])])])
+            ->orderBy('resulted_at')->limit(10)->get(['id', 'clinical_order_id', 'item_name', 'category', 'resulted_at']);
+
+        return [
+            'total' => $query->count(),
+            'rows' => $rows->map(fn (ClinicalOrderItem $item) => [
+                'id' => $item->id,
+                'test' => $item->item_name,
+                'category' => $item->category,
+                'patient' => $item->order?->patient ? ['name' => $item->order->patient->full_name, 'uhid' => $item->order->patient->uhid] : null,
+                'resulted_at' => $item->resulted_at?->toIso8601String(),
+                'waiting_days' => $item->resulted_at ? (int) $item->resulted_at->diffInDays(now()) : null,
+                'url' => route('clinic.orders.show', $item->clinical_order_id),
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * The practitioner's booked day at this branch, for the dashboard's
+     * appointments panel: the same appointments and statuses the calendar
+     * shows (`AppointmentPresenter`), in time order, with the safety flags
+     * of the patients on it. Cancelled bookings are left out; no-shows stay.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function appointments(Clinic $clinic, Branch $branch, ClinicEmployee $doctor, CarbonImmutable $date): array
+    {
+        $appointments = Appointment::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinic->id)->where('branch_id', $branch->id)
+            ->where('practitioner_id', $doctor->id)
+            ->whereBetween('scheduled_at', [$date->startOfDay(), $date->endOfDay()])
+            ->where('status', '!=', AppointmentStatus::Cancelled->value)
+            ->with(['patient' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'clinic_id', 'first_name', 'middle_name', 'last_name', 'name', 'uhid', 'phone']), 'practitioner:id,name', 'service:id,name', 'queueItem'])
+            ->orderBy('scheduled_at')->limit(self::LIMIT)->get();
+        $safety = $this->entries->safetyFlags($clinic->id, $appointments->pluck('patient_id')->filter()->unique()->values()->all());
+
+        return $appointments->map(function (Appointment $appointment) use ($safety) {
+            $row = AppointmentPresenter::toArray($appointment, false);
+
+            return [
+                'id' => $row['id'],
+                'start' => $row['start'],
+                'end' => $row['end'],
+                'patient' => $row['patient'] ? collect($row['patient'])->only(['id', 'name', 'uhid'])->all() : null,
+                'new_case' => $row['new_case'] ? ['name' => $row['new_case']['name']] : null,
+                'service' => $row['service']['name'] ?? null,
+                'status' => $row['display_status'],
+                'safety' => $appointment->patient_id ? array_slice($safety[$appointment->patient_id] ?? [], 0, 2) : [],
+                'patient_url' => $appointment->patient_id ? route('clinic.patients.show', $appointment->patient_id) : null,
+            ];
+        })->values()->all();
     }
 
     /**

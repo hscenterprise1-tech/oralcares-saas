@@ -105,10 +105,10 @@ function SectionFrame<T>({
 
   return (
     <section aria-labelledby={`${id}-heading`} aria-busy={loading || undefined}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 id={`${id}-heading`} className="text-[15px] font-semibold leading-[22px] text-cx-text">
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+        <h2 id={`${id}-heading`} className="text-[16px] font-bold leading-[22px] text-slate-900">
           {title}
-          {data.meta.total > 0 && <span className="ml-2 text-[13px] font-medium text-cx-text-2">{data.meta.total}</span>}
+          {data.meta.total > 0 && <span className="ml-2 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[12px] font-bold text-slate-700">{data.meta.total}</span>}
         </h2>
         {aside}
       </div>
@@ -118,8 +118,8 @@ function SectionFrame<T>({
         <div className={cn(loading && 'pointer-events-none opacity-60 motion-safe:transition-opacity')}>{children(data.data)}</div>
       )}
       {data.meta.last_page > 1 && (
-        <nav aria-label={`Pages of ${title.toLowerCase()}`} className="mt-3.5 grid grid-cols-2 items-center gap-3 md:grid-cols-[auto_1fr_auto]">
-          <p className="col-span-2 text-center text-[13px] text-cx-text-2 md:col-span-1 md:col-start-2 md:row-start-1">
+        <nav aria-label={`Pages of ${title.toLowerCase()}`} className="mt-4 grid grid-cols-2 items-center gap-3 md:grid-cols-[auto_1fr_auto]">
+          <p className="col-span-2 text-center text-[13px] font-medium text-slate-500 md:col-span-1 md:col-start-2 md:row-start-1">
             Page {data.meta.page} of {data.meta.last_page}
           </p>
           <Button icon={ChevronLeft} disabled={page <= 1 || loading} onClick={() => load(page - 1)} className="md:col-start-1 md:row-start-1">
@@ -137,43 +137,64 @@ function SectionFrame<T>({
 }
 
 type Tone = 'teal' | 'blue' | 'amber' | 'slate' | 'rose' | 'green';
-const TONES: Record<Tone, string> = {
-  teal: 'bg-cx-m-teal-bg text-cx-teal-ink',
-  blue: 'bg-cx-m-blue-bg text-cx-blue-ink',
-  amber: 'bg-cx-amber-bg text-cx-amber-ink',
-  slate: 'bg-cx-slate-bg text-cx-slate-ink',
-  rose: 'bg-cx-rose-bg text-cx-rose-ink',
-  green: 'bg-cx-green-bg text-cx-green-ink',
+const SECTION_TONES: Record<Tone, { badge: string; iconBg: string }> = {
+  teal: {
+    badge: 'bg-[#F0FDFA] text-[#0F766E] border border-[#99F6E4]',
+    iconBg: 'bg-gradient-to-br from-[#14B8A6] to-[#0F766E] text-white shadow-sm shadow-teal-500/25',
+  },
+  blue: {
+    badge: 'bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]',
+    iconBg: 'bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-white shadow-sm shadow-blue-500/25',
+  },
+  amber: {
+    badge: 'bg-[#FEFCE8] text-[#B45309] border border-[#FDE68A]',
+    iconBg: 'bg-gradient-to-br from-[#F59E0B] to-[#B45309] text-white shadow-sm shadow-amber-500/25',
+  },
+  slate: {
+    badge: 'bg-slate-100 text-slate-700 border border-slate-200',
+    iconBg: 'bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm',
+  },
+  rose: {
+    badge: 'bg-[#FFF1F2] text-[#9F1239] border border-[#FECDD3]',
+    iconBg: 'bg-gradient-to-br from-[#F472B6] to-[#BE185D] text-white shadow-sm shadow-pink-500/25',
+  },
+  green: {
+    badge: 'bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]',
+    iconBg: 'bg-gradient-to-br from-[#10B981] to-[#047857] text-white shadow-sm shadow-emerald-500/25',
+  },
 };
 
 function Status({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold', TONES[tone])}>{children}</span>;
+  const styles = SECTION_TONES[tone];
+  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-bold border', styles.badge)}>{children}</span>;
 }
 
 /** One row: icon, title line (with status), detail, and actions on the right (below on phones). */
 function Row({ icon: Icon, tone, title, status, meta, children, actions }: { icon: typeof Pill; tone: Tone; title: ReactNode; status?: ReactNode; meta?: ReactNode; children?: ReactNode; actions?: ReactNode }) {
+  const styles = SECTION_TONES[tone];
+
   return (
     <li>
-      <Card as="div" className="flex h-full flex-col gap-3 p-4 sm:flex-row sm:items-start">
-        <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-[11px]', TONES[tone])} aria-hidden="true">
-          <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+      <div className="flex h-full flex-col gap-3.5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] transition-all duration-200 sm:flex-row sm:items-start">
+        <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-sm', styles.iconBg)} aria-hidden="true">
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="min-w-0 text-[14.5px] font-semibold leading-5 text-cx-text [overflow-wrap:anywhere]">{title}</p>
+            <p className="min-w-0 text-[15px] font-bold leading-5 text-slate-900 [overflow-wrap:anywhere]">{title}</p>
             {status}
           </div>
-          {meta && <p className="mt-0.5 text-[12.5px] leading-[18px] text-cx-text-2">{meta}</p>}
-          {children && <div className="mt-2 text-[13px] leading-5 text-cx-text-2">{children}</div>}
+          {meta && <p className="mt-0.5 text-[12.5px] font-medium leading-[18px] text-slate-500">{meta}</p>}
+          {children && <div className="mt-2 text-[13px] leading-5 text-slate-600">{children}</div>}
         </div>
         {actions && <div className="flex shrink-0 flex-wrap gap-1.5 sm:justify-end">{actions}</div>}
-      </Card>
+      </div>
     </li>
   );
 }
 
 const actionClass =
-  'inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-cx-line bg-white px-3 text-[13px] font-semibold text-cx-blue-ink hover:bg-cx-m-blue-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan';
+  'inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-blue-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
 
 function ExternalAction({ href, icon: Icon, children, download = false }: { href: string; icon: typeof Pill; children: ReactNode; download?: boolean }) {
   return (
@@ -398,13 +419,22 @@ type BillRow = {
   outstanding: number;
   detail_url: string;
 };
+/** A practitioner's own fee lines on one bill (`scope: 'own_fees'`): no bill totals, payments or balance. */
+type OwnFeeRow = {
+  id: number;
+  number: string | null;
+  date: string | null;
+  total: number;
+  items: { description: string | null; amount: number }[];
+};
 type BillingPage = Paged<BillRow> & {
+  scope?: 'own_fees';
   summary: {
     billed: number;
     paid: number;
     refunded: number;
     outstanding: number;
-  };
+  } | null;
   payments: {
     receipt: string | null;
     amount: number;
@@ -467,6 +497,38 @@ export function BillingSection({ endpoint, billsUrl }: { endpoint: string; bills
   const state = usePaged<BillingPage>(endpoint);
   const [open, setOpen] = useState<string | null>(null);
   const summary = state.data?.summary;
+  const ownFees = state.data?.scope === 'own_fees';
+
+  if (ownFees) {
+    return (
+      <SectionFrame
+        id="billing"
+        title="Your fees"
+        state={state}
+        empty={{
+          title: 'No fees of yours yet',
+          description: 'Fees billed for your care of this patient appear here.',
+        }}
+      >
+        {(rows) => (
+          <ul className="grid gap-2.5">
+            {(rows as unknown as OwnFeeRow[]).map((bill) => (
+              <Row key={bill.id} icon={Receipt} tone="blue" title={`Bill ${bill.number ?? bill.id}`} meta={shortDate(bill.date) ?? undefined}>
+                <ul className="space-y-0.5 tabular-nums">
+                  {bill.items.map((item, index) => (
+                    <li key={index} className="flex justify-between gap-3">
+                      <span>{item.description ?? 'Fee'}</span>
+                      <span className="font-semibold text-cx-text">{formatMoney(item.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Row>
+            ))}
+          </ul>
+        )}
+      </SectionFrame>
+    );
+  }
 
   return (
     <>
@@ -671,7 +733,7 @@ function BillDialog({ url, onClose }: { url: string; onClose: () => void }) {
 
 /* ------------------------------------------------------------ documents */
 
-type DocumentRow = {
+export type DocumentRow = {
   id: number;
   name: string;
   category: string;
@@ -856,7 +918,7 @@ function UploadPanel({ upload, onUploaded }: { upload: NonNullable<DocumentsPage
 }
 
 /** Removing a document is governed: the owner removes it (the file is kept for audit), anyone else asks. */
-function RemoveDocumentDialog({ doc, mode, governance, onClose, onDone }: { doc: DocumentRow; mode: 'direct' | 'request'; governance: { request: string; direct: string }; onClose: () => void; onDone: () => void }) {
+export function RemoveDocumentDialog({ doc, mode, governance, onClose, onDone }: { doc: DocumentRow; mode: 'direct' | 'request'; governance: { request: string; direct: string }; onClose: () => void; onDone: () => void }) {
   const stepUp = useOwnerModeStepUp();
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);

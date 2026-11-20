@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doctor Dashboard — Option B refined at five widths</title>
+<!--
+  DESIGN REVIEW AID. Each frame loads doctor-dashboard-option-b-refined.html at
+  a real viewport width (the iframe's own width), so the page lays itself out
+  exactly as it would on that screen; the frame is then scaled down only to fit
+  on this page. Open this file in a desktop browser.
+-->
+<style>
+  body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; background: #E9EEF5; color: #0F172A; }
+  header { padding: 20px 24px 8px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: #475467; font-size: 13.5px; max-width: 900px; }
+  .wall { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; padding: 16px 24px 32px; }
+  figure { margin: 0; }
+  figcaption { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  figcaption span { color: #475467; font-weight: 500; }
+  .viewport { overflow: hidden; border-radius: 12px; box-shadow: 0 10px 30px -14px rgba(15,23,42,.35); background: #fff; }
+  .viewport iframe { border: 0; display: block; transform-origin: 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Doctor Dashboard — Option B refined, at five real widths</h1>
+  <p>Each frame is the actual mockup rendered at that width, then scaled to fit this page. Scroll inside a frame to see the whole page. All patients, times and figures are illustrative.</p>
+</header>
+<div class="wall" id="wall"></div>
+<script>
+  const src = 'doctor-dashboard-option-b-refined.html';
+  const sizes = [
+    { w: 1440, h: 900, scale: 0.5, label: 'Desktop', note: 'sidebar, panel on the right' },
+    { w: 1024, h: 768, scale: 0.5, label: 'Laptop', note: 'sidebar, panel below the queue' },
+    { w: 768, h: 1024, scale: 0.5, label: 'Tablet', note: 'drawer menu, two-column lower row' },
+    { w: 390, h: 844, scale: 0.6, label: 'Phone', note: 'single column, next patient first' },
+    { w: 360, h: 780, scale: 0.6, label: 'Narrow phone', note: 'single column' },
+  ];
+  const wall = document.getElementById('wall');
+  for (const s of sizes) {
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<figcaption>${s.label} · ${s.w}px <span>— ${s.note}</span></figcaption>`;
+    const box = document.createElement('div');
+    box.className = 'viewport';
+    box.style.width = `${s.w * s.scale}px`;
+    box.style.height = `${s.h * s.scale}px`;
+    const frame = document.createElement('iframe');
+    frame.src = src;
+    frame.title = `${s.label} ${s.w} pixels wide`;
+    frame.style.width = `${s.w}px`;
+    frame.style.height = `${s.h}px`;
+    frame.style.transform = `scale(${s.scale})`;
+    box.appendChild(frame);
+    fig.appendChild(box);
+    wall.appendChild(fig);
+  }
+</script>
+</body>
+</html>

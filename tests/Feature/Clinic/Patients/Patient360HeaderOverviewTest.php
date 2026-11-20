@@ -50,9 +50,7 @@ beforeEach(function () {
     $this->overview = function ($as): array {
         $overview = [];
         $as()->get("/clinic/patients/{$this->patient->id}")->assertInertia(function (Assert $page) use (&$overview) {
-            $page->loadDeferredProps(function (Assert $reload) use (&$overview) {
-                $overview = $reload->toArray()['props']['overview'];
-            });
+            $overview = $page->toArray()['props']['overview'];
         });
 
         return $overview;
@@ -96,8 +94,10 @@ test('the appointment and financial summaries count real records, and only for t
         ->and($owner['summary']['finance'])->toEqual(['billed' => 1000.0, 'paid' => 400.0, 'outstanding' => 600.0, 'bills' => 1]);
 
     expect(($this->overview)(($this->asRole)(ClinicRole::BillingStaff))['summary']['appointments'])->toBeNull()
-        ->and(($this->overview)(($this->asRole)(ClinicRole::Doctor))['summary']['finance'])->not->toBeNull()
-        ->and(($this->overview)(($this->asRole)(ClinicRole::Receptionist))['summary']['finance'])->not->toBeNull();
+        // A practitioner holds `billing.view_own_fees`, not the patient's whole ledger.
+        ->and(($this->overview)(($this->asRole)(ClinicRole::Doctor))['summary']['finance'])->toBeNull()
+        // The desk reads the patient's ledger since 2026-11-05 (full billing at reception).
+        ->and(($this->overview)(($this->asRole)(ClinicRole::Receptionist))['summary']['finance'])->toEqual($owner['summary']['finance']);
 });
 
 test('the latest documents are the ones the member may open, each through its authorised route', function () {

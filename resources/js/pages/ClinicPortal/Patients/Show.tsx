@@ -1,24 +1,28 @@
-import { useState } from 'react';
-import { Deferred } from '@inertiajs/react';
+import { useMemo, useState } from 'react';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
-import { Overview, OverviewSkeleton } from './components/patient360/Overview';
-import { PatientHeader } from './components/patient360/PatientHeader';
-import { SectionNav } from './components/patient360/SectionNav';
-import { BillingSection, DocumentsSection, FollowUpsSection, InvestigationsSection, MessagesSection, PrescriptionsSection, TreatmentSection } from './components/patient360/Sections';
-import { DentalSection } from './components/patient360/DentalSection';
-import { PhysioSection } from './components/patient360/PhysioSection';
-import { AppointmentsSection, AuditSection, ClinicalSection, ConsentsSection, RequestsSection, TimelineSection } from './components/patient360/RecordSections';
-import { VisitsHistory } from './components/patient360/VisitsHistory';
-import type { Patient360Props } from './components/patient360/types';
+import type { Patient360Props, Patient360Zone } from './components/patient360/types';
+import { ActiveCases } from './components/patient360/v2/ActiveCases';
+import { MedicalHistoryEditor } from './components/patient360/v2/MedicalHistory';
+import { PatientHeaderCard } from './components/patient360/v2/PatientHeaderCard';
+import { Patient360DataProvider } from './components/patient360/v2/store';
+import { ZoneBar } from './components/patient360/v2/ZoneBar';
+import { BillingZone } from './components/patient360/v2/zones/BillingZone';
+import { CasesZone } from './components/patient360/v2/zones/CasesZone';
+import { ClinicalZone } from './components/patient360/v2/zones/ClinicalZone';
+import { DocsZone } from './components/patient360/v2/zones/DocsZone';
+import { OverviewZone } from './components/patient360/v2/zones/OverviewZone';
+import { TimelineZone } from './components/patient360/v2/zones/TimelineZone';
+import { VisitsZone } from './components/patient360/v2/zones/VisitsZone';
 
 /**
- * Patient 360: one patient's workspace.
- *
- * The first response carries the header — identity, the facts the desk asks
- * first, allergies and alerts — and the sections this member may open, in
- * their role's order (`Patient360SectionPolicy`). The Overview arrives just
- * after (a deferred prop); every other section will load from its own
- * endpoint as its screen is built (`ClinicFrontend::PATIENT_360_SECTIONS`).
+ * Patient 360 (redesign, `docs/patient-management/16-patient-360-frontend-redesign-spec.md`):
+ * the persistent patient header and Active Cases, then the seven zones
+ * (`Patient360SectionPolicy::ZONES`). The server decides every section a
+ * member may open; a zone is only the server's sections laid out together.
+ * Every section endpoint is fetched once, together, on arrival, so a zone
+ * opens at once with its data already there. The selected case is
+ * client-side context: it picks the clinical workspace and opens Cases &
+ * Plans; it filters nothing else.
  */
 export default function PatientShow(props: Patient360Props) {
   return (
@@ -28,109 +32,107 @@ export default function PatientShow(props: Patient360Props) {
   );
 }
 
-function Patient360({
-  patient,
-  state,
-  context,
-  profile,
-  practitioners,
-  overview,
-  lens,
-  sections,
-  open_section: openSection,
-  actions,
-  endpoints,
-  links,
-  condition_editor: conditionEditor,
-  safety_editor: safetyEditor,
-}: Patient360Props) {
-  // `?section=` opens a built section this member may see; anything else opens the role's own section.
-  const [active, setActive] = useState(() => {
-    const requested = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('section');
+type Place = { zone: Patient360Zone['key']; case: number | null };
 
-    return sections.some((section) => section.built && section.key === requested) ? (requested as string) : openSection;
-  });
-  const select = (key: string) => {
-    setActive(key);
+/** Where the URL asks to open: `?zone=` and `?case=`, or an older `?section=` link's zone. */
+function initialPlace(zones: Patient360Zone[]): Place {
+  const fallback: Place = { zone: zones[0]?.key ?? 'overview', case: null };
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+  const query = new URLSearchParams(window.location.search);
+  const caseId = Number(query.get('case')) || null;
+  const section = query.get('section');
+  const zone = zones.find((item) => item.key === query.get('zone')) ?? (section ? zones.find((item) => item.sections.includes(section)) : undefined);
+
+  return { zone: zone?.key ?? fallback.zone, case: caseId };
+}
+
+function Patient360(props: Patient360Props) {
+  const { patient, state, context, zones, active_cases: activeCases, actions, endpoints, links, lens } = props;
+  const [place, setPlace] = useState<Place>(() => initialPlace(zones));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const update = (next: Place) => {
+    setPlace(next);
     const url = new URL(window.location.href);
-    url.searchParams.set('section', key);
+    url.searchParams.delete('section');
+    url.searchParams.set('zone', next.zone);
+    if (next.case) {
+      url.searchParams.set('case', String(next.case));
+    } else {
+      url.searchParams.delete('case');
+    }
     window.history.replaceState(window.history.state, '', url);
   };
+  const has = (key: Patient360Zone['key']) => zones.some((item) => item.key === key);
+  const go = (key: Patient360Zone['key']) => {
+    if (has(key)) {
+      update({ ...place, zone: key });
+      window.scrollTo({ top: Math.min(window.scrollY, 260), behavior: 'smooth' });
+    }
+  };
+  const zone = zones.find((item) => item.key === place.zone) ?? zones[0];
+  const selected = activeCases.find((item) => item.id === place.case) ?? null;
+  const clinicalSections = zones.find((item) => item.key === 'clinical')?.sections ?? [];
+  const modules = (['dental', 'physio'] as const).filter((key) => clinicalSections.includes(key));
+  const governance = endpoints.governance_request && endpoints.governance_direct ? { request: endpoints.governance_request, direct: endpoints.governance_direct } : null;
+  const sections = zone?.sections ?? [];
+  const prefetch = useMemo(() => {
+    const keys = new Set(zones.flatMap((item) => item.sections));
+    if (has('cases')) {
+      keys.add('cases');
+    }
+
+    return Array.from(keys)
+      .map((key) => endpoints[key])
+      .filter((url): url is string => Boolean(url));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zones, endpoints]);
+
+  const initial = useMemo(
+    () => Object.fromEntries(Object.entries(props.preloaded ?? {}).flatMap(([key, data]) => (endpoints[key] ? [[endpoints[key] as string, data]] : []))),
+    [props.preloaded, endpoints],
+  );
 
   return (
-    <div className="mx-auto w-full max-w-[1280px]">
-      <PatientHeader
-        patient={patient}
-        context={context}
-        actions={actions}
-        practitioners={practitioners}
-        backHref={links.index}
-        governance={lens.governance}
-        openRequests={lens.open_requests}
-        governanceEndpoints={
-          endpoints.governance_request && endpoints.governance_direct
-            ? {
-                request: endpoints.governance_request,
-                direct: endpoints.governance_direct,
-              }
-            : null
-        }
-        conditionEditor={conditionEditor}
-        safetyEditor={safetyEditor}
-      />
+    <Patient360DataProvider prefetch={prefetch} initial={initial}>
+      <div className="mx-auto w-full max-w-[1320px] space-y-5">
+        <PatientHeaderCard
+          patient={patient}
+          state={state}
+          context={context}
+          actions={actions}
+          modules={modules}
+          backHref={links.index}
+          governance={lens.governance}
+          openRequests={lens.open_requests}
+          governanceEndpoints={governance}
+          practitioners={props.practitioners}
+          onOpenMedicalHistory={patient.status !== 'merged' && (props.condition_editor || props.safety_editor) ? () => setHistoryOpen(true) : undefined}
+        />
+        {historyOpen && <MedicalHistoryEditor context={context} conditionEditor={props.condition_editor} safetyEditor={props.safety_editor} onClose={() => setHistoryOpen(false)} />}
 
-      <div className="mt-4">
-        <SectionNav sections={sections} active={active} onSelect={select} />
-      </div>
+        <ActiveCases
+          cases={activeCases}
+          selected={selected?.id ?? null}
+          onSelect={(id) => update({ ...place, case: id })}
+          onOpen={(id) => update({ zone: has('cases') ? 'cases' : place.zone, case: id })}
+        />
 
-      <div className="mt-4" aria-live="polite">
-        {active === 'overview' && (
-          <Deferred data="overview" fallback={<OverviewSkeleton />}>
-            {overview ? (
-              <Overview
-                overview={overview}
-                state={state}
-                context={context}
-                profile={profile}
-                billsUrl={links.bills}
-                openable={sections.filter((section) => section.built).map((section) => section.key)}
-                onOpenSection={(key) => (sections.some((section) => section.built && section.key === key) ? select(key) : undefined)}
-                visitsBuilt={sections.some((section) => section.built && section.key === 'visits')}
-              />
-            ) : (
-              <OverviewSkeleton />
-            )}
-          </Deferred>
-        )}
-        {active === 'visits' && endpoints.visits && <VisitsHistory endpoint={endpoints.visits} />}
-        {active === 'prescriptions' && endpoints.prescriptions && <PrescriptionsSection endpoint={endpoints.prescriptions} />}
-        {active === 'investigations' && endpoints.investigations && <InvestigationsSection endpoint={endpoints.investigations} />}
-        {active === 'billing' && endpoints.billing && <BillingSection endpoint={endpoints.billing} billsUrl={links.bills} />}
-        {active === 'documents' && endpoints.documents && (
-          <DocumentsSection
-            endpoint={endpoints.documents}
-            governance={
-              endpoints.governance_request && endpoints.governance_direct
-                ? {
-                    request: endpoints.governance_request,
-                    direct: endpoints.governance_direct,
-                  }
-                : null
-            }
-          />
-        )}
-        {active === 'communication' && endpoints.communication && <MessagesSection endpoint={endpoints.communication} />}
-        {active === 'follow-ups' && endpoints['follow-ups'] && <FollowUpsSection endpoint={endpoints['follow-ups'] as string} practitioners={practitioners} />}
-        {active === 'treatment' && endpoints.treatment && <TreatmentSection endpoint={endpoints.treatment} />}
-        {active === 'dental' && endpoints.dental && <DentalSection endpoint={endpoints.dental} />}
-        {active === 'physio' && endpoints.physio && <PhysioSection endpoint={endpoints.physio} />}
-        {active === 'appointments' && endpoints.appointments && <AppointmentsSection endpoint={endpoints.appointments} />}
-        {active === 'consents' && endpoints.consents && <ConsentsSection endpoint={endpoints.consents} />}
-        {active === 'timeline' && endpoints.timeline && <TimelineSection endpoint={endpoints.timeline} />}
-        {active === 'audit' && endpoints.audit && <AuditSection endpoint={endpoints.audit} />}
-        {active === 'clinical' && endpoints.clinical && <ClinicalSection endpoint={endpoints.clinical} />}
-        {active === 'requests' && endpoints.requests && <RequestsSection endpoint={endpoints.requests} />}
+        {zone && <ZoneBar zones={zones} active={zone.key} onSelect={go} selectedCase={selected ? { title: selected.title } : null} onClearCase={() => update({ ...place, case: null })} />}
+
+        <div aria-live="polite">
+          {zone?.key === 'overview' && <OverviewZone props={props} has={has} go={go} />}
+          {zone?.key === 'clinical' && <ClinicalZone props={props} sections={sections} preferred={selected && selected.module !== 'general' ? selected.module : null} />}
+          {zone?.key === 'cases' && endpoints.cases && (
+            <CasesZone endpoint={endpoints.cases} treatmentEndpoint={sections.includes('treatment') ? endpoints.treatment : null} selected={place.case} onSelect={(id) => update({ ...place, case: id })} />
+          )}
+          {zone?.key === 'visits' && <VisitsZone props={props} sections={sections} />}
+          {zone?.key === 'docs' && <DocsZone props={props} sections={sections} />}
+          {zone?.key === 'billing' && <BillingZone props={props} />}
+          {zone?.key === 'timeline' && <TimelineZone props={props} sections={sections} />}
+        </div>
       </div>
-    </div>
+    </Patient360DataProvider>
   );
 }

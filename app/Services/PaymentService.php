@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\BillingStatus;
 use App\ClinicDocument;
+use App\ClinicPermission;
 use App\Events\BillCompleted;
 use App\Events\PaymentRecorded;
 use App\Events\RefundInitiated;
@@ -48,6 +49,23 @@ class PaymentService
 
         return array_values(array_filter(PaymentMethod::cases(), fn (PaymentMethod $method) => ($accepted === [] || in_array($method->value, $accepted, true))
             && ! ($atDesk && in_array($method, [PaymentMethod::Gateway, PaymentMethod::Insurance], true))));
+    }
+
+    /**
+     * Whether this member works the desk at that branch rather than the ledger: someone who cannot read the billing ledger
+     * (`billing.view`) is front-desk staff, and a gateway or insurance settlement is never typed in by them.
+     */
+    public function atDesk(User $user, ?int $branchId): bool
+    {
+        $branch = $branchId ? Branch::query()->withoutGlobalScopes()->find($branchId) : null;
+
+        return $branch === null || ! $user->hasClinicPermissionAt(ClinicPermission::BillingView, $branch);
+    }
+
+    /** Whether this member may record a payment by that method on a bill of that branch (the server's answer, whatever the form showed). */
+    public function mayRecord(Clinic $clinic, User $user, ?int $branchId, PaymentMethod $method): bool
+    {
+        return in_array($method, $this->acceptedMethods($clinic, $this->atDesk($user, $branchId)), true);
     }
 
     /**

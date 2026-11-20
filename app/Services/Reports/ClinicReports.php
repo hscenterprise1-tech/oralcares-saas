@@ -5,7 +5,10 @@ namespace App\Services\Reports;
 use App\BillingStatus;
 use App\ClinicPermission;
 use App\Models\Clinic;
+use App\Models\PatientTreatment;
 use App\Models\User;
+use App\Services\ClinicContext;
+use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\ClinicClock;
 use App\Support\Specialty\SpecialtyRegistry;
 use Carbon\CarbonImmutable;
@@ -44,25 +47,82 @@ class ClinicReports
         $common = ['period', 'branch'];
 
         return [
-            'patients_new' => ['group' => 'Patients', 'label' => 'New patients', 'description' => 'Patients registered in the period.', 'filters' => [...$common, 'specialty']],
-            'patients_activity' => ['group' => 'Patients', 'label' => 'Active and inactive patients', 'description' => 'New, repeat, active in the period, and not seen for six months.', 'filters' => $common],
-            'patients_mix' => ['group' => 'Patients', 'label' => 'Specialty and branch mix', 'description' => 'Visits in the period by specialty and by branch.', 'filters' => ['period']],
-            'operations_visits' => ['group' => 'Operations', 'label' => 'Visits and queue', 'description' => 'Visits by day: checked in, completed, cancelled, average wait.', 'filters' => [...$common, 'specialty']],
-            'operations_appointments' => ['group' => 'Operations', 'label' => 'Appointments', 'description' => 'Booked, attended, cancelled and no-shows by day.', 'filters' => [...$common, 'practitioner']],
-            'staff_workload' => ['group' => 'Doctors & staff', 'label' => 'Practitioner workload', 'description' => 'Consultations, patients, treatments started and completed, sessions.', 'filters' => [...$common, 'specialty']],
-            'dental_procedures' => ['group' => 'Dental', 'label' => 'Dental procedures', 'description' => 'Procedures performed and charged, by procedure.', 'extension' => 'odontogram', 'filters' => [...$common, 'practitioner']],
-            'dental_treatments' => ['group' => 'Dental', 'label' => 'Dental treatments', 'description' => 'Treatments by status, their stages and revenue.', 'extension' => 'odontogram', 'permission' => 'billing.view', 'filters' => [...$common, 'practitioner']],
-            'dental_teeth' => ['group' => 'Dental', 'label' => 'Tooth activity', 'description' => 'Findings and treatments charted, by tooth (FDI).', 'extension' => 'odontogram', 'filters' => $common],
-            'physio_packages' => ['group' => 'Physiotherapy', 'label' => 'Packages and sessions', 'description' => 'Packages sold, sessions sold and used, utilisation, sessions left.', 'extension' => 'session_packages', 'filters' => $common],
-            'physio_expiring' => ['group' => 'Physiotherapy', 'label' => 'Packages ending', 'description' => 'Active packages whose validity ends in the next 30 days.', 'extension' => 'session_packages', 'filters' => ['branch']],
-            'physio_therapists' => ['group' => 'Physiotherapy', 'label' => 'Therapist workload', 'description' => 'Completed sessions and patients per therapist.', 'extension' => 'session_packages', 'filters' => [...$common, 'practitioner']],
-            'finance_revenue' => ['group' => 'Finance', 'label' => 'Revenue and collection', 'description' => 'Billed, discounts, collected by method, refunds, by day.', 'permission' => 'billing.view', 'filters' => $common],
-            'finance_outstanding' => ['group' => 'Finance', 'label' => 'Outstanding and overdue', 'description' => 'Every open balance, oldest first, with how long it is overdue.', 'permission' => 'billing.view', 'filters' => ['branch']],
-            'staff_payroll' => ['group' => 'Staff', 'label' => 'Payroll', 'description' => 'Gross, incentives, commission, deductions, advances and net by month.', 'permission' => 'payroll.view', 'filters' => ['period']],
-            'expenses' => ['group' => 'Expenses', 'label' => 'Expenses', 'description' => 'Approved and paid spending by category, vendor and branch.', 'permission' => 'expense.manage', 'filters' => $common],
-            'follow_ups' => ['group' => 'Follow-ups', 'label' => 'Follow-ups', 'description' => 'Due, completed, missed and still overdue.', 'filters' => [...$common, 'practitioner']],
+            // `group` is the topic; each report in it is one view of that topic. `mine`: a practitioner may open it for their own work.
+            'patients_list' => ['group' => 'Patients', 'label' => 'Every patient', 'description' => 'Each patient seen or registered in the period: new or repeat, visits, doctor, treatments, billed, paid and balance.', 'filters' => [...$common, 'specialty', 'practitioner'], 'facets' => ['patient_type', 'treatment', 'treatment_name', 'payment']],
+            'patients_mix' => ['group' => 'Patients', 'label' => 'By specialty and branch', 'description' => 'Visits in the period by specialty and by branch.', 'filters' => ['period']],
+            'operations_visits' => ['group' => 'Visits & appointments', 'label' => 'Visits and queue', 'description' => 'Visits by day: checked in, completed, cancelled, average wait.', 'filters' => [...$common, 'specialty']],
+            'operations_appointments' => ['group' => 'Visits & appointments', 'label' => 'Appointments', 'description' => 'Booked, attended, cancelled and no-shows by day.', 'filters' => [...$common, 'practitioner'], 'mine' => true],
+            'clinical_consultations' => ['group' => 'Clinical work', 'label' => 'Consultations', 'description' => 'Every signed consultation: patient, diagnosis, procedures, prescriptions and tests.', 'filters' => [...$common, 'specialty', 'practitioner'], 'mine' => true],
+            'clinical_treatments' => ['group' => 'Clinical work', 'label' => 'Treatments', 'description' => 'Every treatment started: patient, status, sessions done of planned, billed, paid and balance.', 'filters' => [...$common, 'specialty', 'practitioner'], 'facets' => ['treatment_status', 'treatment_name', 'payment'], 'mine' => true],
+            'staff_workload' => ['group' => 'Clinical work', 'label' => 'By practitioner', 'description' => 'Consultations, patients, treatments started and completed, sessions — per practitioner.', 'filters' => [...$common, 'specialty']],
+            'dental_procedures' => ['group' => 'Clinical work', 'label' => 'Dental procedures', 'description' => 'Procedures performed and charged, by procedure.', 'extension' => 'odontogram', 'filters' => [...$common, 'practitioner'], 'mine' => true],
+            'dental_treatments' => ['group' => 'Clinical work', 'label' => 'Dental treatments and revenue', 'description' => 'Treatments by status, their stages and revenue.', 'extension' => 'odontogram', 'permission' => 'billing.view', 'filters' => [...$common, 'practitioner']],
+            'dental_teeth' => ['group' => 'Clinical work', 'label' => 'Tooth activity', 'description' => 'Findings and treatments charted, by tooth (FDI).', 'extension' => 'odontogram', 'filters' => $common],
+            'physio_therapists' => ['group' => 'Clinical work', 'label' => 'Therapy sessions', 'description' => 'Completed sessions and patients per therapist.', 'extension' => 'session_packages', 'filters' => [...$common, 'practitioner'], 'mine' => true],
+            'physio_packages' => ['group' => 'Packages', 'label' => 'Packages and sessions', 'description' => 'Packages sold, sessions sold and used, utilisation, sessions left.', 'extension' => 'session_packages', 'filters' => $common],
+            'physio_expiring' => ['group' => 'Packages', 'label' => 'Ending soon', 'description' => 'Active packages whose validity ends in the next 30 days.', 'extension' => 'session_packages', 'filters' => ['branch']],
+            'finance_items' => ['group' => 'Billing', 'label' => 'What was billed', 'description' => 'Every line billed: patient, what it was for, the treatment, the doctor, amount, and how much of its bill is paid.', 'permission' => 'billing.view', 'filters' => [...$common, 'practitioner'], 'facets' => ['payment', 'treatment_name', 'item_type']],
+            'finance_revenue' => ['group' => 'Billing', 'label' => 'Collection by day and method', 'description' => 'Billed, discounts, collected by method, refunds, by day.', 'permission' => 'billing.view', 'filters' => $common],
+            'finance_outstanding' => ['group' => 'Billing', 'label' => 'Outstanding', 'description' => 'Every open balance, oldest first, with how long it is overdue.', 'permission' => 'billing.view', 'filters' => ['branch']],
+            'follow_ups' => ['group' => 'Follow-ups', 'label' => 'Follow-ups', 'description' => 'Due, completed, missed and still overdue.', 'filters' => [...$common, 'practitioner'], 'mine' => true],
+            'staff_payroll' => ['group' => 'Staff & spending', 'label' => 'Payroll', 'description' => 'Gross, incentives, commission, deductions, advances and net by month.', 'permission' => 'payroll.view', 'filters' => ['period']],
+            'expenses' => ['group' => 'Staff & spending', 'label' => 'Expenses', 'description' => 'Approved and paid spending by category, vendor and branch.', 'permission' => 'expense.manage', 'filters' => $common],
             'whatsapp' => ['group' => 'WhatsApp', 'label' => 'WhatsApp messages', 'description' => 'Sent, delivered, read, failed and not sent, by message.', 'filters' => ['period']],
         ];
+    }
+
+    /**
+     * A report's own filters ("facets"): each narrows its rows on the server.
+     * `treatment_name` and `item_type` take their choices from the clinic's
+     * own records (`facetOptions`).
+     *
+     * @var array<string, array{label: string, all: string, options?: array<string, string>}>
+     */
+    public const FACETS = [
+        'patient_type' => ['label' => 'Patients', 'all' => 'New and repeat', 'options' => ['new' => 'New patients', 'repeat' => 'Repeat patients']],
+        'treatment' => ['label' => 'Treatment', 'all' => 'Any treatment', 'options' => ['under_way' => 'Treatment under way', 'completed' => 'Treatment completed', 'none' => 'No treatment']],
+        'treatment_status' => ['label' => 'Status', 'all' => 'Any status', 'options' => ['under_way' => 'Under way', 'completed' => 'Completed', 'cancelled' => 'Cancelled']],
+        'treatment_name' => ['label' => 'Which treatment', 'all' => 'All treatments'],
+        'payment' => ['label' => 'Payment', 'all' => 'Any payment', 'options' => ['balance' => 'Balance due', 'paid' => 'Paid in full', 'not_billed' => 'Not billed']],
+        'item_type' => ['label' => 'Billed for', 'all' => 'Everything billed'],
+    ];
+
+    /**
+     * The choices of one facet in this clinic: fixed ones, or the treatment
+     * names and bill line kinds the clinic has actually used (at most 60).
+     *
+     * @return array<string, string>
+     */
+    public function facetOptions(Clinic $clinic, string $facet): array
+    {
+        return match ($facet) {
+            'treatment_name' => DB::table('patient_treatments')->where('clinic_id', $clinic->id)->whereNotNull('title')
+                ->groupBy('title')->orderByRaw('count(*) desc')->limit(60)->pluck('title')->mapWithKeys(fn ($title) => [$title => $title])->all(),
+            'item_type' => DB::table('patient_billing_items')->where('clinic_id', $clinic->id)->whereNotNull('item_type')
+                ->groupBy('item_type')->orderByRaw('count(*) desc')->limit(60)->pluck('item_type')->mapWithKeys(fn ($type) => [$type => ucfirst(str_replace('_', ' ', $type))])->all(),
+            default => self::FACETS[$facet]['options'] ?? [],
+        };
+    }
+
+    /**
+     * The practitioner a member's reports are limited to: their own work,
+     * when they do not hold the clinic's reports (`reports.view` in the
+     * Command Center) but are a practitioner here. Null for those who see the
+     * clinic's reports, and for anyone else.
+     */
+    public function scopedPractitioner(User $user): ?int
+    {
+        if ($this->seesClinicReports($user)) {
+            return null;
+        }
+        $employee = app(ClinicContext::class)->currentEmployee();
+
+        return $employee?->practitionerProfile !== null ? $employee->id : null;
+    }
+
+    public function seesClinicReports(User $user): bool
+    {
+        return $user->hasClinicPermission(ClinicPermission::ReportsView) && in_array('command_center', app(ClinicAccess::class)->workspaces(), true);
     }
 
     /**
@@ -73,8 +133,13 @@ class ClinicReports
     public function available(Clinic $clinic, User $user): array
     {
         $extensions = $this->specialties->extensionsFor($this->specialties->forClinic($clinic));
+        $clinicWide = $this->seesClinicReports($user);
+        if (! $clinicWide && $this->scopedPractitioner($user) === null) {
+            return [];
+        }
 
-        return array_filter(self::catalog(), fn (array $report) => (! isset($report['extension']) || in_array($report['extension'], $extensions, true))
+        return array_filter(self::catalog(), fn (array $report) => ($clinicWide || ($report['mine'] ?? false))
+            && (! isset($report['extension']) || in_array($report['extension'], $extensions, true))
             && (! isset($report['permission']) || $user->hasClinicPermission(ClinicPermission::from($report['permission']))));
     }
 
@@ -82,11 +147,17 @@ class ClinicReports
      * Normalised filters: the period (default this month), branch,
      * specialty (only one the clinic has) and practitioner (only its own).
      *
+     * Plus any facet chosen (`FACETS`), by its key.
+     *
      * @param  array<string, mixed>  $input
-     * @return array{from: string, to: string, branch_id: ?int, specialty: ?string, practitioner_id: ?int}
+     * @return array{from: string, to: string, branch_id: ?int, specialty: ?string, practitioner_id: ?int, patient_type?: string, treatment?: string, treatment_status?: string, treatment_name?: string, payment?: string, item_type?: string}
      */
-    public function filters(Clinic $clinic, array $input): array
+    public function filters(Clinic $clinic, array $input, ?int $practitioner = null): array
     {
+        // A practitioner's own reports: always their work, whatever was asked.
+        if ($practitioner !== null) {
+            $input['practitioner_id'] = $practitioner;
+        }
         $date = fn ($value) => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
         $today = ClinicClock::now();
         $from = $date($input['from'] ?? null) ?? $today->startOfMonth()->toDateString();
@@ -101,8 +172,16 @@ class ClinicReports
         $branchId = isset($input['branch_id']) && DB::table('branches')->where('clinic_id', $clinic->id)->where('id', (int) $input['branch_id'])->exists() ? (int) $input['branch_id'] : null;
         $specialty = isset($input['specialty']) && in_array($input['specialty'], $this->specialties->forClinic($clinic), true) ? (string) $input['specialty'] : null;
         $practitionerId = isset($input['practitioner_id']) && DB::table('clinic_employees')->where('clinic_id', $clinic->id)->where('id', (int) $input['practitioner_id'])->exists() ? (int) $input['practitioner_id'] : null;
+        // A facet keeps only a value it offers; anything else means "all".
+        $facets = [];
+        foreach (array_keys(self::FACETS) as $facet) {
+            $value = $input[$facet] ?? null;
+            if (is_string($value) && $value !== '' && array_key_exists($value, $this->facetOptions($clinic, $facet))) {
+                $facets[$facet] = $value;
+            }
+        }
 
-        return ['from' => $from, 'to' => $to, 'branch_id' => $branchId, 'specialty' => $specialty, 'practitioner_id' => $practitionerId];
+        return ['from' => $from, 'to' => $to, 'branch_id' => $branchId, 'specialty' => $specialty, 'practitioner_id' => $practitionerId, ...$facets];
     }
 
     /**
@@ -115,44 +194,127 @@ class ClinicReports
     {
         $method = 'report'.str_replace(' ', '', ucwords(str_replace('_', ' ', $report)));
 
-        return $this->{$method}($clinic, $f, $limit);
+        $result = $this->{$method}($clinic, $f, $limit);
+        // Someone who may not see money gets the report without its money figures and columns.
+        if (($f['money'] ?? true) === false) {
+            $money = fn (array $entry) => ($entry['format'] ?? null) === 'money';
+            $hidden = array_column(array_filter($result['columns'], $money), 'key');
+            $result['summary'] = array_values(array_filter($result['summary'], fn (array $entry) => ! $money($entry)));
+            $result['columns'] = array_values(array_filter($result['columns'], fn (array $entry) => ! $money($entry)));
+            $result['rows'] = array_map(fn (array $row) => array_diff_key($row, array_flip($hidden)), $result['rows']);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Whether this member sees money in reports: the clinic's billing, or —
+     * in a practitioner's own reports — their own fees.
+     */
+    public function seesMoney(User $user, bool $mine): bool
+    {
+        return $user->hasClinicPermission(ClinicPermission::BillingView)
+            || ($mine && $user->hasClinicPermission(ClinicPermission::BillingViewOwnFees));
     }
 
     /* ------------------------------------------------------------- patients */
 
-    protected function reportPatientsNew(Clinic $clinic, array $f, int $limit): array
+    /**
+     * Every patient seen (an attended visit) or registered in the period, one
+     * row each with their whole picture: new or repeat, visits, doctor,
+     * treatments, and money — billed and collected in the period, and what
+     * they still owe. Narrowed by its facets: new/repeat, treatment state,
+     * a treatment by name, payment.
+     */
+    protected function reportPatientsList(Clinic $clinic, array $f, int $limit): array
     {
-        $q = DB::table('patients')->where('patients.clinic_id', $clinic->id)
-            ->where('patients.created_at', '>=', $this->start($f))->where('patients.created_at', '<', $this->end($f))
-            ->when($f['specialty'], fn (Builder $q, $s) => $q->whereExists(fn ($e) => $e->from('patient_specialties')->join('clinic_specialties', 'clinic_specialties.id', '=', 'patient_specialties.clinic_specialty_id')
-                ->whereColumn('patient_specialties.patient_id', 'patients.id')->where('clinic_specialties.specialty_key', $s)))
-            ->when($f['branch_id'], fn (Builder $q, $b) => $q->whereExists(fn ($e) => $e->from('patient_branch_activity')->whereColumn('patient_branch_activity.patient_id', 'patients.id')->where('patient_branch_activity.branch_id', $b)));
+        $attended = ['checked_in', 'in_queue', 'waiting', 'with_doctor', 'in_progress', 'completed'];
+        $visits = fn () => DB::table('patient_visits as v')->where('v.clinic_id', $clinic->id)->whereIn('v.visit_status', $attended)
+            ->where('v.visit_date', '>=', $f['from'])->where('v.visit_date', '<', $this->dayAfter($f['to']))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('v.branch_id', $b))
+            ->when($f['practitioner_id'], fn (Builder $q, $p) => $q->where('v.doctor_id', $p))
+            ->when($f['specialty'], fn (Builder $q, $s) => $q->whereIn('v.clinic_specialty_id', DB::table('clinic_specialties')->select('id')->where('clinic_id', $clinic->id)->where('specialty_key', $s)));
+        $live = fn (Builder $bills) => $bills->where('b.clinic_id', $clinic->id)->where('b.status', '!=', BillingStatus::Cancelled->value);
+        $underWay = [PatientTreatment::PLANNED, PatientTreatment::IN_PROGRESS, PatientTreatment::PAUSED];
+
+        $q = DB::table('patients as p')->where('p.clinic_id', $clinic->id)
+            ->where(function (Builder $q) use ($visits, $f) {
+                $q->whereExists($visits()->whereColumn('v.patient_id', 'p.id'));
+                // Registered in the period without a visit yet (not when the list is limited to a doctor, branch or specialty).
+                if (! $f['practitioner_id'] && ! $f['branch_id'] && ! $f['specialty']) {
+                    $q->orWhere(fn ($r) => $r->where('p.created_at', '>=', $this->start($f))->where('p.created_at', '<', $this->end($f)));
+                }
+            });
+        $earlier = fn ($e) => $e->from('patient_visits as ev')->whereColumn('ev.patient_id', 'p.id')->where('ev.clinic_id', $clinic->id)->whereIn('ev.visit_status', $attended)->where('ev.visit_date', '<', $f['from']);
+        match ($f['patient_type'] ?? null) {
+            'new' => $q->whereNotExists($earlier),
+            'repeat' => $q->whereExists($earlier),
+            default => null,
+        };
+        $treatments = fn ($e) => $e->from('patient_treatments as t')->whereColumn('t.patient_id', 'p.id')->where('t.clinic_id', $clinic->id);
+        match ($f['treatment'] ?? null) {
+            'under_way' => $q->whereExists(fn ($e) => $treatments($e)->whereIn('t.status', $underWay)),
+            'completed' => $q->whereExists(fn ($e) => $treatments($e)->where('t.status', PatientTreatment::COMPLETED)),
+            'none' => $q->whereNotExists($treatments),
+            default => null,
+        };
+        if (isset($f['treatment_name'])) {
+            $q->whereExists(fn ($e) => $treatments($e)->where('t.title', $f['treatment_name']));
+        }
+        $bills = fn ($e) => $live($e->from('patient_billings as b')->whereColumn('b.patient_id', 'p.id'));
+        match ($f['payment'] ?? null) {
+            'balance' => $q->whereExists(fn ($e) => $bills($e)->where('b.outstanding_balance', '>', 0)),
+            'paid' => $q->whereExists(fn ($e) => $bills($e)->where('b.issued_at', '>=', $this->start($f))->where('b.issued_at', '<', $this->end($f)))
+                ->whereNotExists(fn ($e) => $bills($e)->where('b.outstanding_balance', '>', 0)),
+            'not_billed' => $q->whereNotExists(fn ($e) => $bills($e)->where('b.issued_at', '>=', $this->start($f))->where('b.issued_at', '<', $this->end($f))),
+            default => null,
+        };
+
+        $ids = (clone $q)->select('p.id');
         $total = (clone $q)->count();
-        $rows = (clone $q)->orderByDesc('patients.id')->limit($limit)->get(['patients.uhid', 'patients.first_name', 'patients.last_name', 'patients.gender', 'patients.age', 'patients.phone', 'patients.created_at']);
+        $new = (clone $q)->whereNotExists($earlier)->count();
+        $inPeriod = fn (string $column) => fn (Builder $query) => $query->where($column, '>=', $this->start($f))->where($column, '<', $this->end($f));
+        // Billed and collected as the revenue report counts them: bills by issue date, payments by when they were taken.
+        $billed = (float) $live(DB::table('patient_billings as b'))->whereIn('b.patient_id', $ids)->tap($inPeriod('b.issued_at'))->sum('b.final_amount');
+        $collected = (float) DB::table('patient_billing_payments as pay')->join('patient_billings as b', 'b.id', '=', 'pay.patient_billing_id')->where('pay.clinic_id', $clinic->id)
+            ->whereIn('b.patient_id', $ids)->tap($inPeriod('pay.paid_at'))->sum('pay.amount');
+        $owed = (float) $live(DB::table('patient_billings as b'))->whereIn('b.patient_id', $ids)->sum('b.outstanding_balance');
+
+        $rows = (clone $q)->leftJoin('clinic_employees as d', 'd.id', '=', 'p.current_practitioner_id')
+            ->orderByDesc('p.id')->limit($limit)->get(['p.id', 'p.uhid', 'p.first_name', 'p.last_name', 'p.gender', 'p.age', 'p.phone', 'p.created_at', 'd.name as doctor']);
+        $page = $rows->pluck('id');
+        // The page's facts, one grouped query each (never per patient).
+        $visitFacts = $visits()->whereIn('v.patient_id', $page)->groupBy('v.patient_id')->selectRaw('v.patient_id, count(*) as n, max(v.visit_date) as last_visit')->get()->keyBy('patient_id');
+        $before = DB::table('patient_visits')->where('clinic_id', $clinic->id)->whereIn('visit_status', $attended)->where('visit_date', '<', $f['from'])->whereIn('patient_id', $page)->distinct()->pluck('patient_id')->flip();
+        $treatmentRows = DB::table('patient_treatments')->where('clinic_id', $clinic->id)->whereIn('patient_id', $page)->orderByDesc('id')->get(['patient_id', 'title', 'status'])->groupBy('patient_id');
+        $money = fn (Builder $query, string $column) => $query->whereIn('b.patient_id', $page)->groupBy('b.patient_id')->selectRaw("b.patient_id, sum({$column}) as n")->pluck('n', 'patient_id');
+        $billedBy = $money($live(DB::table('patient_billings as b'))->tap($inPeriod('b.issued_at')), 'b.final_amount');
+        $paidBy = $money(DB::table('patient_billing_payments as pay')->join('patient_billings as b', 'b.id', '=', 'pay.patient_billing_id')->where('pay.clinic_id', $clinic->id)->tap($inPeriod('pay.paid_at')), 'pay.amount');
+        $owedBy = $money($live(DB::table('patient_billings as b')), 'b.outstanding_balance');
 
         return $this->result(
-            [['label' => 'New patients', 'value' => $total]],
-            [['key' => 'uhid', 'label' => 'UHID'], ['key' => 'name', 'label' => 'Patient'], ['key' => 'gender', 'label' => 'Gender'], ['key' => 'age', 'label' => 'Age'], ['key' => 'phone', 'label' => 'Mobile'], ['key' => 'registered', 'label' => 'Registered', 'format' => 'date']],
-            $rows->map(fn ($r) => ['uhid' => $r->uhid, 'name' => trim($r->first_name.' '.$r->last_name), 'gender' => $r->gender, 'age' => $r->age, 'phone' => $r->phone, 'registered' => $this->localDate($r->created_at)])->all(),
+            [['label' => 'Patients', 'value' => $total], ['label' => 'New', 'value' => $new], ['label' => 'Repeat', 'value' => $total - $new],
+                ['label' => 'Billed', 'value' => round($billed, 2), 'format' => 'money'], ['label' => 'Collected', 'value' => round($collected, 2), 'format' => 'money'], ['label' => 'Still owed', 'value' => round($owed, 2), 'format' => 'money']],
+            [['key' => 'patient', 'label' => 'Patient'], ['key' => 'uhid', 'label' => 'UHID'], ['key' => 'age_gender', 'label' => 'Age / sex'], ['key' => 'phone', 'label' => 'Mobile'],
+                ['key' => 'type', 'label' => 'New / repeat'], ['key' => 'visits', 'label' => 'Visits', 'format' => 'number'], ['key' => 'last_visit', 'label' => 'Last visit', 'format' => 'date'],
+                ['key' => 'doctor', 'label' => 'Doctor'], ['key' => 'treatments', 'label' => 'Treatments'], ['key' => 'treatment_state', 'label' => 'Treatment state'],
+                ['key' => 'billed', 'label' => 'Billed', 'format' => 'money'], ['key' => 'paid', 'label' => 'Paid', 'format' => 'money'], ['key' => 'owed', 'label' => 'Balance', 'format' => 'money']],
+            $rows->map(function ($r) use ($visitFacts, $before, $treatmentRows, $billedBy, $paidBy, $owedBy, $underWay) {
+                $treatments = $treatmentRows->get($r->id, collect());
+                $open = $treatments->whereIn('status', $underWay)->count();
+                $done = $treatments->where('status', PatientTreatment::COMPLETED)->count();
+
+                return [
+                    'patient' => trim($r->first_name.' '.$r->last_name), 'uhid' => $r->uhid,
+                    'age_gender' => trim(($r->age !== null ? $r->age.' y' : '').($r->gender ? ' · '.ucfirst((string) $r->gender) : ''), ' ·') ?: null,
+                    'phone' => $r->phone, 'type' => isset($before[$r->id]) ? 'Repeat' : 'New',
+                    'visits' => (int) ($visitFacts[$r->id]->n ?? 0), 'last_visit' => $visitFacts[$r->id]->last_visit ?? null, 'doctor' => $r->doctor,
+                    'treatments' => $treatments->pluck('title')->unique()->take(3)->implode(', ') ?: null,
+                    'treatment_state' => $treatments->isEmpty() ? 'None' : (collect([$open ? "{$open} under way" : null, $done ? "{$done} completed" : null])->filter()->implode(', ') ?: 'Stopped'),
+                    'billed' => round((float) ($billedBy[$r->id] ?? 0), 2), 'paid' => round((float) ($paidBy[$r->id] ?? 0), 2), 'owed' => round((float) ($owedBy[$r->id] ?? 0), 2),
+                ];
+            })->all(),
             $total > $limit,
-        );
-    }
-
-    protected function reportPatientsActivity(Clinic $clinic, array $f, int $limit): array
-    {
-        $visits = DB::table('patient_visits')->where('clinic_id', $clinic->id)->where('visit_date', '>=', $f['from'])->where('visit_date', '<', $this->dayAfter($f['to']))
-            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('branch_id', $b));
-        $new = (clone $visits)->where('registration_type', 'new')->distinct()->count('patient_id');
-        $repeat = (clone $visits)->where('registration_type', 'repeat')->distinct()->count('patient_id');
-        $active = (clone $visits)->distinct()->count('patient_id');
-        $cutoff = CarbonImmutable::parse($f['to'])->subMonths(6)->toDateString();
-        $inactive = DB::table('patients')->where('clinic_id', $clinic->id)->where('status', 'active')
-            ->whereNotExists(fn ($e) => $e->from('patient_visits')->whereColumn('patient_visits.patient_id', 'patients.id')->where('patient_visits.visit_date', '>=', $cutoff))->count();
-
-        return $this->result(
-            [['label' => 'Seen in the period', 'value' => $active], ['label' => 'First visit', 'value' => $new], ['label' => 'Returning', 'value' => $repeat], ['label' => 'Not seen for 6 months', 'value' => $inactive]],
-            [['key' => 'measure', 'label' => 'Measure'], ['key' => 'patients', 'label' => 'Patients', 'format' => 'number']],
-            [['measure' => 'Seen in the period', 'patients' => $active], ['measure' => 'First visit', 'patients' => $new], ['measure' => 'Returning', 'patients' => $repeat], ['measure' => 'Not seen for 6 months', 'patients' => $inactive]],
         );
     }
 
@@ -257,6 +419,175 @@ class ClinicReports
             [['label' => 'Consultations signed', 'value' => $rows->sum('consultations')], ['label' => 'Treatments started', 'value' => $rows->sum('treatments_started')], ['label' => 'Treatments completed', 'value' => $rows->sum('treatments_completed')], ['label' => 'Sessions completed', 'value' => $rows->sum('sessions')]],
             [['key' => 'practitioner', 'label' => 'Practitioner'], ['key' => 'consultations', 'label' => 'Consultations', 'format' => 'number'], ['key' => 'patients', 'label' => 'Patients', 'format' => 'number'], ['key' => 'treatments_started', 'label' => 'Treatments started', 'format' => 'number'], ['key' => 'treatments_completed', 'label' => 'Treatments completed', 'format' => 'number'], ['key' => 'sessions', 'label' => 'Sessions', 'format' => 'number']],
             $rows->all(),
+        );
+    }
+
+    /* ------------------------------------------------------------- clinical */
+
+    /** Every consultation signed in the period, one row each, with what was done in it. */
+    protected function reportClinicalConsultations(Clinic $clinic, array $f, int $limit): array
+    {
+        $q = DB::table('clinical_encounters as e')->join('patients as p', 'p.id', '=', 'e.patient_id')->leftJoin('clinic_employees as d', 'd.id', '=', 'e.doctor_id')
+            ->where('e.clinic_id', $clinic->id)->whereNotNull('e.finalized_at')->whereNull('e.voided_at')
+            ->where('e.finalized_at', '>=', $this->start($f))->where('e.finalized_at', '<', $this->end($f))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('e.branch_id', $b))->when($f['specialty'], fn (Builder $q, $s) => $q->where('e.specialty', $s))
+            ->when($f['practitioner_id'], fn (Builder $q, $p) => $q->where('e.doctor_id', $p));
+        $count = fn (string $table) => DB::table($table)->selectRaw('count(*)')->whereColumn("{$table}.encounter_id", 'e.id');
+        $ids = (clone $q)->select('e.id');
+        $sum = fn (string $table) => DB::table($table)->whereIn('encounter_id', $ids)->count();
+        $total = (clone $q)->count();
+        $patients = (clone $q)->distinct()->count('e.patient_id');
+        // Patients whose first consultation here is in this period.
+        $firstTime = (clone $q)->whereNotExists(fn ($e) => $e->from('clinical_encounters as earlier')->whereColumn('earlier.patient_id', 'e.patient_id')
+            ->where('earlier.clinic_id', $clinic->id)->whereNull('earlier.voided_at')->whereColumn('earlier.started_at', '<', 'e.started_at'))->distinct()->count('e.patient_id');
+
+        $rows = (clone $q)->orderByDesc('e.finalized_at')->limit($limit)
+            ->select(['e.id', 'e.finalized_at', 'e.specialty', 'e.chief_complaint', 'p.uhid', 'p.first_name', 'p.last_name', 'd.name as doctor'])
+            ->addSelect([
+                'diagnosis' => DB::table('clinical_diagnoses')->select('description')->whereColumn('clinical_diagnoses.encounter_id', 'e.id')->orderByDesc('is_primary')->orderBy('id')->limit(1),
+                'procedures' => $count('patient_procedures'), 'prescriptions' => $count('prescriptions'), 'tests' => $count('clinical_orders'),
+            ])->get();
+
+        return $this->result(
+            [['label' => 'Consultations', 'value' => $total], ['label' => 'Patients', 'value' => $patients], ['label' => 'First-time patients', 'value' => $firstTime],
+                ['label' => 'Procedures', 'value' => $sum('patient_procedures')], ['label' => 'Prescriptions', 'value' => $sum('prescriptions')], ['label' => 'Tests ordered', 'value' => $sum('clinical_orders')]],
+            [['key' => 'signed', 'label' => 'Signed', 'format' => 'date'], ['key' => 'patient', 'label' => 'Patient'], ['key' => 'uhid', 'label' => 'UHID'], ['key' => 'practitioner', 'label' => 'Practitioner'],
+                ['key' => 'specialty', 'label' => 'Specialty'], ['key' => 'complaint', 'label' => 'Complaint'], ['key' => 'diagnosis', 'label' => 'Diagnosis'],
+                ['key' => 'procedures', 'label' => 'Procedures', 'format' => 'number'], ['key' => 'prescriptions', 'label' => 'Prescriptions', 'format' => 'number'], ['key' => 'tests', 'label' => 'Tests', 'format' => 'number']],
+            $rows->map(fn ($r) => [
+                'signed' => $this->localDate($r->finalized_at), 'patient' => trim($r->first_name.' '.$r->last_name), 'uhid' => $r->uhid, 'practitioner' => $r->doctor,
+                'specialty' => $r->specialty ? ($this->specialties->get($r->specialty)['label'] ?? $r->specialty) : null, 'complaint' => $r->chief_complaint, 'diagnosis' => $r->diagnosis,
+                'procedures' => (int) $r->procedures, 'prescriptions' => (int) $r->prescriptions, 'tests' => (int) $r->tests,
+            ])->all(),
+            $total > $limit,
+        );
+    }
+
+    /** Every treatment started in the period, one row each: where it stands and its sessions. */
+    protected function reportClinicalTreatments(Clinic $clinic, array $f, int $limit): array
+    {
+        $q = DB::table('patient_treatments as t')->join('patients as p', 'p.id', '=', 't.patient_id')->leftJoin('clinic_employees as d', 'd.id', '=', 't.practitioner_id')
+            ->where('t.clinic_id', $clinic->id)->where('t.created_at', '>=', $this->start($f))->where('t.created_at', '<', $this->end($f))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('t.branch_id', $b))->when($f['specialty'], fn (Builder $q, $s) => $q->where('t.specialty_key', $s))
+            ->when($f['practitioner_id'], fn (Builder $q, $p) => $q->where('t.practitioner_id', $p));
+        match ($f['treatment_status'] ?? null) {
+            'under_way' => $q->whereIn('t.status', [PatientTreatment::PLANNED, PatientTreatment::IN_PROGRESS, PatientTreatment::PAUSED]),
+            'completed' => $q->where('t.status', PatientTreatment::COMPLETED),
+            'cancelled' => $q->where('t.status', PatientTreatment::CANCELLED),
+            default => null,
+        };
+        if (isset($f['treatment_name'])) {
+            $q->where('t.title', $f['treatment_name']);
+        }
+        $items = fn ($e) => $this->liveItems($e, $clinic)->whereColumn('i.patient_treatment_id', 't.id');
+        match ($f['payment'] ?? null) {
+            'balance' => $q->whereExists(fn ($e) => $items($e)->where('b.outstanding_balance', '>', 0)),
+            'paid' => $q->whereExists($items)->whereNotExists(fn ($e) => $items($e)->where('b.outstanding_balance', '>', 0)),
+            'not_billed' => $q->whereNotExists($items),
+            default => null,
+        };
+
+        $byStatus = (clone $q)->selectRaw('t.status, count(*) as n')->groupBy('t.status')->pluck('n', 'status');
+        $total = (int) $byStatus->sum();
+        $status = fn (string ...$keys) => (int) collect($keys)->sum(fn ($key) => $byStatus[$key] ?? 0);
+        $money = fn ($ids) => $this->liveItems(DB::table('patient_billing_items as i'), $clinic)->whereIn('i.patient_treatment_id', $ids)
+            ->groupBy('i.patient_treatment_id')->selectRaw('i.patient_treatment_id as id, sum(i.final_amount) as billed, sum('.self::PAID_SHARE.') as paid')->get()->keyBy('id');
+        $totals = $money((clone $q)->select('t.id'));
+        $rows = (clone $q)->orderByDesc('t.created_at')->limit($limit)
+            ->get(['t.id', 't.created_at', 't.title', 't.specialty_key', 't.status', 't.sessions_planned', 't.sessions_completed', 'p.uhid', 'p.first_name', 'p.last_name', 'd.name as doctor']);
+
+        return $this->result(
+            [['label' => 'Treatments started', 'value' => $total], ['label' => 'Under way', 'value' => $status(PatientTreatment::PLANNED, PatientTreatment::IN_PROGRESS, PatientTreatment::PAUSED)],
+                ['label' => 'Completed', 'value' => $status(PatientTreatment::COMPLETED)], ['label' => 'Cancelled', 'value' => $status(PatientTreatment::CANCELLED)],
+                ['label' => 'Sessions done', 'value' => (int) (clone $q)->sum('t.sessions_completed')],
+                ['label' => 'Billed', 'value' => round((float) $totals->sum('billed'), 2), 'format' => 'money'], ['label' => 'Paid', 'value' => round((float) $totals->sum('paid'), 2), 'format' => 'money']],
+            [['key' => 'started', 'label' => 'Started', 'format' => 'date'], ['key' => 'patient', 'label' => 'Patient'], ['key' => 'uhid', 'label' => 'UHID'], ['key' => 'treatment', 'label' => 'Treatment'],
+                ['key' => 'specialty', 'label' => 'Specialty'], ['key' => 'practitioner', 'label' => 'Practitioner'], ['key' => 'status', 'label' => 'Status'],
+                ['key' => 'sessions_done', 'label' => 'Sessions done', 'format' => 'number'], ['key' => 'sessions_planned', 'label' => 'Planned', 'format' => 'number'],
+                ['key' => 'billed', 'label' => 'Billed', 'format' => 'money'], ['key' => 'paid', 'label' => 'Paid', 'format' => 'money'], ['key' => 'balance', 'label' => 'Balance', 'format' => 'money']],
+            $rows->map(function ($r) use ($totals) {
+                $billed = round((float) ($totals[$r->id]->billed ?? 0), 2);
+                $paid = round((float) ($totals[$r->id]->paid ?? 0), 2);
+
+                return [
+                    'started' => $this->localDate($r->created_at), 'patient' => trim($r->first_name.' '.$r->last_name), 'uhid' => $r->uhid, 'treatment' => $r->title,
+                    'specialty' => $r->specialty_key ? ($this->specialties->get($r->specialty_key)['label'] ?? $r->specialty_key) : null, 'practitioner' => $r->doctor,
+                    'status' => ucfirst(str_replace('_', ' ', (string) $r->status)), 'sessions_done' => (int) $r->sessions_completed, 'sessions_planned' => $r->sessions_planned !== null ? (int) $r->sessions_planned : null,
+                    'billed' => $billed, 'paid' => $paid, 'balance' => round(max(0, $billed - $paid), 2),
+                ];
+            })->all(),
+            $total > $limit,
+        );
+    }
+
+    /* ---------------------------------------------------------------- money */
+
+    /**
+     * What a bill line's share of its bill's payments comes to: the line's
+     * amount times the part of the bill paid (net of refunds). A bill is paid
+     * as a whole, so a line's "paid" is this share, never a payment of its own.
+     */
+    private const PAID_SHARE = 'case when b.final_amount > 0 then i.final_amount * (b.paid_amount - coalesce(b.refunded_amount, 0)) / b.final_amount else 0 end';
+
+    /** Bill lines on this clinic's bills that are not cancelled, joined to their bill as `b`. */
+    private function liveItems(Builder $items, Clinic $clinic): Builder
+    {
+        if ($items->from === null || $items->from === '') {
+            $items->from('patient_billing_items as i');
+        }
+
+        return $items->join('patient_billings as b', 'b.id', '=', 'i.patient_billing_id')
+            ->where('i.clinic_id', $clinic->id)->where('b.status', '!=', BillingStatus::Cancelled->value);
+    }
+
+    /**
+     * Every line billed in the period (bills by issue date): patient, what it
+     * was for, the treatment, the doctor, its amount and its share of what the
+     * bill has been paid. Narrowed by payment, treatment and kind of line.
+     */
+    protected function reportFinanceItems(Clinic $clinic, array $f, int $limit): array
+    {
+        $q = $this->liveItems(DB::table('patient_billing_items as i'), $clinic)
+            ->join('patients as p', 'p.id', '=', 'b.patient_id')
+            ->leftJoin('patient_treatments as t', 't.id', '=', 'i.patient_treatment_id')
+            ->leftJoin('clinic_employees as d', 'd.id', '=', DB::raw('coalesce(i.doctor_id, b.doctor_id)'))
+            ->where('b.issued_at', '>=', $this->start($f))->where('b.issued_at', '<', $this->end($f))
+            ->when($f['branch_id'], fn (Builder $q, $b) => $q->where('b.branch_id', $b))
+            ->when($f['practitioner_id'], fn (Builder $q, $p) => $q->whereRaw('coalesce(i.doctor_id, b.doctor_id) = ?', [$p]));
+        match ($f['payment'] ?? null) {
+            'balance' => $q->where('b.outstanding_balance', '>', 0),
+            'paid' => $q->where('b.outstanding_balance', '<=', 0),
+            default => null,
+        };
+        if (isset($f['treatment_name'])) {
+            $q->where('t.title', $f['treatment_name']);
+        }
+        if (isset($f['item_type'])) {
+            $q->where('i.item_type', $f['item_type']);
+        }
+
+        $sums = (clone $q)->selectRaw('count(*) as n, count(distinct b.patient_id) as patients, sum(i.final_amount) as billed, sum(i.discount_amount) as discounts, sum('.self::PAID_SHARE.') as paid')->first();
+        $total = (int) ($sums->n ?? 0);
+        $rows = (clone $q)->orderByDesc('b.issued_at')->orderByDesc('i.id')->limit($limit)
+            ->selectRaw('b.issued_at, b.billing_number, b.status as bill_status, i.description, i.item_type, i.quantity, i.discount_amount, i.final_amount, t.title as treatment, d.name as doctor, p.uhid, p.first_name, p.last_name, '.self::PAID_SHARE.' as paid')
+            ->get();
+        $billed = round((float) ($sums->billed ?? 0), 2);
+        $paid = round((float) ($sums->paid ?? 0), 2);
+
+        return $this->result(
+            [['label' => 'Lines billed', 'value' => $total], ['label' => 'Patients', 'value' => (int) ($sums->patients ?? 0)], ['label' => 'Billed', 'value' => $billed, 'format' => 'money'],
+                ['label' => 'Discounts', 'value' => round((float) ($sums->discounts ?? 0), 2), 'format' => 'money'], ['label' => 'Paid', 'value' => $paid, 'format' => 'money'], ['label' => 'Balance', 'value' => round(max(0, $billed - $paid), 2), 'format' => 'money']],
+            [['key' => 'date', 'label' => 'Billed', 'format' => 'date'], ['key' => 'bill', 'label' => 'Bill'], ['key' => 'patient', 'label' => 'Patient'], ['key' => 'uhid', 'label' => 'UHID'],
+                ['key' => 'item', 'label' => 'For'], ['key' => 'type', 'label' => 'Kind'], ['key' => 'treatment', 'label' => 'Treatment'], ['key' => 'doctor', 'label' => 'Doctor'],
+                ['key' => 'quantity', 'label' => 'Qty', 'format' => 'number'], ['key' => 'discount', 'label' => 'Discount', 'format' => 'money'], ['key' => 'amount', 'label' => 'Amount', 'format' => 'money'],
+                ['key' => 'paid', 'label' => 'Paid', 'format' => 'money'], ['key' => 'bill_status', 'label' => 'Bill status']],
+            $rows->map(fn ($r) => [
+                'date' => $this->localDate($r->issued_at), 'bill' => $r->billing_number, 'patient' => trim($r->first_name.' '.$r->last_name), 'uhid' => $r->uhid,
+                'item' => $r->description, 'type' => $r->item_type ? ucfirst(str_replace('_', ' ', $r->item_type)) : null, 'treatment' => $r->treatment, 'doctor' => $r->doctor,
+                'quantity' => (int) $r->quantity, 'discount' => round((float) $r->discount_amount, 2), 'amount' => round((float) $r->final_amount, 2), 'paid' => round((float) $r->paid, 2),
+                'bill_status' => ucfirst(str_replace('_', ' ', (string) $r->bill_status)),
+            ])->all(),
+            $total > $limit,
         );
     }
 

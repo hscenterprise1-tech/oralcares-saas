@@ -1,0 +1,1115 @@
+[
+ {
+  "shot": "p359-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/86/32/86"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/94",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/110"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/110",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/62"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/48"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/48"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "owner-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/86/32/86"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/66/32/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/42/32/42"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/94",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/110"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/110",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/62"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/46/32/46"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/90"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 24/32/32/32"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/48"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 32/48"
+  ],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Recent clinical activity",
+   "Diagnoses and medicines",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "dentist-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "reception-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending",
+   "hidden: High:"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Coming up",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Treatments",
+   "Billing",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "billing-console-errors",
+  "errors": []
+ }
+]

@@ -86,15 +86,15 @@ function Pager({ meta, page, onPage, label }: { meta: Paged<unknown>['meta']; pa
 
 type Tone = 'green' | 'slate' | 'rose' | 'blue' | 'amber';
 const PILL: Record<Tone, string> = {
-  green: 'bg-cx-green-bg text-cx-green-ink',
-  slate: 'bg-cx-slate-bg text-cx-slate-ink',
-  rose: 'bg-cx-rose-bg text-cx-rose-ink',
-  blue: 'bg-cx-m-blue-bg text-cx-blue-ink',
-  amber: 'bg-cx-amber-bg text-cx-amber-ink',
+  green: 'bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]',
+  slate: 'bg-slate-100 text-slate-700 border border-slate-200',
+  rose: 'bg-[#FFF1F2] text-[#9F1239] border border-[#FECDD3]',
+  blue: 'bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]',
+  amber: 'bg-[#FEFCE8] text-[#B45309] border border-[#FDE68A]',
 };
 
 function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold', PILL[tone])}>{children}</span>;
+  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-bold border', PILL[tone])}>{children}</span>;
 }
 
 /* ------------------------------------------------------------ timeline */
@@ -110,28 +110,28 @@ export function TimelineSection({ endpoint }: { endpoint: string }) {
         <EmptyState title="Nothing recorded yet" description="Registrations, visits, consultations, bills and changes to the record appear here as they happen." />
       ) : (
         data && (
-          <Card as="section" aria-label="Timeline" className="p-4">
-            <ol className="divide-y divide-cx-line">
+          <section aria-label="Timeline" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+            <ol className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="grid gap-1 py-2.5 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-3">
-                  <span className="text-[12.5px] font-semibold tabular-nums text-cx-text-2">{shortDate(row.at)}</span>
+                <li key={row.id} className="grid gap-1 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-3">
+                  <span className="text-[12.5px] font-bold tabular-nums text-slate-500">{shortDate(row.at)}</span>
                   <div className="min-w-0">
-                    <p className="text-[14px] font-semibold text-cx-text [overflow-wrap:anywhere]">
+                    <p className="text-[14.5px] font-bold text-slate-900 [overflow-wrap:anywhere]">
                       {row.open_url ? (
-                        <Link href={row.open_url} className="hover:underline">
+                        <Link href={row.open_url} className="text-blue-600 hover:text-blue-800 hover:underline">
                           {row.title}
                         </Link>
                       ) : (
                         row.title
                       )}
                     </p>
-                    {(row.description || row.actor) && <p className="text-[13px] text-cx-text-2 [overflow-wrap:anywhere]">{[row.description, row.actor ? `by ${row.actor}` : null].filter(Boolean).join(' · ')}</p>}
+                    {(row.description || row.actor) && <p className="mt-0.5 text-[13px] text-slate-600 [overflow-wrap:anywhere]">{[row.description, row.actor ? `by ${row.actor}` : null].filter(Boolean).join(' · ')}</p>}
                   </div>
                 </li>
               ))}
             </ol>
             <Pager meta={data.meta} page={page} onPage={load} label="timeline" />
-          </Card>
+          </section>
         )
       )}
     </Frame>
@@ -166,22 +166,22 @@ export function AppointmentsSection({ endpoint }: { endpoint: string }) {
         <EmptyState title="No appointments" description="Bookings made for this patient appear here, with what happened to each." />
       ) : (
         data && (
-          <Card as="section" aria-label="Appointments" className="p-4">
-            <ul className="divide-y divide-cx-line">
+          <section aria-label="Appointments" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+            <ul className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-semibold text-cx-text">
+                    <p className="text-[14.5px] font-bold text-slate-900">
                       {row.date_label} · {row.time_label}
                     </p>
-                    <p className="text-[13px] text-cx-text-2 [overflow-wrap:anywhere]">
-                      {[row.type ? humanize(row.type) : null, row.practitioner, row.branch, row.duration ? `${row.duration} min` : null].filter(Boolean).join(' · ')}
+                    <p className="mt-0.5 text-[13px] font-medium text-slate-500 [overflow-wrap:anywhere]">
+                      {[row.type ? humanize(row.type) : null, row.practitioner ? `Dr. ${row.practitioner}` : null, row.branch, row.duration ? `${row.duration} min` : null].filter(Boolean).join(' · ')}
                     </p>
-                    {row.notes && <p className="text-[12.5px] text-cx-text-2 [overflow-wrap:anywhere]">{row.notes}</p>}
+                    {row.notes && <p className="mt-1 text-[12.5px] text-slate-600 [overflow-wrap:anywhere]">{row.notes}</p>}
                   </div>
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-2.5">
                     <Pill tone={APPOINTMENT_TONE[row.status ?? ''] ?? 'slate'}>{row.status_label ?? humanize(row.status ?? '')}</Pill>
-                    <Link href={row.actions.view_url} className="text-[13px] font-semibold text-cx-blue-ink hover:underline">
+                    <Link href={row.actions.view_url} className="text-[13px] font-bold text-blue-600 hover:text-blue-800 hover:underline">
                       Open day
                     </Link>
                   </span>
@@ -189,7 +189,7 @@ export function AppointmentsSection({ endpoint }: { endpoint: string }) {
               ))}
             </ul>
             <Pager meta={data.meta} page={page} onPage={load} label="appointments" />
-          </Card>
+          </section>
         )
       )}
     </Frame>
@@ -198,7 +198,7 @@ export function AppointmentsSection({ endpoint }: { endpoint: string }) {
 
 /* ------------------------------------------------------------ consents */
 
-type ConsentRow = {
+export type ConsentRow = {
   id: number;
   type: string;
   version: string | null;
@@ -209,7 +209,7 @@ type ConsentRow = {
   revoked_at: string | null;
   revocation_reason: string | null;
 };
-type ConsentsPayload = { data: ConsentRow[]; options: { key: string; label: string; version: string | null; text: string | null }[]; methods: string[]; can_manage: boolean };
+export type ConsentsPayload = { data: ConsentRow[]; options: { key: string; label: string; version: string | null; text: string | null }[]; methods: string[]; can_manage: boolean };
 
 /**
  * Each consent for its own purpose (treatment, communication, data…): who
@@ -232,24 +232,24 @@ export function ConsentsSection({ endpoint }: { endpoint: string }) {
   return (
     <Frame title="Consents" error={error} loading={!data} onRetry={load}>
       {data && (
-        <Card as="section" aria-label="Consents" className="p-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-[15px] font-semibold text-cx-text">Consents</h2>
+        <section aria-label="Consents" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[16px] font-bold text-slate-900">Consents</h2>
             {data.can_manage && data.options.length > 0 && <Button onClick={() => setRecording(true)}>Record consent</Button>}
           </div>
           {data.data.length === 0 ? (
-            <p className="text-[13.5px] text-cx-text-2">No consent recorded. Each purpose — treatment, messages, data — is recorded separately.</p>
+            <p className="text-[13.5px] text-slate-400">No consent recorded. Each purpose — treatment, messages, data — is recorded separately.</p>
           ) : (
-            <ul className="divide-y divide-cx-line">
+            <ul className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                   <div className="min-w-0">
-                    <p className="text-[14px] font-semibold text-cx-text">
-                      {label(row.type)} {row.version && <span className="font-normal text-cx-text-2">· version {row.version}</span>}
+                    <p className="text-[14.5px] font-bold text-slate-900">
+                      {label(row.type)} {row.version && <span className="font-normal text-slate-500">· version {row.version}</span>}
                     </p>
-                    <p className="text-[13px] text-cx-text-2">{[row.method ? humanize(row.method) : null, row.captured_by ? `by ${row.captured_by}` : null, shortDate(row.captured_at)].filter(Boolean).join(' · ')}</p>
+                    <p className="mt-0.5 text-[13px] text-slate-500">{[row.method ? humanize(row.method) : null, row.captured_by ? `by ${row.captured_by}` : null, shortDate(row.captured_at)].filter(Boolean).join(' · ')}</p>
                     {row.revoked_at && (
-                      <p className="text-[12.5px] text-cx-rose-ink">
+                      <p className="mt-0.5 text-[12.5px] text-rose-600 font-medium">
                         Withdrawn {shortDate(row.revoked_at)}
                         {row.revocation_reason ? ` — ${row.revocation_reason}` : ''}
                       </p>
@@ -267,7 +267,7 @@ export function ConsentsSection({ endpoint }: { endpoint: string }) {
               ))}
             </ul>
           )}
-        </Card>
+        </section>
       )}
       {recording && data && (
         <RecordConsent
@@ -302,7 +302,7 @@ function failureMessage(failure: unknown): string {
   return Object.values(body?.errors ?? {})[0]?.[0] ?? body?.message ?? 'Not saved.';
 }
 
-function RecordConsent({ payload, endpoint, onClose, onDone }: { payload: ConsentsPayload; endpoint: string; onClose: () => void; onDone: () => void }) {
+export function RecordConsent({ payload, endpoint, onClose, onDone }: { payload: ConsentsPayload; endpoint: string; onClose: () => void; onDone: () => void }) {
   const [type, setType] = useState(payload.options[0]?.key ?? '');
   const [method, setMethod] = useState(payload.methods.includes('written') ? 'written' : (payload.methods[0] ?? ''));
   const [error, setError] = useState<string | null>(null);
@@ -353,7 +353,7 @@ function RecordConsent({ payload, endpoint, onClose, onDone }: { payload: Consen
   );
 }
 
-function RevokeConsent({ row, label, endpoint, onClose, onDone }: { row: ConsentRow; label: string; endpoint: string; onClose: () => void; onDone: () => void }) {
+export function RevokeConsent({ row, label, endpoint, onClose, onDone }: { row: ConsentRow; label: string; endpoint: string; onClose: () => void; onDone: () => void }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -406,24 +406,24 @@ export function AuditSection({ endpoint }: { endpoint: string }) {
   return (
     <Frame title="Audit" error={error} loading={!data} onRetry={() => load(page)}>
       {data && (
-        <Card as="section" aria-label="Audit" className="p-4">
+        <section aria-label="Audit" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
           {data.meta.total === 0 ? (
-            <p className="text-[13.5px] text-cx-text-2">No audited events yet.</p>
+            <p className="text-[13.5px] text-slate-400">No audited events yet.</p>
           ) : (
-            <ol className="divide-y divide-cx-line">
+            <ol className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="grid gap-1 py-2 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-3">
-                  <span className="tabular-nums text-cx-text-2">{row.at ? new Date(row.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                <li key={row.id} className="grid gap-1 py-3 text-[13.5px] sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-3">
+                  <span className="tabular-nums font-medium text-slate-500">{row.at ? new Date(row.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                   <span className="min-w-0 [overflow-wrap:anywhere]">
-                    <span className="font-semibold text-cx-text">{row.label}</span>
-                    <span className="text-cx-text-2"> · {[row.actor ?? 'System', row.subject].filter(Boolean).join(' · ')}</span>
+                    <span className="font-bold text-slate-900">{row.label}</span>
+                    <span className="text-slate-500"> · {[row.actor ?? 'System', row.subject].filter(Boolean).join(' · ')}</span>
                   </span>
                 </li>
               ))}
             </ol>
           )}
           <Pager meta={data.meta} page={page} onPage={load} label="audit" />
-        </Card>
+        </section>
       )}
     </Frame>
   );
@@ -458,26 +458,26 @@ export function ClinicalSection({ endpoint }: { endpoint: string }) {
         <EmptyState title="No consultations yet" description="Consultations appear here once a clinician starts one." />
       ) : (
         data && (
-          <Card as="section" aria-label="Consultations" className="p-4">
-            <ul className="divide-y divide-cx-line">
+          <section aria-label="Consultations" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+            <ul className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="py-2.5">
+                <li key={row.id} className="py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[14px] font-semibold text-cx-text">
+                    <p className="text-[14.5px] font-bold text-slate-900">
                       {row.url ? (
-                        <Link href={row.url} className="hover:underline">
+                        <Link href={row.url} className="text-blue-600 hover:text-blue-800 hover:underline">
                           {row.number ?? 'Consultation'}
                         </Link>
                       ) : (
                         (row.number ?? 'Consultation')
                       )}
-                      <span className="font-normal text-cx-text-2"> · {[shortDate(row.date), row.practitioner, row.branch].filter(Boolean).join(' · ')}</span>
+                      <span className="font-normal text-slate-500"> · {[shortDate(row.date), row.practitioner ? `Dr. ${row.practitioner}` : null, row.branch].filter(Boolean).join(' · ')}</span>
                     </p>
                     <Pill tone={ENCOUNTER_TONE[row.status] ?? 'slate'}>{row.status === 'draft' ? 'Open' : humanize(row.status)}</Pill>
                   </div>
-                  {row.complaint && <p className="text-[13.5px] text-cx-text [overflow-wrap:anywhere]">{row.complaint}</p>}
-                  {row.diagnoses.length > 0 && <p className="text-[13px] text-cx-text-2 [overflow-wrap:anywhere]">Diagnosis: {row.diagnoses.map((d) => [d.description, d.code].filter(Boolean).join(' ')).join('; ')}</p>}
-                  <p className="text-[12.5px] text-cx-text-2">
+                  {row.complaint && <p className="mt-1 text-[13.5px] text-slate-800 [overflow-wrap:anywhere]"><span className="font-semibold text-slate-700">Complaint:</span> {row.complaint}</p>}
+                  {row.diagnoses.length > 0 && <p className="mt-0.5 text-[13px] text-slate-600 [overflow-wrap:anywhere]"><span className="font-semibold text-slate-700">Diagnosis:</span> {row.diagnoses.map((d) => [d.description, d.code].filter(Boolean).join(' ')).join('; ')}</p>}
+                  <p className="mt-1 text-[12.5px] font-medium text-slate-500">
                     {[
                       row.counts.prescriptions ? `${row.counts.prescriptions} prescription${row.counts.prescriptions > 1 ? 's' : ''}` : null,
                       row.counts.orders ? `${row.counts.orders} investigation order${row.counts.orders > 1 ? 's' : ''}` : null,
@@ -487,12 +487,12 @@ export function ClinicalSection({ endpoint }: { endpoint: string }) {
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
-                  {row.void_reason && <p className="text-[12.5px] text-cx-rose-ink">Voided: {row.void_reason}</p>}
+                  {row.void_reason && <p className="mt-1 text-[12.5px] text-rose-600 font-medium">Voided: {row.void_reason}</p>}
                 </li>
               ))}
             </ul>
             <Pager meta={data.meta} page={page} onPage={load} label="consultations" />
-          </Card>
+          </section>
         )
       )}
     </Frame>
@@ -527,28 +527,28 @@ export function RequestsSection({ endpoint }: { endpoint: string }) {
         <EmptyState title="No requests" description="Removals, voids and other governed changes asked for on this patient's records appear here." />
       ) : (
         data && (
-          <Card as="section" aria-label="Requests" className="p-4">
-            <ul className="divide-y divide-cx-line">
+          <section aria-label="Requests" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+            <ul className="divide-y divide-slate-100">
               {data.data.map((row) => (
-                <li key={row.id} className="py-2.5">
+                <li key={row.id} className="py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[14px] font-semibold text-cx-text [overflow-wrap:anywhere]">
-                      {row.action} <span className="font-normal text-cx-text-2">· {row.target}</span>
+                    <p className="text-[14.5px] font-bold text-slate-900 [overflow-wrap:anywhere]">
+                      {row.action} <span className="font-normal text-slate-500">· {row.target}</span>
                     </p>
                     <Pill tone={REQUEST_TONE[row.status] ?? 'slate'}>{row.direct ? 'Done by the owner' : humanize(row.status)}</Pill>
                   </div>
-                  <p className="text-[13px] text-cx-text-2 [overflow-wrap:anywhere]">
+                  <p className="mt-0.5 text-[13px] text-slate-500 [overflow-wrap:anywhere]">
                     {[row.requester ? `Asked by ${row.requester}` : null, shortDate(row.created_at), row.approver ? `decided by ${row.approver}` : null, row.decided_at ? shortDate(row.decided_at) : null]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
-                  <p className="text-[13px] text-cx-text [overflow-wrap:anywhere]">Reason: {row.reason}</p>
-                  {row.last_note && row.last_note !== row.reason && <p className="text-[12.5px] text-cx-text-2 [overflow-wrap:anywhere]">{row.last_note}</p>}
+                  <p className="mt-1 text-[13px] text-slate-700 [overflow-wrap:anywhere]"><span className="font-semibold text-slate-800">Reason:</span> {row.reason}</p>
+                  {row.last_note && row.last_note !== row.reason && <p className="mt-0.5 text-[12.5px] text-slate-500 [overflow-wrap:anywhere]">{row.last_note}</p>}
                 </li>
               ))}
             </ul>
             <Pager meta={data.meta} page={page} onPage={load} label="requests" />
-          </Card>
+          </section>
         )
       )}
     </Frame>

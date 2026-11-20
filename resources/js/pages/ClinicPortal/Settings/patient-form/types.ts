@@ -38,7 +38,7 @@ export interface PatientFormProps {
   quick_care: { allergy_status: FieldState; alerts: boolean; alert_roles: string[] | null; conditions_from_catalogue: boolean };
   visit_reason: FieldState;
   lists: Record<ListKind, ListItem[]>;
-  links: { fields: string; template: string; quick_care: string; check_in: string; catalogue: string };
+  links: { fields: string; template: string; quick_care: string; check_in: string; catalogue: string; automation?: string; physio?: string | null; self?: string };
 }
 
 export type Screen = 'new_case' | 'full_page';

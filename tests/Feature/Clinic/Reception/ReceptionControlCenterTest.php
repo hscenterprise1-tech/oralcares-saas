@@ -63,7 +63,10 @@ test('a receptionist\'s Control Center is named Reception, with every section th
     $page = ($this->page)();
 
     expect($page['props']['can'])->toBe(['register' => true, 'appointments' => true, 'book' => true, 'queue' => true])
-        ->and($page['props']['billing'])->not->toBeNull()
+        // The desk runs billing in full (2026-11-05): what is waiting to be paid, the day's takings and the way to Billing.
+        ->and($page['props']['billing']['can']['collect'])->toBeTrue()
+        ->and($page['props']['billing']['collected_today'])->not->toBeNull()
+        ->and($page['props']['billing']['links']['all'])->toBe(route('clinic.billing.index'))
         ->and($page['props']['links']['book'])->toContain('book=1')
         // "View all" opens the Queue page's stage tab when the module is on.
         ->and($page['props']['links']['queue'])->toEndWith('/clinic/queue')
@@ -107,6 +110,10 @@ test('a front office without billing or booking rights sees no money, no follow-
 });
 
 test('with billing, a finished visit says where its money stands', function () {
+    // A clinic that grants its desk the ledger (OD-9 made it no default).
+    setPermissionsTeamId(null);
+    Role::findByName(ClinicRole::Receptionist->value, 'web')->givePermissionTo(Permission::firstOrCreate(['name' => ClinicPermission::BillingView->value, 'guard_name' => 'web']));
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
     $item = ($this->checkIn)('Ravi');
     $this->actingAs($this->doctorUser);
     $encounter = app(EncounterWorkspace::class)->startFromQueue($item, $this->doctor);
@@ -128,7 +135,9 @@ test('without the Queue module nobody calls from the desk, on the page or the se
     expect(($this->page)()['props']['can']['queue'])->toBeFalse()
         ->and(($this->page)()['props']['links']['queue'])->toBeNull();
     ($this->asReception)()->patch("/clinic/reception/queue/{$item->id}/status", ['action' => 'call'])->assertForbidden();
-    ($this->asReception)()->patch("/clinic/reception/queue/{$item->id}/status", ['action' => 'cancel'])->assertRedirect();
+    // Cancelling is reception's own act: the confirmation says the visit was cancelled, never that the patient "left".
+    ($this->asReception)()->patch("/clinic/reception/queue/{$item->id}/status", ['action' => 'cancel'])->assertRedirect()
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'visit was cancelled and removed from today') && ! str_contains($message, 'left'));
     ($this->asReception)()->get('/clinic/reception/list/waiting')->assertOk()->assertInertia(fn (Assert $page) => $page->where('can.queue', false));
 });
 

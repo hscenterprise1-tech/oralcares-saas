@@ -2,6 +2,8 @@ import { Link, router } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { Card } from '@/clinic/ui/Card';
+import { PageHeader } from '@/clinic/ui/PageHeader';
+import { PillTabs } from '@/clinic/ui/Tabs';
 import { EmptyState } from '@/clinic/ui/states';
 import { humanize } from '@/clinic/ui/visuals';
 import { shortDate } from '../Patients/components/format';
@@ -43,27 +45,10 @@ export default function OrdersIndex({ branch, tab, category, counts, categories,
 
   return (
     <ClinicPortalShell title="Investigations">
-      <div className="mx-auto w-full max-w-[1100px] space-y-4">
-        <div>
-          <h1 className="text-[22px] font-bold text-cx-text">Investigations</h1>
-          {branch && <p className="text-[13.5px] text-cx-text-2">{branch.name}</p>}
-        </div>
+      <div className="w-full space-y-4">
+        <PageHeader title="Investigations" description={branch?.name} />
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div role="tablist" aria-label="Worklist" className="flex flex-wrap gap-1 rounded-[10px] bg-cx-slate-bg p-1">
-            {TABS.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                onClick={() => go({ tab: key })}
-                className={cn('h-9 rounded-[8px] px-3 text-[13.5px] font-semibold', tab === key ? 'bg-white text-cx-text shadow-sm' : 'text-cx-text-2')}
-              >
-                {label}
-                {counts[key] !== undefined && <span className="ml-1.5 tabular-nums text-cx-text-2">{counts[key]}</span>}
-              </button>
-            ))}
-          </div>
+          <PillTabs label="Worklist" value={tab} onChange={(key) => go({ tab: key })} options={TABS.map(([key, label]) => ({ key, label, count: counts[key] }))} />
           <select aria-label="Type" value={category ?? ''} onChange={(event) => go({ category: event.target.value || null })} className="h-10 rounded-[10px] border border-cx-line bg-white px-3 text-[13.5px]">
             <option value="">All types</option>
             {Object.entries(categories).map(([key, label]) => (

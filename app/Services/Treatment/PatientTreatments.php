@@ -299,12 +299,17 @@ class PatientTreatments
      * practitioner, branch, patient access), no stages, no pinned price.
      * A patient may hold any number of these at once.
      *
-     * @param  array{goal?: ?string, primary_diagnosis_id?: ?int, sessions_planned?: ?int, encounter?: ?ClinicalEncounter}  $options
+     * `at_desk` is the front desk starting a physiotherapy programme for the
+     * therapist (`TreatmentAccess::assertCanStartAtDesk`).
+     *
+     * @param  array{goal?: ?string, primary_diagnosis_id?: ?int, sessions_planned?: ?int, encounter?: ?ClinicalEncounter, at_desk?: bool}  $options
      */
     public function startAdHoc(Patient $patient, string $specialtyKey, string $title, ClinicEmployee $practitioner, Branch $branch, User $by, array $options = []): PatientTreatment
     {
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
-        $this->access->assertCanStartAdHoc($by, $patient, $specialtyKey, $practitioner, $branch);
+        ($options['at_desk'] ?? false)
+            ? $this->access->assertCanStartAtDesk($by, $patient, $specialtyKey, $practitioner, $branch)
+            : $this->access->assertCanStartAdHoc($by, $patient, $specialtyKey, $practitioner, $branch);
         $title = trim($title);
         if ($title === '' || mb_strlen($title) > 150) {
             throw new InvalidArgumentException('Name the treatment (up to 150 characters).');

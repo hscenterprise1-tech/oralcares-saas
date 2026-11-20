@@ -133,7 +133,8 @@ test('clinical documents are neither listed nor opened for reception; administra
 test('actions are built per role and nothing destructive is offered without authority', function () {
     $keys = fn (string $who) => collect(($this->as)($who)->get("/clinic/patients/{$this->patient->id}")->viewData('page')['props']['actions'])->pluck('key')->all();
 
-    expect($keys('reception'))->toContain('check_in', 'book', 'collect_payment')->not->toContain('start_consultation', 'continue_consultation', 'archive')
+    // The desk does not read the patient's ledger by default (OD-9), so it is not offered the Billing section's payments.
+    expect($keys('reception'))->toContain('check_in', 'book')->not->toContain('collect_payment', 'start_consultation', 'continue_consultation', 'archive')
         ->and($keys('billing'))->toContain('collect_payment')->not->toContain('check_in', 'start_consultation', 'archive')
         ->and($keys('doctor'))->toContain('continue_consultation')->not->toContain('archive', 'collect_payment');
 

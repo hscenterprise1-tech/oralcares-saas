@@ -1,21 +1,18 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ChevronRight, ClipboardCheck, Pencil, ShieldAlert } from 'lucide-react';
+import { Activity, ChevronRight, FileText, Phone, Stethoscope } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Avatar, DsButton, FOCUS_RING, Pill, Shimmer, type DsTone } from '@/clinic/ds';
+import { FOCUS_RING, Shimmer, type DsTone } from '@/clinic/ds';
 import type { DeskMode } from '@/pages/ClinicPortal/FrontDesk/components/desk';
-import { MaskedMobile } from '../patientVisuals';
+import { LifecycleBadge, MaskedMobile, PatientAvatar } from '../patientVisuals';
 import type { DirectoryPatient } from '../types';
 
 /**
- * The two record markers that matter at the desk (`patients.status`): a
- * recorded death, and a duplicate merged into another record. Everything
- * else is simply a patient — there is no active / inactive state to show.
+ * The record marker that matters at the desk (`patients.status`): a
+ * duplicate merged into another record. Everything else is simply a patient.
  */
 function recordMarker(status: string): { label: string; tone: DsTone } | null {
   switch (status) {
-    case 'deceased':
-      return { label: 'Deceased', tone: 'slate' };
     case 'merged':
       return { label: 'Merged', tone: 'violet' };
     default:
@@ -23,7 +20,7 @@ function recordMarker(status: string): { label: string; tone: DsTone } | null {
   }
 }
 
-/** New or Repeat: the case of the latest attended visit (`patient_visits.registration_type`), never a patient status. */
+/** New or Repeat: the case of the latest attended visit (`patient_visits.registration_type`). */
 const CASE: Record<'new' | 'repeat', { label: string; tone: DsTone }> = {
   new: { label: 'New', tone: 'blue' },
   repeat: { label: 'Repeat', tone: 'violet' },
@@ -44,55 +41,72 @@ export interface RowActions {
   checkIn: ((patient: DirectoryPatient) => void) | null;
 }
 
-function canCheckIn(patient: DirectoryPatient): boolean {
-  // Deceased and merged records take no new visits; someone already checked in today and not yet seen is already in the queue.
-  return patient.status !== 'deceased' && patient.status !== 'merged' && (!patient.today_visit || patient.today_visit.status === 'completed');
-}
-
-/** Clicks on a button or link inside a row act on their own; anywhere else on the row opens the patient. */
+/** Clicks on a control inside a row act on their own; anywhere else opens the patient. */
 function fromControl(event: MouseEvent): boolean {
   return (event.target as HTMLElement).closest('a,button,[role="button"]') !== null;
 }
 
 /**
- * The directory's patients, kept to what the desk works with: who the
- * patient is (name and patient ID), their mobile, the case (New or Repeat),
- * the assigned doctor or therapist, treatment progress, and the row's
- * actions. From `md` a table where the whole row opens Patient 360 (the
- * doctor and treatment columns join from `lg`); below `md` one card per
- * patient with the same facts. Only what the server sent is shown; a value
- * it does not have is "—".
+ * PatientTable: Complete rebuild adhering to the Clinic Owner Dashboard visual language.
+ *
+ * Desktop (>= 1024px): A modern, clean data grid with soft pastel accents and prominent avatar.
+ * Tablet (768px - 1023px): Tablet cards with prominent avatar and 4-cell facts grid.
+ * Mobile (< 768px): Purpose-built mobile cards with 2x2 facts grid, touch targets, and zero overflow.
  */
-export function PatientTable({ patients, mode, actions, busy }: { patients: DirectoryPatient[]; mode: DeskMode; actions: RowActions; busy: boolean }) {
+export function PatientTable({
+  patients,
+  mode,
+  actions,
+  busy,
+}: {
+  patients: DirectoryPatient[];
+  mode: DeskMode;
+  actions: RowActions;
+  busy: boolean;
+}) {
   return (
     <div className={cn(busy && 'pointer-events-none opacity-60 motion-safe:transition-opacity')}>
-      {/* Tablet and desktop: the table. */}
-      <table className="hidden w-full table-fixed border-separate border-spacing-0 text-left md:table">
-        <caption className="sr-only">Patients</caption>
+      {/* Desktop (>= lg: 1024px, 1440px): Deliberate fixed-column layout with Owner Dashboard polish */}
+      <table className="hidden w-full table-fixed border-separate border-spacing-0 text-left lg:table">
+        <caption className="sr-only">Patients Directory</caption>
         <thead>
-          <tr className="text-[12px] font-semibold text-[#64748B]">
-            {/* Widths add up per breakpoint; the doctor column takes what is left (from lg). */}
-            <th scope="col" className="w-[40%] border-b border-[#E6EBF1] py-2.5 pl-5 pr-3 lg:w-[32%]">
-              Patient
+          <tr className="border-b border-[#E6EBF1] bg-[#F8FAFD]/90 text-[12px] font-semibold text-[#5F6B7E]">
+            <th scope="col" className="w-[35%] border-b border-[#E6EBF1] py-3.5 pl-5 pr-3 whitespace-nowrap">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#1769AA]" aria-hidden="true" />
+                Patient
+              </span>
             </th>
-            <th scope="col" className="w-[22%] border-b border-[#E6EBF1] px-3 py-2.5 lg:w-[16%]">
-              Mobile
+            <th scope="col" className="w-[17%] border-b border-[#E6EBF1] px-3 py-3.5 whitespace-nowrap">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#2B6FD8]" aria-hidden="true" />
+                Mobile
+              </span>
             </th>
-            <th scope="col" className="w-[16%] border-b border-[#E6EBF1] px-3 py-2.5 lg:w-[11%]">
-              Case
+            <th scope="col" className="w-[18%] border-b border-[#E6EBF1] px-3 py-3.5 whitespace-nowrap">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#6B48DE]" aria-hidden="true" />
+                Active Case
+              </span>
             </th>
-            <th scope="col" className="hidden border-b border-[#E6EBF1] px-3 py-2.5 lg:table-cell">
-              {mode.doctor}
+            <th scope="col" className="w-[16%] border-b border-[#E6EBF1] px-3 py-3.5 whitespace-nowrap">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#0E9F87]" aria-hidden="true" />
+                {mode.doctor}
+              </span>
             </th>
-            <th scope="col" className="hidden w-[12%] border-b border-[#E6EBF1] px-3 py-2.5 lg:table-cell">
-              Treatment
+            <th scope="col" className="w-[11%] border-b border-[#E6EBF1] px-3 py-3.5 whitespace-nowrap">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" aria-hidden="true" />
+                Treatment
+              </span>
             </th>
-            <th scope="col" className="w-[22%] border-b border-[#E6EBF1] py-2.5 pl-3 pr-5 text-right lg:w-[13%]">
-              <span className="sr-only">Actions</span>
+            <th scope="col" className="w-[3%] border-b border-[#E6EBF1] py-3.5 pr-5 pl-1 text-right whitespace-nowrap">
+              <span className="sr-only">Open</span>
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-[#F1F5F9] bg-white">
           {patients.map((patient) => {
             const href = actions.profileHref(patient);
 
@@ -100,27 +114,36 @@ export function PatientTable({ patients, mode, actions, busy }: { patients: Dire
               <tr
                 key={patient.id}
                 onClick={(event) => href && !fromControl(event) && router.visit(href)}
-                className={cn('group align-middle motion-safe:transition-colors', href && 'cursor-pointer hover:bg-[#F8FAFC]')}
+                className={cn(
+                  'group align-middle transition-all duration-150',
+                  href &&
+                    'cursor-pointer hover:bg-gradient-to-r hover:from-[#F4F8FE] hover:via-[#FAF9FF] hover:to-white hover:shadow-[0_2px_8px_rgba(23,59,96,0.04)]',
+                )}
               >
-                <td className="border-b border-[#EEF2F6] py-3 pl-5 pr-3">
+                <td className="py-3.5 pl-5 pr-3 align-middle">
                   <PatientIdentity patient={patient} href={href} />
                 </td>
-                <td className="border-b border-[#EEF2F6] px-3 py-3">
-                  <MaskedMobile name={patient.name} phone={patient.phone} lastDigits={patient.phone_last_digits} />
+                <td className="px-3 py-3.5 align-middle text-[13px] font-medium text-[#173B60] whitespace-nowrap">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50/80 text-blue-600 ring-1 ring-inset ring-blue-200/60 shadow-2xs">
+                      <Phone className="h-3.5 w-3.5" />
+                    </span>
+                    <MaskedMobile name={patient.name} phone={patient.phone} lastDigits={patient.phone_last_digits} />
+                  </div>
                 </td>
-                <td className="border-b border-[#EEF2F6] px-3 py-3">
+                <td className="px-3 py-3.5 align-middle">
                   <CaseType patient={patient} />
                 </td>
-                <td className="hidden border-b border-[#EEF2F6] px-3 py-3 lg:table-cell">
+                <td className="px-3 py-3.5 align-middle">
                   <Clinician patient={patient} />
                 </td>
-                <td className="hidden border-b border-[#EEF2F6] px-3 py-3 lg:table-cell">
+                <td className="px-3 py-3.5 align-middle">
                   <Progress patient={patient} />
                 </td>
-                <td className="border-b border-[#EEF2F6] py-3 pl-3 pr-5">
-                  <div className="flex items-center justify-end gap-1">
-                    <RowButtons patient={patient} actions={actions} compact />
-                  </div>
+                <td className="py-3.5 pr-5 pl-1 align-middle text-right">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#F8FAFD] text-[#8C9BAE] transition-all group-hover:bg-[#1769AA] group-hover:text-white group-hover:translate-x-0.5 shadow-2xs">
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </span>
                 </td>
               </tr>
             );
@@ -128,30 +151,83 @@ export function PatientTable({ patients, mode, actions, busy }: { patients: Dire
         </tbody>
       </table>
 
-      {/* Phones: a card per patient. */}
-      <ul className="divide-y divide-[#EEF2F6] md:hidden">
-        {patients.map((patient) => (
-          <li key={patient.id} className="px-4 py-4">
-            <PatientIdentity patient={patient} href={actions.profileHref(patient)} />
-            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-xl bg-[#F6F8FB] px-3.5 py-3">
-              <Fact label="Mobile">
-                <MaskedMobile name={patient.name} phone={patient.phone} lastDigits={patient.phone_last_digits} />
-              </Fact>
-              <Fact label="Case">
-                <CaseType patient={patient} />
-              </Fact>
-              <Fact label={mode.doctor}>
-                <Clinician patient={patient} />
-              </Fact>
-              <Fact label="Treatment">
-                <Progress patient={patient} />
-              </Fact>
-            </dl>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <RowButtons patient={patient} actions={actions} />
-            </div>
-          </li>
-        ))}
+      {/* iPad Portrait (768px: sm to lg): Deliberate tablet-specific patient card */}
+      <ul className="hidden divide-y divide-[#F1F5F9] sm:block lg:hidden">
+        {patients.map((patient) => {
+          const href = actions.profileHref(patient);
+
+          return (
+            <li
+              key={patient.id}
+              onClick={(event) => href && !fromControl(event) && router.visit(href)}
+              className={cn(
+                'group p-4 transition-all duration-150',
+                href &&
+                  'cursor-pointer hover:bg-gradient-to-r hover:from-[#F4F8FE] hover:via-[#FAF9FF] hover:to-white hover:shadow-[0_2px_8px_rgba(23,59,96,0.04)]',
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <PatientIdentity patient={patient} href={href} />
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#F8FAFD] text-[#8C9BAE] transition-all group-hover:bg-[#1769AA] group-hover:text-white group-hover:translate-x-0.5 shadow-2xs">
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </span>
+              </div>
+              <dl className="mt-3 grid grid-cols-4 gap-2.5 rounded-xl border border-[#E6EBF1] bg-gradient-to-br from-[#F8FAFD] to-[#F5F8FF] p-3 shadow-2xs">
+                <Fact label="Mobile">
+                  <MaskedMobile name={patient.name} phone={patient.phone} lastDigits={patient.phone_last_digits} />
+                </Fact>
+                <Fact label="Active Case">
+                  <CaseType patient={patient} />
+                </Fact>
+                <Fact label={mode.doctor}>
+                  <Clinician patient={patient} />
+                </Fact>
+                <Fact label="Treatment">
+                  <Progress patient={patient} />
+                </Fact>
+              </dl>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Mobile (390px, 360px: < sm): Purpose-built mobile patient cards */}
+      <ul className="divide-y divide-[#F1F5F9] sm:hidden">
+        {patients.map((patient) => {
+          const href = actions.profileHref(patient);
+
+          return (
+            <li
+              key={patient.id}
+              onClick={(event) => href && !fromControl(event) && router.visit(href)}
+              className={cn(
+                'group p-3.5 transition-all duration-150 active:scale-[0.99]',
+                href && 'cursor-pointer hover:bg-blue-50/25',
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <PatientIdentity patient={patient} href={href} />
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F8FAFD] text-[#8C9BAE] transition-all group-hover:bg-[#1769AA] group-hover:text-white shadow-2xs">
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </span>
+              </div>
+              <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-[#E6EBF1] bg-gradient-to-br from-[#F8FAFD] to-[#F5F8FF] p-2.5 shadow-2xs">
+                <Fact label="Mobile">
+                  <MaskedMobile name={patient.name} phone={patient.phone} lastDigits={patient.phone_last_digits} />
+                </Fact>
+                <Fact label="Active Case">
+                  <CaseType patient={patient} />
+                </Fact>
+                <Fact label={mode.doctor}>
+                  <Clinician patient={patient} />
+                </Fact>
+                <Fact label="Treatment">
+                  <Progress patient={patient} />
+                </Fact>
+              </dl>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -159,27 +235,52 @@ export function PatientTable({ patients, mode, actions, busy }: { patients: Dire
 
 function PatientIdentity({ patient, href }: { patient: DirectoryPatient; href: string | null }) {
   const marker = recordMarker(patient.status);
+  const demographics = [
+    patient.age !== null && patient.age !== undefined ? `${patient.age}y` : null,
+    patient.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1).toLowerCase() : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <Avatar name={patient.name} />
-      <div className="min-w-0">
+    <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+      {/* Prominent Avatar: 44px (h-11 w-11) preserved across desktop, tablet, and mobile */}
+      <PatientAvatar name={patient.name} quiet={patient.status === 'merged'} size="md" />
+
+      <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {href ? (
-            <Link href={href} className={cn('min-w-0 rounded text-[14px] font-semibold leading-5 text-[#173B60] [overflow-wrap:anywhere] hover:text-[#1769AA] hover:underline', FOCUS_RING)}>
+            <Link
+              href={href}
+              className={cn(
+                'min-w-0 truncate text-[15px] font-bold leading-snug text-[#173B60] transition-colors group-hover:text-[#1769AA]',
+                FOCUS_RING,
+              )}
+            >
               {patient.name}
             </Link>
           ) : (
-            <span className="min-w-0 text-[14px] font-semibold leading-5 text-[#173B60] [overflow-wrap:anywhere]">{patient.name}</span>
+            <span className="min-w-0 truncate text-[15px] font-bold leading-snug text-[#173B60]">{patient.name}</span>
           )}
-          {marker && <Pill tone={marker.tone}>{marker.label}</Pill>}
-          {patient.critical_alerts > 0 && (
-            <Pill tone="rose" icon={ShieldAlert}>
-              {patient.critical_alerts} {patient.critical_alerts === 1 ? 'alert' : 'alerts'}
-            </Pill>
+          {marker && (
+            <span
+              className={cn(
+                'shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider',
+                marker.tone === 'slate'
+                  ? 'border border-slate-200 bg-slate-100 text-slate-700'
+                  : 'border border-purple-200 bg-purple-50 text-purple-700',
+              )}
+            >
+              {marker.label}
+            </span>
           )}
         </div>
-        <p className="mt-0.5 truncate text-[12.5px] tabular-nums text-[#64748B]">{patient.uhid ?? 'No patient ID'}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-[#5F6B7E]">
+          <span className="rounded-md border border-blue-200/80 bg-blue-50/90 px-1.5 py-0.5 font-mono text-[11px] font-bold text-blue-700 shadow-2xs">
+            {patient.uhid ?? 'No UHID'}
+          </span>
+          {demographics ? <span className="font-medium text-[#5F6B7E]">• {demographics}</span> : null}
+        </div>
       </div>
     </div>
   );
@@ -188,13 +289,67 @@ function PatientIdentity({ patient, href }: { patient: DirectoryPatient; href: s
 function CaseType({ patient }: { patient: DirectoryPatient }) {
   const value = patient.case_type ? CASE[patient.case_type] : null;
 
-  return value ? <Pill tone={value.tone}>{value.label}</Pill> : <Quiet>—</Quiet>;
+  return (
+    <div className="min-w-0 space-y-1">
+      {patient.active_case ? (
+        // The case by what it is for; its internal case number is not a patient-facing identifier.
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-semibold text-[#173B60]" title={patient.active_case.title}>
+            {patient.active_case.title}
+          </p>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-1.5">
+        {value ? (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-2xs',
+              value.tone === 'blue'
+                ? 'border border-blue-200/90 bg-blue-50/90 text-blue-700'
+                : 'border border-purple-200/90 bg-purple-50/90 text-purple-700',
+            )}
+          >
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                value.tone === 'blue' ? 'bg-blue-600' : 'bg-purple-600',
+              )}
+              aria-hidden="true"
+            />
+            {value.label}
+          </span>
+        ) : !patient.active_case ? (
+          <Quiet>—</Quiet>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function Progress({ patient }: { patient: DirectoryPatient }) {
   const value = patient.treatment_progress ? PROGRESS[patient.treatment_progress] : null;
 
-  return value ? <Pill tone={value.tone}>{value.label}</Pill> : <Quiet>—</Quiet>;
+  if (!value) return <Quiet>—</Quiet>;
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-2xs',
+        value.tone === 'green'
+          ? 'border border-emerald-200/90 bg-emerald-50/90 text-emerald-700'
+          : 'border border-amber-200/90 bg-amber-50/90 text-amber-800',
+      )}
+    >
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full',
+          value.tone === 'green' ? 'bg-emerald-600' : 'bg-amber-600',
+        )}
+        aria-hidden="true"
+      />
+      {value.label}
+    </span>
+  );
 }
 
 function Clinician({ patient }: { patient: DirectoryPatient }) {
@@ -203,88 +358,45 @@ function Clinician({ patient }: { patient: DirectoryPatient }) {
   }
 
   return (
-    <div className="min-w-0">
-      <p className="truncate text-[13px] font-medium text-[#173B60]">{patient.assigned_doctor.name}</p>
-      {!patient.assigned_doctor.at_clinic && <p className="text-[12px] text-[#A35A06]">No longer at the clinic</p>}
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-50/80 text-teal-600 ring-1 ring-inset ring-teal-200/60 shadow-2xs">
+        <Stethoscope className="h-3.5 w-3.5" />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[13.5px] font-semibold text-[#173B60]">{patient.assigned_doctor.name}</p>
+        {!patient.assigned_doctor.at_clinic && (
+          <p className="text-[11px] font-medium text-amber-700">No longer at clinic</p>
+        )}
+      </div>
     </div>
-  );
-}
-
-function RowButtons({ patient, actions, compact = false }: { patient: DirectoryPatient; actions: RowActions; compact?: boolean }) {
-  const href = actions.profileHref(patient);
-  const edit = actions.editHref(patient);
-  const checkIn = actions.checkIn && canCheckIn(patient) ? actions.checkIn : null;
-
-  if (compact) {
-    return (
-      <>
-        {checkIn && (
-          <DsButton size="sm" icon={ClipboardCheck} onClick={() => checkIn(patient)} aria-label={`Check in ${patient.name}`}>
-            <span className="hidden xl:inline">Check in</span>
-          </DsButton>
-        )}
-        {edit && (
-          <Link href={edit} aria-label={`Edit ${patient.name}`} title="Edit" className={cn('flex h-9 w-9 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#EAF2FA] hover:text-[#1769AA]', FOCUS_RING)}>
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-          </Link>
-        )}
-        {href && (
-          <Link href={href} aria-label={`Open ${patient.name}'s record`} title="Open record" className={cn('flex h-9 w-9 items-center justify-center rounded-lg text-[#64748B] hover:bg-[#EAF2FA] hover:text-[#1769AA]', FOCUS_RING)}>
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
-        )}
-      </>
-    );
-  }
-
-  return (
-    <>
-      {href && (
-        <Link href={href} className={cn('inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-[#1769AA] px-3 text-[13.5px] font-semibold text-white hover:bg-[#135A93]', FOCUS_RING)}>
-          Open record
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
-      )}
-      {checkIn && (
-        <DsButton icon={ClipboardCheck} onClick={() => checkIn(patient)} className="flex-1">
-          Check in
-        </DsButton>
-      )}
-      {edit && (
-        <Link href={edit} className={cn('inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-[#D5DDE7] bg-white px-3 text-[13.5px] font-semibold text-[#173B60] hover:bg-[#F5F8FC]', FOCUS_RING)}>
-          <Pencil className="h-4 w-4" aria-hidden="true" />
-          Edit
-        </Link>
-      )}
-    </>
   );
 }
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11.5px] font-semibold text-[#64748B]">{label}</dt>
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-[#8C9BAE]">{label}</dt>
       <dd className="mt-0.5 min-w-0">{children}</dd>
     </div>
   );
 }
 
 function Quiet({ children }: { children: ReactNode }) {
-  return <span className="whitespace-nowrap text-[13px] text-[#64748B]">{children}</span>;
+  return <span className="whitespace-nowrap text-[12.5px] text-[#8C9BAE]">—</span>;
 }
 
-/** The table's shape while the first page loads. */
+/** The table skeleton while the first page loads. */
 export function PatientTableSkeleton() {
   return (
-    <ul aria-label="Loading patients" className="divide-y divide-[#EEF2F6]">
+    <ul aria-label="Loading patients" className="divide-y divide-[#F1F5F9]">
       {[0, 1, 2, 3, 4, 5].map((index) => (
-        <li key={index} className="flex items-center gap-3 px-5 py-4">
-          <Shimmer className="h-10 w-10 shrink-0 rounded-full" />
-          <span className="flex-1 space-y-2">
-            <Shimmer className="h-3.5 w-1/3" />
+        <li key={index} className="flex items-center gap-3.5 px-5 py-4">
+          <Shimmer className="h-11 w-11 shrink-0 rounded-[14px]" />
+          <span className="flex-1 space-y-1.5">
+            <Shimmer className="h-4 w-1/3" />
             <Shimmer className="h-3 w-1/5" />
           </span>
-          <Shimmer className="hidden h-3.5 w-24 md:block" />
+          <Shimmer className="hidden h-3.5 w-24 lg:block" />
           <Shimmer className="hidden h-3.5 w-20 lg:block" />
         </li>
       ))}

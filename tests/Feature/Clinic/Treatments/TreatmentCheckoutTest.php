@@ -111,8 +111,14 @@ test('billing needs billing.create, a discount needs discount.apply, and another
     $treatment = $this->treatments->start($this->patient, $this->t->rct(), $this->f->doctorA, $this->f->branch, $owner, ($this->tooth)(16));
     $charge = ['charges' => ["treatment:{$treatment->id}"]];
 
-    ($this->as)(ClinicRole::Doctor)()->postJson($this->charges, $charge)->assertForbidden();
-    ($this->as)(ClinicRole::Receptionist)()->postJson($this->charges, [...$charge, 'discount' => 100])->assertForbidden();
+    // A doctor whose clinic keeps billing at the desk (the default Doctor role may bill).
+    $doctor = ($this->as)(ClinicRole::Doctor);
+    withoutDoctorBillingRights();
+    $doctor()->postJson($this->charges, $charge)->assertForbidden();
+    // A desk whose clinic keeps discounts away from it (the default desk may discount since 2026-11-05).
+    $desk = ($this->as)(ClinicRole::Receptionist);
+    withoutDeskLedger();
+    $desk()->postJson($this->charges, [...$charge, 'discount' => 100])->assertForbidden();
 
     $other = TreatmentFixture::make('other-clinic');
     $asOther = fn () => $this->actingAs($other->f->owner)->withSession($other->f->session);

@@ -161,7 +161,10 @@ test('a practitioner starts treatment from what they practise; the declared targ
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.name', 'Root Canal Treatment')
         ->assertJsonPath('data.0.targets.0.key', 'tooth')
-        ->assertJsonPath('data.0.price', 8000);
+        // The catalogue price list is the ledger's; a practitioner holds only their own fees.
+        ->assertJsonMissingPath('data.0.price');
+    $ownerOptions = collect(($this->asOwner)()->getJson("/clinic/patients/{$this->patient->id}/treatments/options")->assertOk()->json('data'))->keyBy('name');
+    expect($ownerOptions['Root Canal Treatment']['price'])->toEqual(8000);
 
     $dentist()->postJson("/clinic/patients/{$this->patient->id}/treatments", ['version_id' => $version])
         ->assertUnprocessable()->assertJsonPath('message', 'Which tooth is this treatment for?');
@@ -213,6 +216,32 @@ test('amounts are shown only to members who may see billing', function () {
     $reception = ($this->as)(ClinicRole::Receptionist);
     Role::findByName(ClinicRole::Receptionist->value)->revokePermissionTo('billing.view');
     $reception()->getJson("/clinic/treatments/{$treatment->id}")->assertOk()->assertJsonMissingPath('data.agreed_amount')->assertJsonMissingPath('data.stages.0.amount');
+});
+
+test('a practitioner sees the agreed estimate of their own treatments only, never another\'s, a charge or a catalogue price', function () {
+    $owner = $this->t->actAsOwner();
+    $mine = app(PatientTreatments::class)->start($this->patient, $this->t->rct(), $this->f->doctorA, $this->f->branch, $owner, ['targets' => ['tooth' => [['tooth_number' => 16]]]]);
+    $theirs = app(PatientTreatments::class)->start($this->patient, $this->t->rct(), $this->f->doctorB, $this->f->branch, $owner, ['targets' => ['tooth' => [['tooth_number' => 26]]]]);
+    $dentist = ($this->as)(ClinicRole::Doctor, $this->f->doctorA);
+
+    $dentist()->getJson("/clinic/treatments/{$mine->id}")->assertOk()
+        ->assertJsonPath('data.agreed_amount', 8000)
+        ->assertJsonPath('data.amount_scope', 'own_estimate')
+        ->assertJsonMissingPath('data.procedures.0.charged_amount');
+    $dentist()->getJson("/clinic/treatments/{$theirs->id}")->assertOk()
+        ->assertJsonMissingPath('data.agreed_amount')->assertJsonMissingPath('data.stages.0.amount')->assertJsonMissingPath('data.amount_scope');
+
+    $list = collect($dentist()->getJson("/clinic/patients/{$this->patient->id}/treatments")->assertOk()->json('data'))->keyBy('id');
+    expect($list[$mine->id]['agreed_amount'])->toEqual(8000)
+        ->and($list[$theirs->id])->not->toHaveKey('agreed_amount');
+
+    $board = collect($dentist()->getJson('/clinic/treatments')->assertOk()->json('data'))->keyBy('id');
+    expect($board[$mine->id]['agreed_amount'])->toEqual(8000)
+        ->and($board[$theirs->id])->not->toHaveKey('agreed_amount');
+
+    // The ledger's readers keep seeing every amount, unmarked.
+    ($this->as)(ClinicRole::BillingStaff)()->getJson("/clinic/treatments/{$theirs->id}")->assertOk()
+        ->assertJsonPath('data.agreed_amount', 8000)->assertJsonMissingPath('data.amount_scope');
 });
 
 test('the board is keyset-paged and limits a clinician to the specialties they practise', function () {
@@ -279,10 +308,10 @@ test('Patient 360 active care and the treatment section read patient treatments'
     $treatment = app(PatientTreatments::class)->start($this->patient, $this->t->rct(), $this->f->doctorA, $this->f->branch, $this->t->actAsOwner(), ['targets' => ['tooth' => [['tooth_number' => 16]]]]);
 
     ($this->asOwner)()->get("/clinic/patients/{$this->patient->id}")->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->loadDeferredProps(fn (Assert $reload) => $reload
+        ->assertInertia(fn (Assert $page) => $page
             ->where('overview.current.active_care.0.id', $treatment->id)
             ->where('overview.current.active_care.0.targets.tooth.0.tooth_number', 16)
-            ->where('overview.current.active_care.0.progress.total', 3)));
+            ->where('overview.current.active_care.0.progress.total', 3));
 
     ($this->asOwner)()->getJson("/clinic/patients/{$this->patient->id}/360/treatment")->assertOk()
         ->assertJsonPath('treatments.0.id', $treatment->id)

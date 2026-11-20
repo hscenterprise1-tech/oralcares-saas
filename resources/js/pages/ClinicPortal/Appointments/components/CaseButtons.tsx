@@ -1,12 +1,10 @@
-import { Plus, RotateCcw } from 'lucide-react';
+import { RotateCcw, UserPlus } from 'lucide-react';
+import { DsButton } from '@/clinic/ds';
 import { cn } from '@/lib/utils';
 
 /**
  * The walk-in starts: New Case and Repeat Case, each opening the one
- * canonical intake (`ReceptionIntakeDialog`). The group, the buttons and
- * their classes are the approved New Case / Repeat Case design (first on the
- * Reception header, removed in the 2026-10-11 frontend reset): frozen, so do
- * not restyle them.
+ * canonical intake (`ReceptionIntakeDialog`). Uses the approved DsButton design.
  */
 export function CaseButtons({ canRegister, onNewCase, onRepeatCase }: {
   canRegister: boolean;
@@ -14,26 +12,21 @@ export function CaseButtons({ canRegister, onNewCase, onRepeatCase }: {
   onRepeatCase: () => void;
 }) {
   return (
-    <div role="group" aria-label="Start a case" className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+    <div role="group" aria-label="Start a case" className="grid grid-cols-2 gap-2.5 sm:flex sm:shrink-0">
       {canRegister && (
-        <button
-          type="button"
-          onClick={onNewCase}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#1769AA] px-5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(23,59,96,0.18)] motion-safe:transition-[background-color,transform] hover:bg-[#135A93] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal focus-visible:ring-offset-2 motion-safe:active:scale-[0.98]"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" /> New Case
-        </button>
+        <DsButton variant="primary" size="lg" icon={UserPlus} onClick={onNewCase}>
+          New Case
+        </DsButton>
       )}
-      <button
-        type="button"
+      <DsButton
+        variant="secondary"
+        size="lg"
+        icon={RotateCcw}
         onClick={onRepeatCase}
-        className={cn(
-          'inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-clinic-border bg-white px-5 text-[14px] font-semibold text-clinic-ink motion-safe:transition-colors hover:bg-clinic-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong focus-visible:ring-offset-2',
-          !canRegister && 'col-span-2',
-        )}
+        className={cn('shadow-[0_1px_2px_rgba(15,23,42,0.06)]', !canRegister && 'col-span-2')}
       >
-        <RotateCcw className="h-4 w-4" aria-hidden="true" /> Repeat Case
-      </button>
+        Repeat Case
+      </DsButton>
     </div>
   );
 }

@@ -83,3 +83,13 @@ test('signing in again as the same account starts a fresh session in the same cl
 
     $this->assertAuthenticatedAs($this->f->owner);
 });
+
+test('an owner signing in with a stale reception intended url lands on the command center, never reception', function () {
+    $this->withSession(['url.intended' => '/clinic/reception'])
+        ->post('/clinic/login', ['email' => $this->f->owner->email, 'password' => 'owner-pass'])
+        ->assertRedirect('/clinic/dashboard-redirect');
+
+    $this->assertAuthenticatedAs($this->f->owner);
+    // When following redirect, owner lands on Owner Command Center
+    $this->get('/clinic/dashboard-redirect')->assertRedirect(route('clinic.dashboard'));
+});

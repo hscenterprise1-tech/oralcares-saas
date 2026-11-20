@@ -5,6 +5,7 @@ use App\BranchStatus;
 use App\ClinicMembershipStatus;
 use App\ClinicRole;
 use App\Models\Branch;
+use App\Models\ClinicalEncounter;
 use App\Models\ClinicMembership;
 use App\Models\Patient;
 use App\Models\PatientVisit;
@@ -92,7 +93,7 @@ test('a long history comes a page at a time, with no row on two pages', function
         ->and(collect($second['data'])->pluck('date')->all())->toBe(['2026-09-02', '2026-09-01']);
 });
 
-test('the desk and clinicians see visits; billing does not; the consultation is named to clinicians only and linked nowhere yet', function () {
+test('the desk and clinicians see visits; billing does not; the consultation is named and linked to clinicians only', function () {
     $visit = ($this->visit)('2026-10-24', 'in_progress');
     $this->actingAs($this->f->owner);
     app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $this->f->doctorA, $visit);
@@ -104,7 +105,8 @@ test('the desk and clinicians see visits; billing does not; the consultation is 
         ->and($reception[1]['calendar_url'])->toBe(route('clinic.appointments.index', ['date' => '2026-10-20']));
 
     $doctor = ($this->asRole)(ClinicRole::Doctor)()->getJson(($this->url)())->assertOk()->json('data');
-    expect($doctor[0]['consultation'])->toMatchArray(['status' => 'open', 'url' => null])
+    $encounter = ClinicalEncounter::query()->withoutGlobalScopes()->where('patient_visit_id', $visit->id)->sole();
+    expect($doctor[0]['consultation'])->toMatchArray(['status' => 'open', 'url' => route('clinic.consultations.show', $encounter)])
         ->and($doctor[0]['consultation']['number'])->not->toBeNull();
 
     ($this->asRole)(ClinicRole::BillingStaff)()->getJson(($this->url)())->assertForbidden();

@@ -13,6 +13,7 @@ use App\Models\DeletionRequest;
 use App\Models\Patient;
 use App\Models\PatientMerge;
 use App\Models\PatientTimelineEvent;
+use App\Models\User;
 use App\PatientStatus;
 use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\ClinicContext;
@@ -70,6 +71,10 @@ class Patient360Controller extends Controller
                 return redirect()->route('clinic.patients.show', $survivorId)->with('success', 'This record was merged into this patient.');
             }
         }
+        // A deleted record is kept in the database as history; it no longer opens.
+        if ($patient->status === PatientStatus::Deleted) {
+            return redirect()->route('clinic.patients.index')->with('success', 'The patient was deleted.');
+        }
         app(SecurityAudit::class)->record('patient.viewed', $patient);
 
         $user = $request->user();
@@ -88,7 +93,10 @@ class Patient360Controller extends Controller
             'state' => $this->summary->state($patient, $user),
             'context' => $this->summary->context($patient, $user),
             'profile' => $this->summary->profile($patient, $user),
-            'overview' => Inertia::defer(fn () => [
+            // Each open section's first page, exactly as its endpoint answers it, so every zone opens with its data.
+            'preloaded' => $this->preloaded($patient, $user, Patient360SectionPolicy::zonesFor($built)),
+            // Sent with the page (not deferred): the Overview opens complete, with no second request.
+            'overview' => fn () => [
                 ...$this->summary->overview($patient, $user),
                 // The latest documents, exactly as the Documents section lists them for this member (null when they may not open it).
                 'documents' => $this->policy->allows($user, $patient, 'documents')
@@ -96,7 +104,7 @@ class Patient360Controller extends Controller
                     : null,
                 // Physiotherapy at a glance (read-only) and where the desk confirms today's session; null outside physiotherapy clinics.
                 'physio_care' => app(PhysioCareSummary::class)->forPatient($patient, $user, $this->clinicContext->branch()),
-            ]),
+            ],
             'lens' => [
                 'persona' => $lens['persona'],
                 'default_section' => $lens['default_section'],
@@ -111,6 +119,10 @@ class Patient360Controller extends Controller
                     ->map(fn (DeletionRequest $r) => "{$r->action_type}:{$r->target_id}")->values()->all(),
             ],
             'sections' => $sections,
+            // The seven zones (`Patient360SectionPolicy::ZONES`), each with the sections this member may open.
+            'zones' => Patient360SectionPolicy::zonesFor($built),
+            // Above the zones, on every one: the patient's open cases (modules the clinic offers).
+            'active_cases' => $this->policy->allows($user, $patient, 'cases') ? app(Patient360Sections::class)->activeCases($patient, $user) : [],
             // Every role opens on the Overview; its own sections are one tap away.
             'open_section' => 'overview',
             'endpoints' => [
@@ -119,6 +131,7 @@ class Patient360Controller extends Controller
                 'clinical' => $base('encounters'),
                 'appointments' => $base('appointments'),
                 'treatment' => $base('treatment'),
+                'cases' => $base('cases'),
                 'prescriptions' => $base('prescriptions'),
                 'investigations' => $base('investigations'),
                 'billing' => $base('billing'),
@@ -218,7 +231,57 @@ class Patient360Controller extends Controller
         'transfer' => 'clinic.patients.transfer',
         'upload_document' => 'clinic.patients.documents.store',
         'approvals' => 'clinic.approvals.index',
+        'checkout' => 'clinic.billing.checkout',
     ];
+
+    /**
+     * The first page of every section in this member's zones, keyed by the
+     * page's endpoint name and built by the same `Patient360Sections` call its
+     * endpoint makes (first page, default filters), so a zone opens with its
+     * data instead of waiting on a request per card. Later pages, filters and
+     * refreshes still go through `Patient360SectionController`. A section that
+     * fails to build is left out; the page fetches it as before.
+     *
+     * @param  list<array{key: string, label: string, sections: list<string>}>  $zones
+     * @return array<string, mixed>
+     */
+    private function preloaded(Patient $patient, User $user, array $zones): array
+    {
+        $sections = app(Patient360Sections::class);
+        $builders = [
+            'timeline' => ['timeline', fn () => $sections->timeline($patient, $user, null, 1)],
+            'visits' => ['visits', fn () => $sections->visits($patient, $user, 1)],
+            'clinical' => ['encounters', fn () => $sections->encounters($patient, $user, 1)],
+            'appointments' => ['appointments', fn () => $sections->appointments($patient, $user, 'upcoming', 1)],
+            'treatment' => ['treatment', fn () => $sections->treatment($patient, $user, 1)],
+            'cases' => ['cases', fn () => $sections->cases($patient, $user)],
+            'prescriptions' => ['prescriptions', fn () => $sections->prescriptions($patient, $user, 1)],
+            'investigations' => ['investigations', fn () => $sections->investigations($patient, $user, null, 1)],
+            'billing' => ['billing', fn () => $sections->billing($patient, $user, 1)],
+            'documents' => ['documents', fn () => $sections->documents($patient, $user, 1)],
+            'follow-ups' => ['follow-ups', fn () => $sections->followUps($patient, $user)],
+            'communication' => ['communications', fn () => $sections->communications($patient, $user, 1)],
+            'requests' => ['requests', fn () => $sections->requests($patient, $user, 1)],
+            'audit' => ['audit', fn () => $sections->audit($patient, 1)],
+            'dental' => ['dental', fn () => $sections->dental($patient, $user)],
+            'physio' => ['physio', fn () => $sections->physio($patient, $user)],
+        ];
+        $keys = array_unique(array_merge(...array_map(fn (array $zone) => $zone['sections'], $zones ?: [['sections' => []]])));
+
+        $preloaded = [];
+        foreach ($keys as $key) {
+            if (! isset($builders[$key]) || ! $this->policy->allows($user, $patient, $builders[$key][0])) {
+                continue;
+            }
+            try {
+                $preloaded[$key] = $builders[$key][1]();
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
+
+        return $preloaded;
+    }
 
     /**
      * Whether the page can offer an action now: check-in opens the desk's own

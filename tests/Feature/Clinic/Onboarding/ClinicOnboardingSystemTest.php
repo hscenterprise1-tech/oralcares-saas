@@ -611,9 +611,9 @@ it('gives an invited doctor their own practitioner onboarding after accepting', 
     expect($doctor->services()->pluck('clinical_procedures.id')->all())->toBe([$service])
         ->and(Practitioner::withoutGlobalScopes()->where('clinic_employee_id', $doctor->id)->value('registration_number'))->toBe('KA-12345')
         ->and(PractitionerQualification::withoutGlobalScopes()->where('clinic_id', $clinic->id)->value('qualification'))->toBe('MDS');
-    // Onboarded, the doctor's home is the Appointment Calendar.
+    // Onboarded, the doctor's home is the Doctor Dashboard (Today).
     $this->followingRedirects()->get(route('clinic.dashboard'))->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Appointments/Index', true));
+        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Today/Index', true));
 
     // A receptionist only sees the fields that apply to them.
     auth()->logout();

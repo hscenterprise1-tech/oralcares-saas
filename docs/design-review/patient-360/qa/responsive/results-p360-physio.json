@@ -1,0 +1,40 @@
+[
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 24x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 24x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ }
+]

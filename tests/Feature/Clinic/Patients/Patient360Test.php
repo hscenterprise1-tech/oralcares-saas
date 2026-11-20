@@ -41,7 +41,7 @@ beforeEach(function () {
         ->createBill($this->f->clinic, $patient ?? $this->patient, $branch ?? $this->f->branch, [['clinical_procedure_id' => $this->procedure->id, 'unit_price' => $price]]);
 });
 
-test('Patient 360 ships only the summary; the overview is deferred and every section loads from its own endpoint', function () {
+test('Patient 360 ships the overview and each open section\'s first page with the page; later pages load from the section endpoints', function () {
     ($this->asOwner)()->get("/clinic/patients/{$this->patient->id}")
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
@@ -50,16 +50,33 @@ test('Patient 360 ships only the summary; the overview is deferred and every sec
             ->where('patient.uhid', 'UHID-2026-0099')
             ->has('state')
             ->has('context')
-            ->missing('overview')
+            ->has('overview.current')
+            ->has('overview.next')
+            ->has('overview.recent')
+            ->has('preloaded.billing.summary')
+            ->has('preloaded.timeline.data')
             ->missing('timeline')
             ->missing('billing')
             ->where('endpoints.billing', route('clinic.patients.360.section', [$this->patient->id, 'billing']))
             ->where('sections', fn ($sections) => collect($sections)->pluck('key')->all() === [
-                'overview', 'visits', 'clinical', 'appointments', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit',
+                'overview', 'visits', 'clinical', 'appointments', 'cases', 'treatment', 'prescriptions', 'investigations', 'billing', 'documents', 'consents', 'follow-ups', 'timeline', 'communication', 'requests', 'audit',
             ])
+            // The same sections, grouped into the seven zones.
+            ->where('zones', fn ($zones) => collect($zones)->pluck('key')->all() === ['overview', 'clinical', 'cases', 'visits', 'docs', 'billing', 'timeline'])
             ->where('lens.persona', 'owner')
-            ->where('lens.owner', true)
-            ->loadDeferredProps(fn (Assert $reload) => $reload->has('overview.current')->has('overview.next')->has('overview.recent')));
+            ->where('lens.owner', true));
+});
+
+test('the preloaded first page of a section is exactly what its endpoint answers', function () {
+    $preloaded = [];
+    ($this->asOwner)()->get("/clinic/patients/{$this->patient->id}")
+        ->assertInertia(function (Assert $page) use (&$preloaded) {
+            $preloaded = $page->toArray()['props']['preloaded'];
+        });
+
+    expect($preloaded)->toHaveKeys(['visits', 'billing', 'timeline', 'documents', 'cases'])
+        ->and($preloaded['billing'])->toEqual(($this->asOwner)()->getJson(route('clinic.patients.360.section', [$this->patient->id, 'billing']))->json())
+        ->and($preloaded['visits'])->toEqual(($this->asOwner)()->getJson(route('clinic.patients.360.section', [$this->patient->id, 'visits']))->json());
 });
 
 test('practitioners offered for booking are real practitioners with the specialty they recorded', function () {
@@ -76,6 +93,7 @@ test('reception sees desk sections only and is refused clinical, audit and speci
     $reception->get("/clinic/patients/{$this->patient->id}")
         ->assertInertia(fn (Assert $page) => $page
             ->where('lens.persona', 'reception')
+            // Check-in leads; the desk takes payments too (full billing since 2026-11-05), but never starts a consultation.
             ->where('actions', fn ($actions) => ! collect($actions)->contains('key', 'start_consultation') && collect($actions)->contains('key', 'collect_payment') && collect($actions)->firstWhere('kind', 'primary')['key'] === 'check_in')
             ->where('context.clinical', false)
             ->where('sections', fn ($sections) => collect($sections)->pluck('key')->intersect(['clinical', 'treatment', 'prescriptions', 'dental', 'physio', 'audit'])->isEmpty()));
@@ -83,6 +101,7 @@ test('reception sees desk sections only and is refused clinical, audit and speci
     foreach (['encounters', 'treatment', 'prescriptions', 'audit', 'dental', 'physio'] as $section) {
         $reception->getJson(($this->section)($section))->assertForbidden();
     }
+    // The patient's ledger is the desk's too since 2026-11-05 (full billing at reception).
     $reception->getJson(($this->section)('billing'))->assertOk();
     $reception->getJson(($this->section)('appointments'))->assertOk();
 });
@@ -106,7 +125,8 @@ test('the billing section totals every live bill but pages the list', function (
         ->assertJsonPath('summary.outstanding', 12000)
         ->assertJsonPath('meta.total', 13)
         ->assertJsonCount(10, 'data')
-        ->assertJsonPath('payments.0.amount', 500);
+        ->assertJsonPath('payments.0.amount', 500)
+        ->assertJsonPath('payments.0.receipt_url', route('clinic.billing.bills.print', ['bill' => $paid->id, 'layout' => 'receipt', 'payment' => $paid->payments()->sole()->id]));
 });
 
 test('a bill opens only through its own patient, and refunds need refund permission', function () {

@@ -20,7 +20,7 @@ import { shortDate } from '../format';
  * the consultation; this section reads them. No tooth chart, no dental terms.
  */
 
-type Physio = {
+export type Physio = {
   assessments: {
     id: number;
     kind: string;
@@ -339,18 +339,18 @@ export function PhysioSection({ endpoint }: { endpoint: string }) {
 
 type Tone = 'green' | 'slate' | 'blue' | 'amber';
 const PILL: Record<Tone, string> = {
-  green: 'bg-cx-green-bg text-cx-green-ink',
-  slate: 'bg-cx-slate-bg text-cx-slate-ink',
-  blue: 'bg-cx-m-blue-bg text-cx-blue-ink',
-  amber: 'bg-cx-amber-bg text-cx-amber-ink',
+  green: 'bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]',
+  slate: 'bg-slate-100 text-slate-700 border border-slate-200',
+  blue: 'bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]',
+  amber: 'bg-[#FEFCE8] text-[#B45309] border border-[#FDE68A]',
 };
 
 function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold', PILL[tone])}>{children}</span>;
+  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-bold border', PILL[tone])}>{children}</span>;
 }
 
 /** Sells a prepaid block of sessions for the active plan's treatment; the key made when the dialog opens stops a double sale. */
-function SellPackage({ url, treatmentId, planTitle, onSold }: { url: string; treatmentId: number; planTitle: string | null; onSold: () => void }) {
+export function SellPackage({ url, treatmentId, planTitle, onSold }: { url: string; treatmentId: number; planTitle: string | null; onSold: () => void }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', sessions_total: '10', price: '', valid_until: '' });
   const [key, setKey] = useState('');
@@ -442,14 +442,14 @@ function Panel({ title, children, aside }: { title: string; children: ReactNode;
   const id = `physio-${title.toLowerCase().replace(/\W+/g, '-')}`;
 
   return (
-    <Card as="section" aria-labelledby={id} className="p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 id={id} className="text-[15px] font-semibold text-cx-text">
+    <section aria-labelledby={id} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 id={id} className="text-[16px] font-bold tracking-tight text-slate-900">
           {title}
         </h2>
         {aside}
       </div>
       {children}
-    </Card>
+    </section>
   );
 }

@@ -105,7 +105,7 @@ test('the front office is its own grant: a doctor given it works the desk withou
         ->assertInertia(fn (Assert $page) => $page->where('can.register', false));
 });
 
-test('a receptionist works the front desk and billing; queue rights alone never open the desk', function () {
+test('a receptionist works the front desk and billing (full billing since 2026-11-05); queue rights alone never open the desk', function () {
     expect(($this->workspaces)(($this->member)([ClinicRole::Receptionist])))->toBe(['front_desk', 'billing'])
         ->and(ClinicRole::Doctor->permissions())->toContain(ClinicPermission::QueueManage->value)
         ->and(ClinicRole::Doctor->permissions())->not->toContain(ClinicPermission::FrontOffice->value);

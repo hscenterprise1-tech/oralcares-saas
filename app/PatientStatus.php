@@ -6,18 +6,20 @@ enum PatientStatus: string
 {
     case Active = 'active';
     case Inactive = 'inactive';
-    case Deceased = 'deceased';
 
     /** A duplicate merged into another patient (see `patient_merges`); kept, never shown as a working record. */
     case Merged = 'merged';
+
+    /** Deleted by the owner (governed `patient.delete`); kept in the database as history, never shown as a working record. */
+    case Deleted = 'deleted';
 
     public function label(): string
     {
         return match ($this) {
             self::Active => 'Active',
             self::Inactive => 'Inactive',
-            self::Deceased => 'Deceased',
             self::Merged => 'Merged',
+            self::Deleted => 'Deleted',
         };
     }
 
@@ -28,6 +30,6 @@ enum PatientStatus: string
      */
     public static function working(): array
     {
-        return [self::Active->value, self::Inactive->value, self::Deceased->value];
+        return [self::Active->value, self::Inactive->value];
     }
 }

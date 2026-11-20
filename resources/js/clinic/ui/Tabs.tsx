@@ -72,3 +72,20 @@ export function LinkTabs({ tabs, label, className }: { tabs: { key: string; labe
     </nav>
   );
 }
+
+/**
+ * The same pill tabs for choices made on the page rather than by URL (a list's filter, a view switch):
+ * buttons that report the choice, with the chosen one marked for screen readers.
+ */
+export function PillTabs<T extends string>({ options, value, onChange, label, className }: { options: { key: T; label: string; count?: number | null }[]; value: T; onChange: (key: T) => void; label: string; className?: string }) {
+  return (
+    <div role="group" aria-label={label} className={cn(LIST, 'w-fit', className)}>
+      {options.map((option) => (
+        <button key={option.key} type="button" aria-pressed={value === option.key} onClick={() => onChange(option.key)} className={cn(TAB, value === option.key && ACTIVE)}>
+          {option.label}
+          <Count value={option.count} />
+        </button>
+      ))}
+    </div>
+  );
+}

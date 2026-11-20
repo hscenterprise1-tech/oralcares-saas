@@ -105,6 +105,7 @@ type DentalProps = {
 const UPPER = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 
+
 export function DentalPanel({ dental, services, open }: { dental: DentalProps; services: { id: number; name: string; code: string | null }[]; open: boolean }) {
   const [tooth, setTooth] = useState<number | null>(null);
   const [tab, setTab] = useState<'finding' | 'plan' | 'gums' | 'lab'>('finding');

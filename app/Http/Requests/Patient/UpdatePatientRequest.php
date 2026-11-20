@@ -54,8 +54,8 @@ class UpdatePatientRequest extends FormRequest
             'first_name' => ['sometimes', 'required', 'string', 'max:100'],
             'middle_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'last_name' => [...$rule('last_name'), 'string', 'max:100'],
-            'date_of_birth' => [...$rule('date_of_birth'), 'date', 'before:today'],
-            'age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:150'],
+            'date_of_birth' => [...$rule('date_of_birth'), 'date', 'before_or_equal:today'],
+            'age' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:120'],
             'gender' => [...$rule('gender'), 'string', 'in:male,female,other'],
             'blood_group' => [...$rule('blood_group'), 'string', 'in:A+,A-,B+,B-,AB+,AB-,O+,O-'],
 
@@ -82,6 +82,7 @@ class UpdatePatientRequest extends FormRequest
             'allergies.*' => ['string'],
             'medical_alerts' => ['sometimes', 'nullable', 'array'],
             'medical_alerts.*' => ['string'],
+            'medical_notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ];
     }
 }

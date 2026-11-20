@@ -120,11 +120,8 @@ export function PatientSearchStep({
     }
   };
 
-  // A patient recorded as deceased is shown, never taken forward: no new visit can start (`PatientCareGuard`).
   function pick(patient: LookupPatient) {
-    if (patient.status !== 'deceased') {
-      onSelect(patient);
-    }
+    onSelect(patient);
   }
 
   const specialtyLabel = (key: string) => config.specialties.find((specialty) => specialty.key === key)?.label ?? humanize(key);
@@ -178,7 +175,6 @@ export function PatientSearchStep({
       <ul id={listId} role="listbox" aria-label="Patients" className="space-y-1.5">
         {shown.map((patient, index) => {
           const isActive = index === active;
-          const deceased = patient.status === 'deceased';
           const initials = patient.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
           const facts = [patient.uhid, maskPhone(patient.phone), [patient.age !== null ? `${patient.age}` : null, patient.gender ? humanize(patient.gender) : null].filter(Boolean).join(' · ')].filter(Boolean);
 
@@ -189,12 +185,10 @@ export function PatientSearchStep({
               role="option"
               aria-selected={isActive}
               onMouseEnter={() => setActive(index)}
-              aria-disabled={deceased || undefined}
               onClick={() => pick(patient)}
               className={cn(
                 'group flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-both motion-safe:duration-200 motion-safe:transition-[background-color,border-color,box-shadow]',
                 isActive ? 'border-[#14917F]/60 bg-[#F0FAF8] shadow-[0_6px_16px_-12px_rgba(15,107,95,0.7)]' : 'border-[#E6EBF2] bg-white hover:border-[#C9D6E4]',
-                deceased && 'cursor-not-allowed opacity-75',
               )}
             >
               <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[12.5px] font-bold', isActive ? 'bg-[#14917F] text-white' : 'bg-[#EEF3FA] text-[#1769AA]')} aria-hidden="true">
@@ -213,7 +207,6 @@ export function PatientSearchStep({
                     </span>
                   )}
                   {patient.in_queue && <span className="rounded-full bg-[#FFF3DC] px-2 py-px font-semibold text-[#92400E]">In today&apos;s queue</span>}
-                  {deceased && <span className="rounded-full bg-[#EEF1F5] px-2 py-px font-semibold text-[#475569]">Recorded as deceased · no new visits</span>}
                 </div>
                 <SafetyFlags flags={patient.safety_flags} compact className="mt-1" />
               </div>

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Clinic;
 
-use App\ClinicPermission;
 use App\Http\Controllers\Concerns\AnswersDomainErrors;
 use App\Http\Controllers\Concerns\BindsToActiveClinic;
 use App\Http\Controllers\Controller;
@@ -188,7 +187,7 @@ class TreatmentCareController extends Controller
     public function sellPackage(Request $request, PatientTreatment $treatment, IntakeSubmissions $submissions): JsonResponse
     {
         $this->inActiveClinic($treatment);
-        abort_unless($request->user()->hasClinicPermission(ClinicPermission::BillingCreate), 403, 'Selling a package needs billing rights.');
+        abort_unless(SessionPackages::maySell($request->user()), 403, 'Selling a package needs the package-selling permission.');
         $this->access->assertCanView($request->user(), $treatment);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:150'],
@@ -214,6 +213,7 @@ class TreatmentCareController extends Controller
     {
         $this->inActiveClinic($treatment, $package);
         $this->belongsTo($package, $treatment);
+        abort_unless(SessionPackages::maySell($request->user()), 403, 'Adjusting a package needs the package-selling permission.');
         $this->access->assertCanView($request->user(), $treatment);
         $data = $request->validate([
             'quantity' => ['required', 'integer', 'between:-200,200', 'not_in:0'],

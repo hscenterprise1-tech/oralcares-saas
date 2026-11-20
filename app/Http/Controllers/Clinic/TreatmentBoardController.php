@@ -6,6 +6,7 @@ use App\ClinicPermission;
 use App\Http\Controllers\Controller;
 use App\Models\PatientTreatment;
 use App\Services\ClinicContext;
+use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\Treatment\TreatmentAccess;
 use App\Services\Treatment\TreatmentReadModel;
@@ -46,6 +47,8 @@ class TreatmentBoardController extends Controller
             $filters['cursor'] ?? null,
             $user->hasClinicPermission(ClinicPermission::BillingView),
             (int) ($filters['per_page'] ?? 25),
+            // A practitioner limited to their own fees sees their own treatments' agreed estimates only.
+            app(Patient360Access::class)->ownFeesPractitionerId($user),
         ));
     }
 }

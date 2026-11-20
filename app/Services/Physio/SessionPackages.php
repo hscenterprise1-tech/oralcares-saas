@@ -49,13 +49,25 @@ class SessionPackages
     ) {}
 
     /**
+     * May this member sell a package? `package.sell` (granted on its own,
+     * never implied by ordinary billing) and `billing.create`, since a priced
+     * package is raised on a bill. Every sale entry point asks this.
+     */
+    public static function maySell(User $user): bool
+    {
+        return $user->hasClinicPermission(ClinicPermission::PackageSell) && $user->hasClinicPermission(ClinicPermission::BillingCreate);
+    }
+
+    /**
      * Sell a package for one treatment. With a price it is raised on the
      * canonical clinic bill, against that treatment. A renewal names the
      * package it follows; the old one, its usage and its bill stay as they are.
+     * Sold during a visit (`$encounter`), its bill belongs to that visit, so the
+     * desk collects it with the visit.
      *
      * @param  array{name: string, sessions_total: int, valid_until?: ?string, clinical_procedure_id?: ?int, price?: ?float, renews_package_id?: ?int}  $data
      */
-    public function sell(PatientTreatment $treatment, Branch $branch, array $data, ClinicEmployee $seller): PatientSessionPackage
+    public function sell(PatientTreatment $treatment, Branch $branch, array $data, ClinicEmployee $seller, ?ClinicalEncounter $encounter = null): PatientSessionPackage
     {
         if ($treatment->clinic_id !== $branch->clinic_id || $treatment->clinic_id !== $seller->clinic_id) {
             throw new InvalidArgumentException('The treatment, branch and seller must belong to one clinic.');
@@ -75,7 +87,7 @@ class SessionPackages
             throw new InvalidArgumentException('Name the package.');
         }
 
-        return DB::transaction(function () use ($treatment, $branch, $data, $sessions, $name, $seller) {
+        return DB::transaction(function () use ($treatment, $branch, $data, $sessions, $name, $seller, $encounter) {
             $renews = null;
             if (! empty($data['renews_package_id'])) {
                 $renews = PatientSessionPackage::query()->withoutGlobalScopes()->whereKey($data['renews_package_id'])->lockForUpdate()->first();
@@ -107,7 +119,7 @@ class SessionPackages
                     'unit_price' => $price,
                     'clinical_procedure_id' => $package->clinical_procedure_id,
                     'patient_treatment_id' => $treatment->id,
-                ]], creator: $seller);
+                ]], encounter: $encounter, creator: $seller);
                 $package->update(['patient_billing_id' => $bill->id]);
             }
 
@@ -242,13 +254,13 @@ class SessionPackages
 
     /**
      * An audited manual change to a package's entitlement (goodwill session,
-     * correction). Needs billing rights and a reason; never takes the balance
-     * below zero.
+     * correction). Needs the package-selling right (`maySell`) and a reason;
+     * never takes the balance below zero.
      */
     public function adjust(PatientSessionPackage $package, int $quantity, string $reason, User $by): PatientSessionPackage
     {
-        if (! $by->hasClinicPermission(ClinicPermission::BillingCreate)) {
-            throw new AuthorizationException('Adjusting a package needs billing rights.');
+        if (! self::maySell($by)) {
+            throw new AuthorizationException('Adjusting a package needs the package-selling permission.');
         }
         $reason = trim($reason);
         if ($quantity === 0 || abs($quantity) > 200) {
@@ -282,9 +294,17 @@ class SessionPackages
         });
     }
 
-    /** Cancel a package nothing has been taken from. */
-    public function cancel(PatientSessionPackage $package): PatientSessionPackage
+    /**
+     * Cancel a package nothing has been taken from. Needs the package-selling
+     * right (`maySell`). Its bill and ledger stay; returning money is a refund
+     * on the bill, with its own permission.
+     */
+    public function cancel(PatientSessionPackage $package, User $by): PatientSessionPackage
     {
+        if (! self::maySell($by)) {
+            throw new AuthorizationException('Cancelling a package needs the package-selling permission.');
+        }
+
         return DB::transaction(function () use ($package) {
             $locked = PatientSessionPackage::query()->withoutGlobalScopes()->whereKey($package->id)->lockForUpdate()->firstOrFail();
             $consumed = SessionPackageUsage::query()->withoutGlobalScopes()->where('package_id', $locked->id)

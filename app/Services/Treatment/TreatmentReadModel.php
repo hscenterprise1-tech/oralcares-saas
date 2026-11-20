@@ -24,7 +24,11 @@ use Illuminate\Support\Facades\DB;
  * one for their stages, one per declared target — never per row.
  *
  * Amounts are included only for callers that may see money; the caller
- * decides (`$withAmounts`). Branch limits come from `PatientBranchAccess`.
+ * decides (`$withAmounts`). A practitioner who may see only their own fees
+ * gets the agreed estimate of the treatments assigned to them
+ * (`patient_treatments.practitioner_id`, passed as `$ownEstimatesFor`) and no
+ * other amount: never another practitioner's, never what was charged, never
+ * a catalogue price. Branch limits come from `PatientBranchAccess`.
  */
 class TreatmentReadModel
 {
@@ -50,7 +54,7 @@ class TreatmentReadModel
      * @param  list<int>|null  $onlyIds
      * @return list<array<string, mixed>>
      */
-    public function forPatient(int $clinicId, int $patientId, ?array $branchIds, bool $openOnly, bool $withAmounts, int $limit = 50, ?array $onlyIds = null): array
+    public function forPatient(int $clinicId, int $patientId, ?array $branchIds, bool $openOnly, bool $withAmounts, int $limit = 50, ?array $onlyIds = null, ?int $ownEstimatesFor = null): array
     {
         if ($onlyIds === []) {
             return [];
@@ -62,7 +66,7 @@ class TreatmentReadModel
             ->orderByRaw("case when status in ('planned','in_progress','paused') then 0 else 1 end")
             ->latest('id')->limit($limit)->get();
 
-        return $this->present($rows, $withAmounts);
+        return $this->present($rows, $withAmounts, $ownEstimatesFor);
     }
 
     /**
@@ -148,7 +152,7 @@ class TreatmentReadModel
      * @param  Collection<int, PatientTreatment>  $rows
      * @return list<array<string, mixed>>
      */
-    public function present(Collection $rows, bool $withAmounts): array
+    public function present(Collection $rows, bool $withAmounts, ?int $ownEstimatesFor = null): array
     {
         if ($rows->isEmpty()) {
             return [];
@@ -157,7 +161,10 @@ class TreatmentReadModel
             ->orderBy('position')->get()->groupBy('patient_treatment_id');
         $targets = $this->targets->readMany($rows);
 
-        return $rows->map(function (PatientTreatment $t) use ($stages, $targets, $withAmounts) {
+        return $rows->map(function (PatientTreatment $t) use ($stages, $targets, $withAmounts, $ownEstimatesFor) {
+            // The agreed estimate is shown to the ledger's readers, or to the practitioner the treatment is assigned to.
+            $ownEstimate = ! $withAmounts && $ownEstimatesFor !== null && (int) $t->practitioner_id === $ownEstimatesFor;
+            $estimate = $withAmounts || $ownEstimate;
             $own = $stages->get($t->id, collect());
             $next = $own->first(fn (PatientTreatmentStage $s) => ! $s->isClosed());
 
@@ -180,13 +187,15 @@ class TreatmentReadModel
                     'id' => $s->id, 'position' => $s->position, 'name' => $s->name, 'status' => $s->status, 'is_optional' => $s->is_optional,
                     'sessions' => $s->sessions_planned !== null ? ['done' => $s->sessions_completed, 'planned' => $s->sessions_planned] : null,
                     'completed_at' => $s->completed_at?->toIso8601String(),
-                    ...($withAmounts ? ['amount' => $s->agreed_amount !== null ? (float) $s->agreed_amount : null] : []),
+                    ...($estimate ? ['amount' => $s->agreed_amount !== null ? (float) $s->agreed_amount : null] : []),
                 ])->values()->all(),
                 'targets' => $targets[$t->id] ?? [],
                 'valid_until' => $t->valid_until?->toDateString(),
                 'started_at' => $t->started_at?->toIso8601String(),
                 'completed_at' => $t->completed_at?->toIso8601String(),
-                ...($withAmounts ? ['agreed_amount' => $t->agreed_amount !== null ? (float) $t->agreed_amount : null, 'currency' => $t->currency] : []),
+                ...($estimate ? ['agreed_amount' => $t->agreed_amount !== null ? (float) $t->agreed_amount : null, 'currency' => $t->currency] : []),
+                // `own_estimate`: the agreed estimate of this practitioner's own treatment, not a catalogue price or a charge.
+                ...($ownEstimate ? ['amount_scope' => 'own_estimate'] : []),
             ];
         })->values()->all();
     }
@@ -197,14 +206,14 @@ class TreatmentReadModel
      *
      * @return array<string, mixed>
      */
-    public function detail(PatientTreatment $treatment, bool $withAmounts): array
+    public function detail(PatientTreatment $treatment, bool $withAmounts, ?int $ownEstimatesFor = null): array
     {
         $treatment->loadMissing(['practitioner:id,name']);
         $procedures = PatientProcedure::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)->where('patient_treatment_id', $treatment->id)
             ->latest('id')->limit(500)->get(['id', 'encounter_id', 'patient_treatment_stage_id', 'clinical_procedure_id', 'code', 'name', 'quantity', 'details', 'performed_at', 'charged_amount']);
 
         return [
-            ...$this->present(collect([$treatment]), $withAmounts)[0],
+            ...$this->present(collect([$treatment]), $withAmounts, $ownEstimatesFor)[0],
             'catalog_treatment_version_id' => $treatment->catalog_treatment_version_id,
             'encounter_id' => $treatment->encounter_id,
             'cancelled_at' => $treatment->cancelled_at?->toIso8601String(),
@@ -227,7 +236,7 @@ class TreatmentReadModel
      * @param  array{status?: ?string, specialty?: ?string, practitioner_id?: ?int}  $filters
      * @return array{data: list<array<string, mixed>>, next_cursor: ?string, per_page: int}
      */
-    public function board(int $clinicId, ?array $branchIds, ?array $specialties, array $filters, ?string $cursor, bool $withAmounts, int $perPage = 25): array
+    public function board(int $clinicId, ?array $branchIds, ?array $specialties, array $filters, ?string $cursor, bool $withAmounts, int $perPage = 25, ?int $ownEstimatesFor = null): array
     {
         $perPage = max(1, min($perPage, 100));
         $status = $filters['status'] ?? null;
@@ -245,7 +254,7 @@ class TreatmentReadModel
             ->get(['id', 'uhid', 'first_name', 'middle_name', 'last_name', 'name'])->keyBy('id');
 
         return [
-            'data' => collect($this->present($rows, $withAmounts))->map(fn (array $t) => [
+            'data' => collect($this->present($rows, $withAmounts, $ownEstimatesFor))->map(fn (array $t) => [
                 ...$t,
                 'patient' => ($p = $patients->get($t['patient_id'])) ? ['id' => $p->id, 'uhid' => $p->uhid, 'name' => $p->full_name] : null,
             ])->values()->all(),

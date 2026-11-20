@@ -33,9 +33,9 @@ use InvalidArgumentException;
  * balance the only balance). The fee is the practitioner's own; nothing the
  * desk sends sets an amount to charge.
  *
- * Callers run this inside the registration/check-in transaction: a payment
- * that fails undoes the visit and the charge with it, so no orphan bill or
- * half-paid state is left behind.
+ * Callers run this inside the registration/check-in transaction: payment
+ * comes first, so a payment that fails undoes the visit, the queue entry and
+ * the charge with it — no orphan bill, no unpaid patient in the queue.
  */
 class CheckInCharges
 {
@@ -107,12 +107,19 @@ class CheckInCharges
      * (null for "nothing charged"). When the server's own answer differs —
      * the fee changed, a package covers the visit, the policy changed — the
      * check-in is refused with the real amount, so nobody is charged a sum
-     * they were not shown.
+     * they were not shown. A desk that showed a fee also says how it is
+     * settled: a payment (full or part), or `$payLater` — an explicit unpaid
+     * check-in that leaves the bill owing. `$payLater` null is an older
+     * caller that never states it: the bill is left owing, as before.
+     *
+     * The payment is taken by a member who may collect money at this
+     * branch, by a method the desk accepts; any refusal throws, so the
+     * caller's transaction undoes the check-in with it.
      *
      * @param  array{method: string, amount: float|int|string, reference?: ?string}|null  $payment
      * @return array{bill: PatientBilling, payment: ?PatientBillingPayment}|null
      */
-    public function chargeVisit(Clinic $clinic, Branch $branch, Patient $patient, PatientVisit $visit, ?ClinicEmployee $doctor, User $user, ?ClinicEmployee $performer, ?array $payment, bool $verify = false, ?float $expected = null): ?array
+    public function chargeVisit(Clinic $clinic, Branch $branch, Patient $patient, PatientVisit $visit, ?ClinicEmployee $doctor, User $user, ?ClinicEmployee $performer, ?array $payment, bool $verify = false, ?float $expected = null, ?bool $payLater = null): ?array
     {
         $fee = $this->dueAtCheckIn($clinic, $patient, $visit, $doctor, $user);
         if ($verify && round((float) $expected, 2) !== round((float) $fee, 2)) {
@@ -126,6 +133,21 @@ class CheckInCharges
             }
 
             return null;
+        }
+        if ($payment !== null && $payLater === true) {
+            throw ValidationException::withMessages(['payment' => 'Take the payment or choose Pay later, not both.']);
+        }
+        if ($payment === null && $payLater !== true && ($verify || $payLater === false)) {
+            throw ValidationException::withMessages(['payment' => 'Take the payment, or choose Pay later to check the patient in unpaid.']);
+        }
+        if ($payment !== null) {
+            if (! $user->hasClinicPermissionAt(ClinicPermission::PaymentCollect, $branch)) {
+                throw ValidationException::withMessages(['payment' => 'You cannot take payments.']);
+            }
+            $method = PaymentMethod::tryFrom((string) ($payment['method'] ?? ''));
+            if ($method === null || ! in_array($method, $this->payments->acceptedMethods($clinic, atDesk: true), true)) {
+                throw ValidationException::withMessages(['payment.method' => 'Choose how the patient is paying.']);
+            }
         }
         if ($this->visitCharged($visit)) {
             throw ValidationException::withMessages(['payment' => 'This visit has already been charged.']);
@@ -148,11 +170,6 @@ class CheckInCharges
 
         $paid = null;
         if ($payment !== null) {
-            if (! $user->hasClinicPermission(ClinicPermission::PaymentCollect)) {
-                throw ValidationException::withMessages(['payment' => 'You cannot take payments.']);
-            }
-            $method = PaymentMethod::tryFrom((string) ($payment['method'] ?? ''))
-                ?? throw ValidationException::withMessages(['payment.method' => 'Choose how the patient is paying.']);
             try {
                 $paid = $this->payments->recordPayment($bill, $method, (float) $payment['amount'], $payment['reference'] ?? null, $performer);
             } catch (DomainException|InvalidArgumentException $e) {
@@ -188,7 +205,9 @@ class CheckInCharges
         $payment = $charge['payment'];
 
         $bill->loadMissing('items');
-        $mayView = $user->hasClinicPermission(ClinicPermission::BillingView);
+        // Printing this bill, its receipt and following its messages: the desk that raised it may, as may the ledger's readers.
+        $mayView = $user->hasClinicPermission(ClinicPermission::BillingView) || $user->hasClinicPermission(ClinicPermission::BillingCreate) || $user->hasClinicPermission(ClinicPermission::PaymentCollect);
+        $mayFollowMessages = $user->hasClinicPermission(ClinicPermission::PaymentCollect);
 
         return [
             'id' => $bill->id,
@@ -214,7 +233,7 @@ class CheckInCharges
                 // The existing bill print route as a thermal roll receipt for this payment.
                 'print_url' => $mayView ? route('clinic.billing.bills.print', ['bill' => $bill, 'layout' => 'receipt', 'payment' => $payment->id]) : null,
                 // Where the patient's messages for this payment stand (queued after the payment commits).
-                'messages_url' => $mayView ? route('clinic.billing.payments.messages', $payment->id) : null,
+                'messages_url' => $mayFollowMessages ? route('clinic.billing.payments.messages', $payment->id) : null,
                 'retry_url' => $user->hasClinicPermission(ClinicPermission::PaymentCollect) ? route('clinic.billing.payments.messages.retry', $payment->id) : null,
             ] : null,
             'print_url' => $mayView ? route('clinic.billing.bills.print', $bill) : null,

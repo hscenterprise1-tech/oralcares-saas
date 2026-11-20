@@ -67,7 +67,7 @@ export function Table<Row>({
                   key={column.key}
                   scope="col"
                   className={cn(
-                    'border-b border-cx-line bg-cx-surface px-4 py-2.5 text-[12px] font-semibold text-cx-text-3',
+                    'border-b border-[#E6EBF1] bg-white px-4 py-2.5 text-[12px] font-semibold text-[#64748B]',
                     index === 0 && 'sticky left-0 z-[1]',
                     column.numeric && 'text-right',
                     column.hideBelow && HIDE[column.hideBelow],
@@ -84,7 +84,7 @@ export function Table<Row>({
               ? Array.from({ length: 5 }, (_, index) => (
                   <tr key={index}>
                     {columns.map((column) => (
-                      <td key={column.key} className={cn('border-b border-cx-line px-4 py-3.5', column.hideBelow && HIDE[column.hideBelow])}>
+                      <td key={column.key} className={cn('border-b border-[#E6EBF1] px-4 py-3.5', column.hideBelow && HIDE[column.hideBelow])}>
                         <Skeleton className="h-3.5 w-3/4" />
                       </td>
                     ))}
@@ -101,7 +101,7 @@ export function Table<Row>({
                       <td
                         key={column.key}
                         className={cn(
-                          'border-b border-cx-line bg-cx-surface px-4 py-3 align-middle text-cx-text group-hover:bg-cx-nav-canvas',
+                          'border-b border-[#E6EBF1] bg-white px-4 py-3 align-middle text-[#173B60] group-hover:bg-[#F5F8FC]',
                           index === 0 && 'sticky left-0 z-[1]',
                           column.numeric && 'text-right tabular-nums',
                           column.hideBelow && HIDE[column.hideBelow],

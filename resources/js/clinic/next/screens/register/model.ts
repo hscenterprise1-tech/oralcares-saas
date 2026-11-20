@@ -18,7 +18,7 @@ export interface RegisterRow {
   phone: string | null;
   phoneTail: string | null;
   email: string | null;
-  lifecycle: 'deceased' | 'merged' | null;
+  lifecycle: 'merged' | null;
   alerts: number;
   doctor: { name: string; atClinic: boolean } | null;
   specialties: { key: string; label: string }[];
@@ -63,7 +63,7 @@ export function toRow(patient: DirectoryPatient, props: Pick<DirectoryProps, 'li
     phone: patient.phone,
     phoneTail: patient.phone_last_digits,
     email: patient.email,
-    lifecycle: patient.status === 'deceased' || patient.status === 'merged' ? patient.status : null,
+    lifecycle: patient.status === 'merged' ? 'merged' : null,
     alerts: patient.critical_alerts,
     doctor: patient.assigned_doctor ? { name: patient.assigned_doctor.name, atClinic: patient.assigned_doctor.at_clinic } : null,
     specialties: patient.specialties.filter((key) => labels[key]).map((key) => ({ key, label: labels[key] })),

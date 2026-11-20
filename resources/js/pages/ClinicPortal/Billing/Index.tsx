@@ -8,6 +8,7 @@ import { Card } from '@/clinic/ui/Card';
 import { Field, Input, Select } from '@/clinic/ui/controls';
 import { DatePicker } from '@/clinic/ui/DatePicker';
 import { PageHeader } from '@/clinic/ui/PageHeader';
+import { PillTabs } from '@/clinic/ui/Tabs';
 import { EmptyState } from '@/clinic/ui/states';
 import { formatMoney, formatNumber } from '@/clinic/ui/visuals';
 import { cn } from '@/lib/utils';
@@ -48,7 +49,7 @@ interface Props {
   bills: PagedList<BillRow> | null;
   collections: PagedList<CollectionRow> | null;
   totals: { count: number; billed?: number; collected: number; refunded?: number; adjusted?: number; outstanding?: number };
-  ready: { id: number }[];
+  ready: { id: number; number: string | null; patient: string | null; uhid: string | null; doctor: string | null; url: string }[];
   filters: { q: string; status: string | null; branch: number | null; from: string | null; to: string | null; method: string | null };
   statuses: Option[];
   methods: Option[];
@@ -75,23 +76,7 @@ export default function BillingIndex({ view, bills, collections, totals, ready, 
       <PageHeader title="Billing" description="Bills raised at the clinic, what has been collected, and what is still due." />
       <BillingTabs tabs={tabs} current="bills" />
 
-      <div role="tablist" aria-label="Show" className="mb-4 inline-flex rounded-full border border-cx-line bg-cx-surface p-1">
-        {(['bills', 'collections'] as const).map((key) => (
-          <button
-            key={key}
-            role="tab"
-            type="button"
-            aria-selected={view === key}
-            onClick={() => switchView(key)}
-            className={cn(
-              'min-h-9 rounded-full px-4 text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-nav-teal',
-              view === key ? 'bg-cx-nav-active font-semibold text-cx-nav-teal-strong ring-1 ring-inset ring-cx-nav-teal/40' : 'text-cx-nav-ink hover:bg-cx-nav-bg',
-            )}
-          >
-            {key === 'bills' ? 'Bills' : 'Collections'}
-          </button>
-        ))}
-      </div>
+      <PillTabs label="Show" className="mb-4" value={view} onChange={switchView} options={[{ key: 'bills', label: 'Bills' }, { key: 'collections', label: 'Collections' }]} />
 
       <FilterBar onApply={() => apply()} onClear={() => { const empty = { q: '', status: null, branch: null, from: null, to: null, method: null }; setDraft(empty); apply(empty); }} dirty={dirty}>
         <Field label="Search" htmlFor="billing-q" className="min-w-[220px] flex-1">
@@ -120,7 +105,7 @@ export default function BillingIndex({ view, bills, collections, totals, ready, 
       </FilterBar>
 
       {view === 'bills' ? (
-        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           <Figure label="Billed" value={totals.billed ?? 0} tone="brand" note={`${formatNumber(totals.count)} bills (cancelled bills carry no amount)`} />
           <Figure label="Collected" value={totals.collected} tone="green" />
           <Figure label="Refunded" value={totals.refunded ?? 0} tone="slate" />
@@ -134,9 +119,24 @@ export default function BillingIndex({ view, bills, collections, totals, ready, 
       )}
 
       {view === 'bills' && ready.length > 0 && (
-        <p className="mb-3 text-[12.5px] text-cx-text-3">
-          {formatNumber(ready.length)} signed {ready.length === 1 ? 'consultation is' : 'consultations are'} ready to bill. They are billed from the consultation checkout.
-        </p>
+        <Card className="mb-4 p-4">
+          <h2 className="text-[14px] font-semibold text-cx-text">
+            {formatNumber(ready.length)} signed {ready.length === 1 ? 'consultation is' : 'consultations are'} ready to bill
+          </h2>
+          <ul className="mt-2 divide-y divide-cx-line" aria-label="Consultations ready to bill">
+            {ready.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="min-w-0 text-[13px]">
+                  <span className="font-semibold text-cx-text">{row.patient ?? 'Patient'}</span>
+                  <span className="text-cx-text-2">{[row.uhid, row.doctor, row.number].filter(Boolean).map((part) => ` · ${part}`).join('')}</span>
+                </span>
+                <Link href={row.url} className="inline-flex h-9 items-center rounded-full bg-[#1769AA] px-4 text-[12.5px] font-semibold text-white hover:bg-[#135A93] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1769AA]/40">
+                  Checkout
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       <Card>

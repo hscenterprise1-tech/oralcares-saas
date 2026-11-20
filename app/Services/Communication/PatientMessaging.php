@@ -17,6 +17,7 @@ use App\Models\Patient;
 use App\Models\PatientBilling;
 use App\Models\PatientBillingPayment;
 use App\Models\PatientFollowUp;
+use App\Models\PatientProcedure;
 use App\Models\PatientSessionPackage;
 use App\Models\PatientTimelineEvent;
 use App\Models\PatientTreatment;
@@ -24,6 +25,7 @@ use App\Models\PatientTreatmentStage;
 use App\Models\PatientVisit;
 use App\Models\PhysioSession;
 use App\Models\Prescription;
+use App\Models\TreatmentPlan;
 use App\Services\ChannelResolverService;
 use App\Services\NotificationService;
 use App\Services\WhatsApp\ClinicWhatsApp;
@@ -49,7 +51,7 @@ use Illuminate\Support\Str;
  *
  * Messages are only queued here; `DispatchDuePatientMessages` sends them.
  * Nothing is queued for a patient who may not be contacted at all
- * (`PatientMessageEligibility`: merged, deceased).
+ * (`PatientMessageEligibility`: merged, deleted).
  */
 class PatientMessaging
 {
@@ -169,7 +171,7 @@ class PatientMessaging
 
     /**
      * A message a member chose to send now (`ManualShare`), through the same
-     * pipeline as the automatic ones: eligibility (merged, deceased),
+     * pipeline as the automatic ones: eligibility (merged, deleted),
      * consent, the clinic's own sender, an approved template, and the event
      * key for duplicate protection. WhatsApp only: when WhatsApp cannot carry
      * it, nothing is queued on another channel.
@@ -313,6 +315,39 @@ class PatientMessaging
         }
     }
 
+    /**
+     * Care advice after a recorded procedure (`clinic_messages.aftercare`):
+     * the first kind whose pattern matches its name, once per consultation
+     * and kind. A procedure with no matching kind sends nothing.
+     */
+    public function procedureAftercare(PatientProcedure $procedure): void
+    {
+        $name = (string) ($procedure->name ?? '');
+        foreach ((array) config('clinic_messages.aftercare', []) as $kind => $advice) {
+            if (! @preg_match($advice['pattern'], $name)) {
+                continue;
+            }
+            $this->send($procedure->clinic_id, $this->branchOfEncounter($procedure->encounter_id), $procedure->patient_id, 'procedure_aftercare',
+                'aftercare:'.($procedure->encounter_id ?? "procedure-{$procedure->id}").":{$kind}", [
+                    'patient' => $this->patientName($procedure->patient_id),
+                    'clinic' => $this->clinicName($procedure->clinic_id),
+                    'procedure' => mb_strtolower($name),
+                    'care' => $advice['care'],
+                ]);
+
+            return;
+        }
+    }
+
+    /** A dental plan with no work for a month (`ClinicWorkAlerts`): ask the patient to book. Once a month per plan. */
+    public function planStalled(TreatmentPlan $plan, string $month): void
+    {
+        $this->send($plan->clinic_id, $this->branchOfEncounter($plan->encounter_id), $plan->patient_id, 'dental_plan_waiting', "dental_plan_waiting:{$plan->id}:{$month}", [
+            'patient' => $this->patientName($plan->patient_id),
+            'clinic' => $this->clinicName($plan->clinic_id),
+        ]);
+    }
+
     /** A step of a dental treatment is done: book the next visit. */
     public function treatmentStageCompleted(PatientTreatmentStage $stage): void
     {
@@ -379,10 +414,16 @@ class PatientMessaging
     }
 
     /** A balance still open: due, then overdue (once each per bill). */
-    public function balanceOpen(PatientBilling $bill, bool $overdue): void
+    /**
+     * A bill still owing. An overdue bill is reminded again at each later
+     * stage (`QueueScheduledPatientMessages::OVERDUE_STAGES`); the first
+     * stage keeps the original event key, so no earlier reminder repeats.
+     */
+    public function balanceOpen(PatientBilling $bill, bool $overdue, ?int $stage = null): void
     {
         $code = $overdue ? 'payment_overdue' : 'payment_due';
-        $this->send($bill->clinic_id, $bill->branch_id, $bill->patient_id, $code, "{$code}:{$bill->id}", [
+        $key = "{$code}:{$bill->id}".($overdue && $stage !== null && $stage > (int) config('clinic_whatsapp.overdue_after_days', 7) ? ":{$stage}" : '');
+        $this->send($bill->clinic_id, $bill->branch_id, $bill->patient_id, $code, $key, [
             'patient' => $this->patientName($bill->patient_id),
             'clinic' => $this->clinicName($bill->clinic_id),
             'amount' => self::money((float) $bill->outstanding_balance),

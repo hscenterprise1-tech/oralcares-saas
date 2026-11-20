@@ -21,7 +21,11 @@ export type PhysioCare = {
   /** Owed on live bills; null for members who do not see billing. */
   amount_due: number | null;
   /** Where the desk confirms today's session; null when the patient is not queued here or the member may not. */
-  confirm: { url: string; therapist: string | null } | null;
+  confirm: { url: string; therapist: string | null; therapist_id: number | null } | null;
+  /** Therapists who give physiotherapy at this branch today (for the desk); empty for members who may not run sessions. */
+  therapists: { id: number; name: string }[];
+  /** Where the desk starts a physiotherapy programme; null for members who may not. */
+  start_url: string | null;
 };
 
 /**

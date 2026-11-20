@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Clinic;
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
 use App\Models\PatientBilling;
+use App\Models\PatientCase;
 use App\Services\ClinicContext;
 use App\Services\DentalChartService;
 use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\Patient360\Patient360SectionPolicy;
 use App\Services\Patient\Patient360\Patient360Sections;
+use App\Services\Patient\PatientCaseLifecycle;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -60,6 +64,7 @@ class Patient360SectionController extends Controller
             'audit' => $this->sections->audit($patient, $page),
             'dental' => $this->sections->dental($patient, $user),
             'physio' => $this->sections->physio($patient, $user),
+            'cases' => $this->sections->cases($patient, $user),
         };
 
         return response()->json($data);
@@ -69,14 +74,47 @@ class Patient360SectionController extends Controller
     private const SECTIONS = [
         'timeline' => true, 'visits' => true, 'encounters' => true, 'appointments' => true, 'treatment' => true, 'prescriptions' => true,
         'investigations' => true, 'billing' => true, 'documents' => true, 'follow-ups' => true, 'communications' => true,
-        'requests' => true, 'audit' => true, 'dental' => true, 'physio' => true,
+        'requests' => true, 'audit' => true, 'dental' => true, 'physio' => true, 'cases' => true,
     ];
+
+    /**
+     * A step in a case's lifecycle (`PatientCaseLifecycle`, which authorises
+     * it): recommend completion, close (with an optional summary), or reopen
+     * (with a reason). The case must be this patient's, in this clinic.
+     */
+    public function transitionCase(Request $request, Patient $patient, int $case, string $transition, PatientCaseLifecycle $lifecycle): RedirectResponse
+    {
+        $this->authorize('view', $patient);
+        abort_unless($patient->clinic_id === $this->clinicContext->clinic()?->id, 404);
+        abort_unless($this->policy->allows($request->user(), $patient, 'cases'), 403);
+        $record = PatientCase::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)->findOrFail($case);
+        $validated = $request->validate(['note' => ['nullable', 'string', 'max:2000']]);
+        $note = $validated['note'] ?? null;
+
+        try {
+            match ($transition) {
+                'recommend' => $lifecycle->recommend($record, $request->user(), $note),
+                'close' => $lifecycle->close($record, $request->user(), $note),
+                'reopen' => $lifecycle->reopen($record, $request->user(), (string) $note),
+            };
+        } catch (AuthorizationException $e) {
+            abort(403, $e->getMessage());
+        }
+
+        return back()->with('success', match ($transition) {
+            'recommend' => 'Completion recommended. The case is closed once it is approved.',
+            'close' => 'Case closed. Its history is kept.',
+            'reopen' => 'Case reopened.',
+        });
+    }
 
     public function bill(Request $request, Patient $patient, int $bill): JsonResponse
     {
         $this->authorize('view', $patient);
         abort_unless($patient->clinic_id === $this->clinicContext->clinic()?->id, 404);
         abort_unless($this->policy->allows($request->user(), $patient, 'billing'), 403);
+        // A whole bill (other lines, payments, balance) is the ledger's: own-fees members see their lines in the section only.
+        abort_unless($this->policy->field($request->user(), $patient, 'financial'), 403);
 
         $record = PatientBilling::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
             ->when($this->access->branchIds() !== null, fn ($query) => $query->whereIn('branch_id', $this->access->branchIds()))

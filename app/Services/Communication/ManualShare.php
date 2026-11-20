@@ -32,7 +32,7 @@ use Illuminate\Database\Eloquent\Builder;
  * - What: only this patient's own records, of this clinic, in a state that
  *   makes the message true (a finalised prescription, a reviewed report, an
  *   upcoming appointment, an open follow-up).
- * - How: `PatientMessaging::sendManual` — eligibility (deceased, merged),
+ * - How: `PatientMessaging::sendManual` — eligibility (merged, deleted),
  *   consent, the clinic's own sender (no fallback to another number), the
  *   approved template, queued and tracked like every other message.
  * - Once an hour per record: the event key carries the hour, so a double

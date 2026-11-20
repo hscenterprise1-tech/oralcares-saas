@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patients Directory — design review, pass 5 (fictional data)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- The same family the Clinic Portal loads (resources/views/app.blade.php). -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* =====================================================================
+   COMPACT PREMIUM — pass 4
+   TYPE     12/16 · 13/18 · 14/20 · 15/22 · 18/26 · 24/32     Inter 400 · 500 · 600 (700 title only)
+   SPACE    4 · 8 · 12 · 16 · 20 · 24
+   RADIUS   6 badges · 10 controls · 12 rows · 14 popover/cards
+   CONTROL  40px buttons · 44px search/toolbar · 44px touch targets on phones
+   COLOUR — one job per hue
+     teal / cyan   primary action, focus, Filters button, Status filter
+     blue          search, mobile number, Registered filter
+     mint          registration date, Assigned-doctor filter, "Active"
+     violet        last activity, Branch filter & scope, "Archived"
+     amber "Inactive" · slate "Deceased" · rose errors only
+   ===================================================================== */
+:root {
+  --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --fs-xs: 12px; --lh-xs: 16px;
+  --fs-sm: 13px; --lh-sm: 18px;
+  --fs-md: 14px; --lh-md: 20px;
+  --fs-lg: 15px; --lh-lg: 22px;
+  --fs-xl: 18px; --lh-xl: 26px;
+  --fs-2xl: 24px; --lh-2xl: 32px;
+
+  --canvas: #F3F7FB; --surface: #FFFFFF; --line: #E1E9F2; --line-strong: #CFDAE6;
+  --ink: #0D1B2E; --ink-2: #2F3E55; --muted: #56647A; --subtle: #94A0B2;
+
+  --teal-700: #0A7A6E; --teal-600: #0E9384; --teal-500: #14B8A6; --teal-100: #CCF3EC; --teal-50: #EAFAF7;
+  --cyan-50: #E6F9FC;
+  --blue-700: #1D5FC4; --blue-600: #2970E0; --blue-100: #D8E6FD; --blue-50: #EEF4FF;
+  --violet-700: #5B3FC4; --violet-600: #6E52E0; --violet-100: #E5DEFC; --violet-50: #F4F1FE;
+  --mint-700: #0F7A4F; --mint-600: #12A877; --mint-100: #CFF2E1; --mint-50: #ECFAF3;
+  --amber-700: #8F4D07; --amber-100: #FCE7C3; --amber-50: #FFF6E6;
+  --slate-700: #3B4859; --slate-100: #E3E8EF; --slate-50: #F2F5F8;
+
+  --primary: linear-gradient(135deg, #0E9384 0%, #1673C9 100%);
+  --primary-hover: linear-gradient(135deg, #0B7F72 0%, #1462B0 100%);
+  --focus: #0EA5C6; --ring: 0 0 0 3px rgba(14,165,198,.22);
+  --shadow-1: 0 1px 2px rgba(16,24,40,.05);
+  --shadow-pop: 0 2px 6px rgba(16,24,40,.06), 0 24px 48px -20px rgba(30,64,120,.35);
+  --shadow-hover: 0 2px 4px rgba(16,24,40,.04), 0 10px 22px -14px rgba(14,116,144,.38);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font); font-size: var(--fs-md); line-height: var(--lh-md); color: var(--ink);
+  background: radial-gradient(900px 340px at 14% -10%, rgba(20,184,166,.08), transparent 70%), radial-gradient(800px 340px at 92% -10%, rgba(110,82,224,.07), transparent 70%), var(--canvas);
+  background-attachment: fixed; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-feature-settings: 'cv11';
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* =====================================================================
+   SHELL — static replica of the approved sidebar and top bar (context only, unchanged)
+   ===================================================================== */
+.app { display: flex; min-height: 100vh; }
+.side { width: 240px; flex: none; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(214,227,239,.8); background: linear-gradient(180deg,#F1FAFA 0%,#FFFFFF 160px); display: flex; flex-direction: column; }
+.side .brand { height: 73px; border-bottom: 1px solid rgba(214,227,239,.8); padding: 0 24px; display: flex; flex-direction: column; justify-content: center; }
+.side .brand b { font-size: 20px; font-weight: 600; letter-spacing: -.02em; } .side .brand small { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.side nav { padding: 12px; flex: 1; }
+.side .grp { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 12px 12px 6px; }
+.side .it { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 12px; font-weight: 500; }
+.side .it svg { width: 18px; height: 18px; color: #4A5D73; }
+.side .it.on { background: linear-gradient(90deg,#DDF4F2,#E6F0FD); color: #007A7B; } .side .it.on svg { color: #007A7B; }
+.side .it .soon { margin-left: auto; font-size: 10.5px; background: var(--slate-50); color: var(--muted); border-radius: 99px; padding: 2px 8px; }
+.side .it.dim { color: var(--muted); }
+.side .clinic { margin: 12px; padding: 12px; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -14px rgba(15,23,42,.14); font-size: 13px; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top { position: sticky; top: 0; z-index: 30; background: rgba(255,255,255,.95); border-bottom: 1px solid rgba(214,227,239,.8); }
+.top .bar { max-width: 1600px; margin: 0 auto; height: 72px; padding: 0 32px; display: flex; align-items: center; gap: 16px; }
+.top .menu { display: none; }
+.top .gsearch { flex: 1; max-width: 560px; height: 44px; border-radius: 12px; border: 1px solid rgba(214,227,239,.7); background: #F5F8FC; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: var(--muted); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.top .ib { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #4A5D73; border: 0; background: transparent; }
+.top .avatar { width: 44px; height: 44px; border-radius: 99px; background: linear-gradient(135deg,#D6F2EF,#E4DEFC); display: grid; place-items: center; font-weight: 600; }
+.top .who { line-height: 1.25; } .top .who b { display: block; font-size: 13.5px; } .top .who small { font-size: 12px; color: var(--muted); }
+.brandm { display: none; font-size: 18px; font-weight: 600; }
+
+/* =====================================================================
+   PAGE
+   ===================================================================== */
+.page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 20px 32px 64px; }
+
+/* Header: title, subtitle and New Patient on one line -------------------- */
+.head { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; }
+/* The original header mark (teal → blue → violet tile), kept at a compact 44px; no tall hero container. */
+.titles { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.mark { width: 44px; height: 44px; flex: none; border-radius: 14px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(140deg, #22C1B0 0%, #2B86E8 60%, #7B61F0 100%); box-shadow: 0 8px 18px -10px rgba(43,134,232,.7), inset 0 1px 0 rgba(255,255,255,.35); }
+.tt { min-width: 0; }
+.head h1 { margin: 0; font-size: var(--fs-2xl); line-height: 30px; font-weight: 700; letter-spacing: -0.022em; }
+.head p { margin: 0; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--muted); }
+
+/* Buttons ---------------------------------------------------------------- */
+.btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: var(--fs-md); line-height: var(--lh-md); font-weight: 600; color: var(--ink-2); white-space: nowrap; transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s; }
+.btn:hover:not([disabled]) { border-color: #9CCFE0; color: var(--blue-700); background: var(--cyan-50); }
+.btn.primary { border: 0; color: #fff; background: var(--primary); box-shadow: 0 6px 14px -8px rgba(22,115,201,.8), inset 0 1px 0 rgba(255,255,255,.18); }
+.btn.primary:hover:not([disabled]) { background: var(--primary-hover); color: #fff; transform: translateY(-1px); }
+.btn.primary:focus-visible { outline-offset: 3px; }
+.btn.soft { border-color: var(--teal-100); background: var(--teal-50); color: var(--teal-700); }
+.btn.soft:hover:not([disabled]) { background: var(--teal-100); color: var(--teal-700); border-color: #A7E6DA; }
+.btn[disabled] { color: #A3AEBD; background: rgba(255,255,255,.7); border-color: var(--line); cursor: not-allowed; }
+
+/* Toolbar: search · scope · Filters ------------------------------------- */
+.toolbar { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.search { position: relative; flex: 1; min-width: 0; }
+.search .lead { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--blue-600); pointer-events: none; display: grid; }
+.search input { width: 100%; height: 44px; padding: 0 44px 0 42px; border-radius: 12px; border: 1px solid var(--line-strong); background: #fff;
+  font-size: var(--fs-lg); line-height: var(--lh-lg); color: var(--ink); box-shadow: var(--shadow-1); transition: border-color .15s, box-shadow .15s; text-overflow: ellipsis; }
+.search input::placeholder { color: var(--muted); }
+.search input:hover { border-color: #A9C8EE; }
+.search input:focus { outline: 0; border-color: var(--focus); box-shadow: var(--ring); }
+.search input::-webkit-search-cancel-button { display: none; }
+.search input:placeholder-shown { padding-right: 12px; } /* no clear button until something is typed */
+.search .clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); display: grid; place-items: center; }
+.search .clear:hover { background: var(--slate-50); color: var(--ink-2); }
+.search .spin { position: absolute; right: 14px; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 99px; border: 2px solid var(--blue-100); border-top-color: var(--blue-600); animation: rot .8s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg); } }
+
+.seg { display: inline-flex; height: 44px; padding: 3px; border-radius: 12px; background: #fff; border: 1px solid var(--line-strong); box-shadow: var(--shadow-1); flex: none; }
+.seg button { height: 100%; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; font-size: var(--fs-md); font-weight: 500; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--teal-50); color: var(--teal-700); font-weight: 600; }
+
+.fbtn { height: 44px; padding: 0 12px 0 9px; border-radius: 12px; border: 1px solid var(--line-strong); background: #fff; box-shadow: var(--shadow-1); display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-md); font-weight: 600; color: var(--ink-2); flex: none; transition: border-color .15s, background .15s; }
+.fbtn .fi { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--teal-50); color: var(--teal-700); }
+.fbtn .count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: var(--teal-600); color: #fff; font-size: var(--fs-xs); line-height: 20px; text-align: center; }
+.fbtn .caret { color: var(--subtle); transition: transform .15s; display: grid; }
+.fbtn:hover { border-color: #9CCFE0; background: var(--cyan-50); }
+.fbtn[aria-expanded="true"] { border-color: var(--teal-500); background: var(--teal-50); }
+.fbtn[aria-expanded="true"] .caret { transform: rotate(180deg); }
+.fbtn.has { border-color: #9EDDD3; }
+
+/* Filter popover ------------------------------------------------------- */
+.pop { position: absolute; right: 0; top: 52px; z-index: 40; width: 560px; max-width: 100%; padding: 16px; border-radius: 14px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+.pop[hidden] { display: none; }
+.pop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.pop-head b { font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; }
+.pop-head span { font-size: var(--fs-xs); line-height: var(--lh-xs); color: var(--muted); }
+.pop-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { position: relative; min-width: 0; }
+.field > label { display: block; margin-bottom: 6px; font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 600; color: var(--ink-2); }
+.fl { --h: var(--teal-600); --h-ink: var(--teal-700); --h-soft: var(--teal-50); --h-line: var(--teal-100);
+  position: relative; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 32px 0 8px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; transition: border-color .15s, background .15s; }
+.fl.h-blue { --h: var(--blue-600); --h-ink: var(--blue-700); --h-soft: var(--blue-50); --h-line: var(--blue-100); }
+.fl.h-mint { --h: var(--mint-600); --h-ink: var(--mint-700); --h-soft: var(--mint-50); --h-line: var(--mint-100); }
+.fl.h-violet { --h: var(--violet-600); --h-ink: var(--violet-700); --h-soft: var(--violet-50); --h-line: var(--violet-100); }
+.fl:hover { border-color: var(--h-line); }
+.fl .ico { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--h-soft); color: var(--h); flex: none; }
+.fl .v { flex: 1; min-width: 0; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl .caret { position: absolute; right: 10px; top: 50%; margin-top: -7px; color: var(--subtle); display: grid; }
+.fl select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; }
+.fl:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fl.on { background: var(--h-soft); border-color: var(--h-line); }
+.fl.on .ico { background: var(--h); color: #fff; }
+.fl.on .v, .fl.on .caret { color: var(--h-ink); }
+.fl.on .v { font-weight: 600; }
+.pop-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pop-foot .pnote { font-size: var(--fs-xs); line-height: var(--lh-xs); color: var(--muted); }
+.pop-foot .acts { display: flex; gap: 8px; }
+.proposed { position: absolute; top: -2px; right: 0; height: 18px; padding: 0 6px; border-radius: 5px; background: #FFF7E6; color: #8F4D07; border: 1px dashed #E7B464; font-size: 10.5px; line-height: 16px; font-weight: 600; }
+body:not(.notes) .proposed { display: none; }
+
+/* Applied chips -------------------------------------------------------- */
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; height: 30px; padding: 0 2px 0 10px; border-radius: 99px; font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; background: var(--c-soft); color: var(--c-ink); border: 1px solid var(--c-line); white-space: nowrap; }
+.chip .k { font-weight: 500; margin-right: 3px; }
+.chip button { width: 26px; height: 26px; border: 0; border-radius: 99px; background: transparent; color: inherit; display: grid; place-items: center; }
+.chip button:hover { background: var(--c-line); }
+.chip.teal { --c-soft: var(--teal-50); --c-ink: var(--teal-700); --c-line: var(--teal-100); }
+.chip.blue { --c-soft: var(--blue-50); --c-ink: var(--blue-700); --c-line: var(--blue-100); }
+.chip.mint { --c-soft: var(--mint-50); --c-ink: var(--mint-700); --c-line: var(--mint-100); }
+.chip.violet { --c-soft: var(--violet-50); --c-ink: var(--violet-700); --c-line: var(--violet-100); }
+.clearall { height: 30px; padding: 0 8px; border: 0; background: transparent; color: var(--blue-700); font-size: var(--fs-sm); font-weight: 600; border-radius: 8px; }
+.clearall:hover { background: var(--blue-50); }
+
+/* List ----------------------------------------------------------------- */
+.list { margin-top: 18px; }
+.caption { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 0 2px 8px; }
+.caption h2 { margin: 0; font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; }
+.scope { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px; border-radius: 99px; background: var(--violet-50); color: var(--violet-700); font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 500; border: 1px solid var(--violet-100); }
+.scope.teal { background: var(--teal-50); color: var(--teal-700); border-color: var(--teal-100); }
+
+/* Patient rows — the original (pass 2/3) appearance, restored in pass 5. */
+.grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(150px, 1fr) minmax(136px, .9fr) minmax(156px, 1fr) 28px; column-gap: 24px; align-items: center; }
+.cols { padding: 0 20px 8px; font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 600; color: var(--muted); }
+.cols > div { display: flex; align-items: center; gap: 6px; }
+.cols i { width: 6px; height: 6px; border-radius: 2px; display: inline-block; }
+.rows { display: grid; gap: 10px; }
+.row { position: relative; min-height: 72px; padding: 14px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(16,24,40,.05); transition: border-color .18s, box-shadow .18s, background .18s, transform .18s; }
+a.row:hover { border-color: #A6DCE3; background: linear-gradient(90deg, #F2FBFA 0%, #F5F8FF 60%, #FFFFFF 100%); box-shadow: var(--shadow-hover); transform: translateY(-1px); }
+a.row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-color: #A6DCE3; }
+.row.archived { background: #FBFAFF; border-color: #E9E4FA; }
+
+.who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.av { width: 44px; height: 44px; border-radius: 14px; flex: none; display: grid; place-items: center; font-size: var(--fs-md); line-height: 1; font-weight: 600; letter-spacing: .01em; box-shadow: inset 0 0 0 1px rgba(255,255,255,.6); }
+.av.p0 { background: linear-gradient(140deg, #D2F5EE, #B9ECE2); color: #0A6D62; }
+.av.p1 { background: linear-gradient(140deg, #D6F1FB, #BFE6F7); color: #0B6585; }
+.av.p2 { background: linear-gradient(140deg, #DEE8FE, #C9DAFC); color: #1D55B0; }
+.av.p3 { background: linear-gradient(140deg, #E9E3FE, #D9CFFC); color: #5235B5; }
+.av.p4 { background: linear-gradient(140deg, #D8F5E6, #C0EDD6); color: #11704A; }
+.row.archived .av { background: linear-gradient(140deg, #EEF1F5, #E2E7EE); color: var(--slate-700); }
+.idt { min-width: 0; }
+.name-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.name { font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; color: var(--ink); letter-spacing: -0.008em; overflow-wrap: anywhere; }
+.meta { margin-top: 2px; font-size: var(--fs-sm); line-height: 20px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; white-space: nowrap; }
+.meta .pid { color: var(--ink-2); font-weight: 500; letter-spacing: .01em; }
+.meta .dot::before { content: '·'; color: var(--subtle); }
+
+/* Status badges: dot + word, one colour per meaning */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 8px; border-radius: 8px; font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 600; white-space: nowrap; flex: none; border: 1px solid transparent; }
+.badge::before { content: ''; width: 6px; height: 6px; border-radius: 99px; background: currentColor; }
+.badge.active { background: var(--mint-50); color: var(--mint-700); border-color: var(--mint-100); }
+.badge.inactive { background: var(--amber-50); color: var(--amber-700); border-color: var(--amber-100); }
+.badge.deceased { background: var(--slate-50); color: var(--slate-700); border-color: var(--slate-100); }
+.badge.archived { background: var(--violet-50); color: var(--violet-700); border-color: var(--violet-100); }
+
+/* Information groups: each fact carries its hue in a small icon tile */
+.fact { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ft { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none; }
+.ft.blue { background: var(--blue-50); color: var(--blue-600); }
+.ft.mint { background: var(--mint-50); color: var(--mint-700); }
+.ft.violet { background: var(--violet-50); color: var(--violet-600); }
+.fv { min-width: 0; }
+.val { display: block; font-size: var(--fs-md); line-height: var(--lh-md); color: var(--ink); font-weight: 500; white-space: nowrap; }
+.val.empty { color: var(--muted); font-weight: 400; }
+.sub { display: block; font-size: var(--fs-xs); line-height: var(--lh-xs); color: var(--violet-700); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.mask { color: var(--subtle); letter-spacing: .06em; font-weight: 400; }
+.flab { display: none; }
+.chev { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; color: var(--subtle); justify-self: end; transition: color .18s, background .18s, transform .18s; }
+a.row:hover .chev, a.row:focus-visible .chev { color: #fff; background: var(--primary); transform: translateX(2px); }
+.facts { display: none; }
+
+/* Pager */
+.pager { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin-top: 14px; }
+.pager span { text-align: center; font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--muted); }
+
+/* States */
+.state { position: relative; overflow: hidden; padding: 36px 24px; text-align: center; border-radius: 14px; border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow-1); }
+.state::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 110px; background: var(--tint); pointer-events: none; }
+.state > * { position: relative; }
+.state.teal { --tint: linear-gradient(180deg, #E8F8F5, rgba(255,255,255,0)); }
+.state.blue { --tint: linear-gradient(180deg, #ECF2FE, rgba(255,255,255,0)); }
+.state.rose { --tint: linear-gradient(180deg, #FEEFF1, rgba(255,255,255,0)); }
+.state .ic { width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 13px; display: grid; place-items: center; color: #fff; }
+.state.teal .ic { background: linear-gradient(140deg, #22C1B0, #2B86E8); }
+.state.blue .ic { background: linear-gradient(140deg, #3B9AF0, #7B61F0); }
+.state.rose .ic { background: linear-gradient(140deg, #F2737D, #E0434F); }
+.state h3 { margin: 0 auto; max-width: 32ch; font-size: var(--fs-xl); line-height: var(--lh-xl); font-weight: 600; text-wrap: balance; }
+.state p { margin: 6px auto 18px; max-width: 46ch; font-size: var(--fs-md); line-height: 21px; color: var(--ink-2); text-wrap: pretty; }
+.state .acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.state .aside { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 99px; background: var(--teal-50); color: var(--teal-700); font-size: var(--fs-sm); font-weight: 500; }
+.skel { background: linear-gradient(90deg, #E9F1F7 0%, #F5F8FD 50%, #E9F1F7 100%); background-size: 200% 100%; animation: sh 1.3s infinite linear; border-radius: 6px; }
+@keyframes sh { to { background-position: -200% 0; } }
+.note { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: var(--blue-50); border: 1px dashed var(--blue-100); font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--ink-2); }
+.note code { font-size: 12px; color: var(--blue-700); }
+
+/* =====================================================================
+   DESIGN-REVIEW PANEL (not part of the design)
+   ===================================================================== */
+.review { position: fixed; right: 16px; bottom: 16px; z-index: 60; font-size: 12.5px; color: #E8EEF6; }
+.review > button { height: 36px; padding: 0 14px; border: 0; border-radius: 99px; background: #0F1C2E; color: #E8EEF6; font-weight: 500; box-shadow: 0 8px 20px -8px rgba(0,0,0,.45); }
+.review .panel { position: absolute; right: 0; bottom: 44px; width: 360px; max-height: calc(100vh - 80px); overflow: auto; padding: 14px; border-radius: 14px; background: #0F1C2E; box-shadow: 0 20px 50px -20px rgba(0,0,0,.5); display: grid; gap: 10px; }
+.review .panel[hidden] { display: none; }
+.review .lbl { display: block; color: #9FB3C8; font-size: 11px; letter-spacing: .04em; margin-bottom: 4px; }
+.review .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.review .opts button { min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16); background: transparent; color: #E8EEF6; font-size: 12px; }
+.review .opts button[aria-pressed="true"] { background: #0E9384; border-color: #0E9384; }
+.review p { margin: 0; color: #9FB3C8; font-size: 11.5px; line-height: 1.45; }
+body.shot .review { display: none; }
+
+/* =====================================================================
+   RESPONSIVE
+   ===================================================================== */
+@media (max-width: 1279px) {
+  .top .who { display: none; }
+  .page { padding: 20px 24px 64px; }
+  .grid { grid-template-columns: minmax(296px, 1fr) 124px 96px 100px 28px; column-gap: 14px; }
+  .row, .cols { padding-left: 16px; padding-right: 16px; }
+  .who { gap: 12px; }
+  .av { width: 40px; height: 40px; border-radius: 12px; }
+  .ft { display: none; }
+}
+/* Tablet and phone: rows recompose into the original cards (status top-right, tinted fact band). */
+@media (max-width: 1023px) {
+  .side { display: none; }
+  .top .menu { display: grid; border: 1px solid var(--line-strong); }
+  .top .bar { height: 64px; padding: 0 24px; }
+  .page { padding: 16px 16px 64px; }
+  .av { width: 44px; height: 44px; border-radius: 14px; }
+  .cols { display: none; }
+  .rows { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .row.grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "who" "facts"; row-gap: 14px; align-items: start; padding: 16px; min-height: 0; }
+  .row .who { grid-area: who; align-items: flex-start; }
+  .row .idt { flex: 1; }
+  .row .name-line { flex-wrap: nowrap; justify-content: space-between; align-items: flex-start; }
+  .row .chev, .row.grid > span:last-child:empty { display: none; }
+  .row .c-phone, .row .c-reg, .row .c-seen { display: none; }
+  .row .facts { grid-area: facts; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 16px; padding: 12px 14px; border-radius: 12px;
+    background: linear-gradient(120deg, #F3FAFD 0%, #F5F3FE 100%); border: 1px solid #E8EEF8; }
+  .row.archived .facts { background: #F7F5FE; }
+  .facts .wide { grid-column: 1 / -1; }
+  .flab { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 500; color: var(--muted); margin-bottom: 2px; }
+  .flab i { width: 6px; height: 6px; border-radius: 2px; }
+  .facts .sub { display: inline; color: var(--violet-700); }
+  .facts .sub::before { content: ' · '; color: var(--subtle); }
+  .pager { grid-template-columns: 1fr 1fr; }
+  .pager span { grid-column: 1 / -1; grid-row: 1; }
+}
+
+/* Phone: compact stacked cards; filters open inline below the toolbar */
+@media (max-width: 767px) {
+  .top .gsearch { display: none; } .brandm { display: block; }
+  .top .bar { padding: 0 16px; }
+  .page { padding: 14px 16px 64px; }
+  /* Mark | title | button on one row; the subtitle runs under title and button. */
+  .head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "mark h1 btn" "mark p p"; column-gap: 10px; row-gap: 2px; align-items: center; }
+  .titles, .tt { display: contents; }
+  .mark { grid-area: mark; align-self: start; width: 36px; height: 36px; border-radius: 11px; margin-top: 2px; }
+  .head h1 { grid-area: h1; }
+  .head p { grid-area: p; }
+  .head .btn { grid-area: btn; }
+  .mark svg { width: 20px; height: 20px; }
+  .head h1 { font-size: 22px; line-height: 28px; }
+  .head p { font-size: var(--fs-sm); line-height: var(--lh-sm); }
+  .head .btn { height: 44px; }
+  .toolbar { flex-wrap: wrap; margin-top: 12px; }
+  .search { flex: 1 1 100%; }
+  .search input { font-size: 16px; }
+  .toolbar:not(.doc) .search { flex: 1 1 0; }
+  .seg { flex: 1; } .seg button { flex: 1; padding: 0 8px; }
+  /* Phone: Filters shrinks to its icon + count so search and scope keep their width. */
+  .fbtn { padding: 0 9px; gap: 6px; }
+  .fbtn .flbl, .fbtn .caret { display: none; }
+  .pop { position: static; flex: 1 1 100%; width: 100%; padding: 14px; box-shadow: var(--shadow-1); }
+  .pop-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .fl { height: 44px; }
+  .pop-foot .pnote { display: none; }
+  .pop-foot .acts { flex: 1; } .pop-foot .acts .btn { flex: 1; height: 44px; }
+  .chip { height: 36px; } .chip button { width: 32px; height: 32px; } .clearall { height: 36px; }
+  .list { margin-top: 14px; }
+  .rows { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .row.grid { padding: 14px; row-gap: 12px; }
+  .row .facts { gap: 10px 12px; padding: 12px; }
+  .pager .btn { height: 44px; }
+}
+@media (max-width: 380px) { .head .btn .lbl-long { display: none; } }
+</style>
+</head>
+<body>
+<!-- DESIGN REVIEW ONLY. Fictional data. Not routed, not imported by the app, no network calls except the web font. -->
+<div class="app">
+  <aside class="side" aria-label="Sidebar (approved shell, static context)">
+    <div class="brand"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav aria-label="Main">
+      <div class="grp">Main</div>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Dashboard</span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Appointments</span>
+      <span class="it on" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/></svg>Patients</span>
+      <span class="it dim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 2h12M6 22h12M7 2c0 6 10 6 10 10S7 16 7 22M17 2c0 6-10 6-10 10s10 4 10 10"/></svg>Queue<span class="soon">Soon</span></span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Billing</span>
+      <div class="grp">Additional</div>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg>Notifications</span>
+      <span class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Support</span>
+    </nav>
+    <div class="clinic"><b style="font-weight:600">Lotus Smile &amp; Spine Care</b><div style="color:var(--muted);font-size:12px;margin-top:2px" id="branchCtx">Bandra</div></div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="bar">
+        <button class="ib menu" aria-label="Open navigation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <b class="brandm">OralCares</b>
+        <div class="gsearch"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search patients and more…</div>
+        <div class="right">
+          <button class="ib" aria-label="Notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/></svg></button>
+          <span class="avatar" id="avatar">RK</span>
+          <span class="who"><b id="whoName">Riya Kapoor</b><small id="whoRole">Reception</small></span>
+        </div>
+      </div>
+    </header>
+    <main class="page" id="page"></main>
+  </div>
+</div>
+
+<div class="review" aria-label="Design review controls">
+  <div class="panel" id="rvPanel" hidden>
+    <div><span class="lbl">Scenario</span><div class="opts" data-k="scenario"></div></div>
+    <div><span class="lbl">Signed in as</span><div class="opts" data-k="role"></div></div>
+    <div><span class="lbl">Clinic</span><div class="opts" data-k="clinic"></div></div>
+    <div><span class="lbl">State</span><div class="opts" data-k="state"></div></div>
+    <div><span class="lbl">Patient record page</span><div class="opts" data-k="record"></div></div>
+    <div><span class="lbl">Contract notes</span><div class="opts" data-k="notes"></div></div>
+    <p id="rvScope"></p>
+    <p>Fictional patients. Each role's reach follows blueprint §7.2. Mobile numbers are masked for every role (D1). "Proposed" marks filters the page cannot apply until the D3 / doctor-filter change ships. Nothing here talks to the app.</p>
+  </div>
+  <button type="button" id="rvToggle" aria-expanded="false" aria-controls="rvPanel">Review controls</button>
+</div>
+
+<script>
+/* ---------------- fictional data (never real patients) */
+const ALL_BRANCHES = ['Bandra', 'Powai', 'Thane'];
+/* Active practitioners (ClinicEmployee::activePractitioners) — the "Assigned doctor" options. */
+const DOCTORS = { d1: 'Dr. Kavya Rao', d2: 'Dr. Sameer Kulkarni', d3: 'Dr. Neha Shetty' };
+/* seenAt = branches with patient_branch_activity rows; doctor = patients.current_practitioner_id. */
+const PATIENTS = [
+  { id: 1, name: 'Aarav Mehta', uhid: 'LSS-2026-00420', age: 34, g: 'M', phone: '+91 98200 14521', reg: '22 Oct 2026', seen: '23 Oct 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: 'd1', status: 'active' },
+  { id: 2, name: 'Meera Iyer', uhid: 'LSS-2026-00419', age: 41, g: 'F', phone: '+91 99870 22310', reg: '21 Oct 2026', seen: '22 Oct 2026', seenAt: ['Powai'], last: 'Powai', doctor: 'd2', status: 'active' },
+  { id: 3, name: 'Kabir Shah', uhid: 'LSS-2026-00418', age: 9, g: 'M', phone: '+91 90040 55102', reg: '20 Oct 2026', seen: '20 Oct 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: 'd1', status: 'active' },
+  { id: 4, name: 'Ananya Rao', uhid: 'LSS-2026-00417', age: 27, g: 'F', phone: '+91 98670 33019', reg: '18 Oct 2026', seen: '21 Oct 2026', seenAt: ['Thane', 'Bandra'], last: 'Thane', doctor: 'd3', status: 'active' },
+  { id: 5, name: 'Rohan Venkatesh Desai', uhid: 'LSS-2026-00415', age: 58, g: 'M', phone: '+91 97690 81234', reg: '16 Oct 2026', seen: '19 Oct 2026', seenAt: ['Powai'], last: 'Powai', doctor: 'd2', status: 'active' },
+  { id: 6, name: 'Sana Qureshi', uhid: 'LSS-2026-00412', age: 33, g: 'F', phone: '+91 98330 47120', reg: '12 Oct 2026', seen: '12 Oct 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: 'd1', status: 'inactive' },
+  { id: 7, name: 'Priya Menon', uhid: 'LSS-2026-00409', age: 38, g: 'F', phone: '+91 99200 61845', reg: '9 Oct 2026', seen: '17 Oct 2026', seenAt: ['Powai', 'Bandra'], last: 'Bandra', doctor: 'd3', status: 'active' },
+  { id: 8, name: 'Vikram Nair', uhid: null, age: 46, g: 'M', phone: null, reg: '6 Oct 2026', seen: '6 Oct 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: null, status: 'active' },
+  { id: 9, name: 'Ishita Banerjee', uhid: 'LSS-2026-00398', age: 22, g: 'F', phone: '+91 98190 30214', reg: '28 Sep 2026', seen: '15 Oct 2026', seenAt: ['Thane'], last: 'Thane', doctor: 'd3', status: 'active' },
+  { id: 10, name: 'Fatima Sheikh', uhid: 'LSS-2026-00394', age: 29, g: 'F', phone: '+91 98111 70456', reg: '25 Sep 2026', seen: '14 Oct 2026', seenAt: ['Bandra', 'Powai'], last: 'Powai', doctor: 'd1', status: 'active' },
+  { id: 11, name: 'Joseph D’Souza', uhid: 'LSS-2026-00391', age: 71, g: 'M', phone: '+91 98920 66381', reg: '24 Sep 2026', seen: '30 Sep 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: 'd1', status: 'deceased' },
+  { id: 12, name: 'Arjun Kulkarni', uhid: 'LSS-2026-00385', age: 52, g: 'M', phone: '+91 97300 18842', reg: '19 Sep 2026', seen: '2 Oct 2026', seenAt: ['Thane'], last: 'Thane', doctor: 'd2', status: 'active' },
+];
+const ARCHIVED = [
+  { id: 21, name: 'Farhan Ali', uhid: 'LSS-2025-00212', age: 52, g: 'M', phone: '+91 98111 40021', reg: '11 Mar 2025', seen: '2 Jun 2026', seenAt: ['Powai'], last: 'Powai', doctor: 'd2', status: 'archived' },
+  { id: 22, name: 'Neha Kulkarni', uhid: 'LSS-2025-00180', age: 30, g: 'F', phone: '+91 99300 71456', reg: '20 Feb 2025', seen: '14 Jan 2026', seenAt: ['Bandra'], last: 'Bandra', doctor: 'd1', status: 'archived' },
+];
+
+/* Role templates (ClinicPermission::defaultRolePermissions) + example branch reach (PatientBranchAccess).
+   reach: null = unlimited (primary owner / has_all_branches_access). doctorFilter is a product choice (blueprint §7.3). */
+const ROLES = {
+  /* A doctor-owner shown in Owner Mode: clinic-wide directory, no My/All switch (blueprint D11). */
+  owner: { label: 'Owner (Owner Mode)', name: 'Dr. Arjun Malhotra', ini: 'AM', sub: 'Clinic owner · Owner Mode', reach: null, create: true, practitioner: false, doctorFilter: true, desk: false },
+  admin: { label: 'Admin', name: 'Leena Fernandes', ini: 'LF', sub: 'Admin · all branches', reach: null, create: true, practitioner: false, doctorFilter: true, desk: false },
+  reception: { label: 'Reception', name: 'Riya Kapoor', ini: 'RK', sub: 'Reception · Bandra, Powai', reach: ['Bandra', 'Powai'], create: true, practitioner: false, doctorFilter: true, desk: true },
+  doctor: { label: 'Doctor', name: 'Dr. Kavya Rao', ini: 'KR', sub: 'Practitioner · Bandra', reach: ['Bandra'], create: false, practitioner: true, doctorFilter: false, desk: false, me: 'd1' },
+  billing: { label: 'Billing', name: 'Neel Joshi', ini: 'NJ', sub: 'Billing · Bandra, Thane', reach: ['Bandra', 'Thane'], create: false, practitioner: false, doctorFilter: false, desk: false },
+  staff: { label: 'Staff', name: 'Asha Pillai', ini: 'AP', sub: 'Staff · Bandra', reach: ['Bandra'], create: false, practitioner: false, doctorFilter: false, desk: false },
+};
+const STATUS = { working: 'Working', active: 'Active', inactive: 'Inactive', deceased: 'Deceased', archived: 'Archived' };
+const REGISTERED = { '': 'Any time', '7': 'Last 7 days', '30': 'Last 30 days', '90': 'Last 90 days' };
+const TODAY = new Date('24 Oct 2026').getTime();
+
+const BLANK = { q: '', status: 'working', registered: '', doctor: '', branch: '' };
+const S = { role: 'owner', clinic: 'multi', state: 'populated', record: 'built', notes: 'off', scenario: 'owner-all', tab: 'all', open: false, ...BLANK };
+
+const SCENARIOS = {
+  'owner-all': ['Owner · all branches', { role: 'owner', clinic: 'multi' }],
+  'owner-branch': ['Owner · Powai only', { role: 'owner', clinic: 'multi', branch: 'Powai' }],
+  'owner-doctor-branch': ['Owner · doctor + branch', { role: 'owner', clinic: 'multi', doctor: 'd1', branch: 'Bandra', registered: '30' }],
+  'doctor-mine': ['Doctor · My patients', { role: 'doctor', clinic: 'multi', tab: 'mine' }],
+  'doctor-all': ['Doctor · All accessible', { role: 'doctor', clinic: 'multi', tab: 'all' }],
+  'reception': ['Reception', { role: 'reception', clinic: 'multi' }],
+  'billing': ['Billing', { role: 'billing', clinic: 'multi' }],
+  'search-filters': ['Search + filters', { role: 'owner', clinic: 'multi', q: 'Ra', status: 'active', doctor: 'd3' }],
+  'single': ['Single-branch clinic', { role: 'owner', clinic: 'single' }],
+};
+const OPTS = {
+  scenario: Object.entries(SCENARIOS).map(([k, v]) => [k, v[0]]),
+  role: Object.entries(ROLES).map(([k, v]) => [k, v.label]),
+  clinic: [['multi', '3 branches'], ['single', '1 branch']],
+  state: [['populated', 'Populated'], ['loading', 'Loading'], ['searching', 'Searching'], ['empty', 'First-time empty'], ['error', 'Error']],
+  record: [['built', 'Built (rows open)'], ['missing', 'Not built yet']],
+  notes: [['off', 'Hidden'], ['on', 'Show “Proposed”']],
+};
+
+/* ---------------- access model (what the server would enforce) */
+const role = () => ROLES[S.role];
+const reach = () => { const all = S.clinic === 'single' ? ['Bandra'] : ALL_BRANCHES; const r = role().reach; return r ? r.filter((b) => all.includes(b)) : all; };
+const branchFilterShown = () => reach().length > 1; // accessible_branch_count > 1
+const doctorFilterShown = () => role().doctorFilter && !role().practitioner;
+
+/* ---------------- helpers */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const initials = (n) => { const w = n.replace(/[’']/g, '').split(' ').filter(Boolean); return (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); };
+/* Avatar colour follows the name, so a patient keeps the same colour on every page. */
+const avatarTone = (n) => { const i = initials(n); return 'p' + ((i.charCodeAt(0) + (i.charCodeAt(1) || 0) + n.length) % 5); };
+const svg = (w, d, sw = 1.8) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  search: (w = 18) => svg(w, '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', 2.2),
+  x: svg(14, '<path d="M6 6l12 12M18 6L6 18"/>', 2),
+  plus: svg(16, '<path d="M12 5v14M5 12h14"/>', 2.2),
+  caret: svg(14, '<path d="M6 9l6 6 6-6"/>', 2),
+  chev: svg(14, '<path d="M9 6l6 6-6 6"/>', 2.2),
+  user: svg(22, '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/>'),
+  users: svg(22, '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.7.8 2.8 2.6 3 5.2"/>'),
+  alert: svg(22, '<path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
+  status: svg(13, '<path d="M20 6L9 17l-5-5"/>', 2.4),
+  cal: svg(13, '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>', 2.2),
+  pin: svg(13, '<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>', 2.2),
+  steth: svg(13, '<path d="M6 3v6a5 5 0 0 0 10 0V3"/><path d="M11 14v1.5a4.5 4.5 0 0 0 9 0V13"/><circle cx="20" cy="11" r="2"/>', 2.2),
+  sliders: svg(15, '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>', 2),
+  phone: svg(14, '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2"/>'),
+  calPlus: svg(14, '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/>'),
+  pulse: svg(14, '<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
+};
+
+/* Masking shows the country code and the last four digits. Display only — the real fix is server-side (blueprint D1). */
+function phoneVal(p) {
+  if (!p) return '<span class="val empty">No mobile</span>';
+  const parts = p.trim().split(/\s+/); const cc = parts[0].startsWith('+') ? parts.shift() : '';
+  const last = parts.join('').slice(-4);
+  return `<span class="val num"><span aria-hidden="true">${esc(cc)} <span class="mask">••••••</span> ${esc(last)}</span><span class="sr">Mobile ending ${esc(last.split('').join(' '))}</span></span>`;
+}
+const badge = (s) => `<span class="badge ${s}">${STATUS[s]}</span>`;
+const sexLabel = (g) => ({ M: 'Male', F: 'Female' })[g] || g;
+
+/* The list the server would return: tenant → branch reach → scope → filters → search. Newest registration first. */
+function visible() {
+  const r = reach();
+  let list = (S.status === 'archived' ? ARCHIVED : PATIENTS)
+    .map((p) => (S.clinic === 'single' ? { ...p, seenAt: ['Bandra'], last: 'Bandra' } : p))
+    .filter((p) => p.seenAt.some((b) => r.includes(b)))
+    // last_branch is the most recent branch *among the member's own branches*
+    .map((p) => ({ ...p, lastShown: r.includes(p.last) ? p.last : p.seenAt.find((b) => r.includes(b)) }));
+  if (role().practitioner && S.tab === 'mine') list = list.filter((p) => p.doctor === role().me);
+  if (['active', 'inactive', 'deceased'].includes(S.status)) list = list.filter((p) => p.status === S.status);
+  if (S.registered) { const from = TODAY - Number(S.registered) * 864e5; list = list.filter((p) => new Date(p.reg).getTime() >= from); }
+  if (S.doctor && doctorFilterShown()) list = list.filter((p) => p.doctor === S.doctor);
+  if (S.branch && branchFilterShown()) list = list.filter((p) => p.seenAt.includes(S.branch));
+  const q = S.q.trim().toLowerCase();
+  if (!q) return list;
+  if (/^[\d\s+()-]+$/.test(q)) { const d = q.replace(/\D/g, ''); return list.filter((p) => (p.phone || '').replace(/\D/g, '').replace(/^91/, '').startsWith(d) || (p.uhid || '').startsWith(q)); }
+  const w = q.split(/\s+/); const parts = (p) => p.name.toLowerCase().split(' ');
+  return list.filter((p) => (p.uhid || '').toLowerCase().startsWith(q) || (parts(p).some((n) => n.startsWith(w[0])) && w.slice(1).every((x) => parts(p).some((n) => n.startsWith(x)))));
+}
+
+/* Applied filters, in one place — chips, count and copy all read this. Scope (My/All) is not a filter. */
+function applied() {
+  const a = [];
+  if (S.status !== 'working') a.push({ k: 'status', hue: 'teal', key: 'Status', val: STATUS[S.status] });
+  if (S.registered) a.push({ k: 'registered', hue: 'blue', key: 'Registered', val: REGISTERED[S.registered] });
+  if (S.doctor && doctorFilterShown()) a.push({ k: 'doctor', hue: 'mint', key: 'Assigned', val: DOCTORS[S.doctor] });
+  if (S.branch && branchFilterShown()) a.push({ k: 'branch', hue: 'violet', key: 'Branch', val: S.branch });
+  return a;
+}
+
+/* ---------------- pieces */
+function row(p) {
+  const open = S.record === 'built';
+  const tag = open ? 'a' : 'div';
+  const branch = reach().length > 1 && p.lastShown ? `<span class="sub">${esc(p.lastShown)}</span>` : '';
+  const meta = [p.uhid ? `<span class="pid num">${esc(p.uhid)}</span>` : '<span>No patient ID</span>', p.age != null ? `<span class="dot"></span><span class="num">${p.age} yrs</span>` : '', p.g ? `<span class="dot"></span><span>${sexLabel(p.g)}</span>` : ''].join('');
+  return `<${tag} class="row grid ${p.status}" ${open ? `href="#patient-${p.id}" aria-label="${esc(p.name)}${p.uhid ? ', ' + esc(p.uhid) : ''}, ${STATUS[p.status]}" onclick="return false"` : ''}>
+    <div class="who">
+      <span class="av ${avatarTone(p.name)}" aria-hidden="true">${esc(initials(p.name))}</span>
+      <div class="idt">
+        <div class="name-line"><span class="name">${esc(p.name)}</span>${badge(p.status)}</div>
+        <div class="meta">${meta}</div>
+      </div>
+    </div>
+    <div class="c-phone"><div class="fact"><span class="ft blue">${I.phone}</span><div class="fv">${phoneVal(p.phone)}</div></div></div>
+    <div class="c-reg"><div class="fact"><span class="ft mint">${I.calPlus}</span><div class="fv"><span class="val num">${p.reg}</span></div></div></div>
+    <div class="c-seen"><div class="fact"><span class="ft violet">${I.pulse}</span><div class="fv"><span class="val num">${p.seen}</span>${branch}</div></div></div>
+    <div class="facts">
+      <div><span class="flab"><i style="background:var(--blue-600)"></i>Mobile</span>${phoneVal(p.phone)}</div>
+      <div><span class="flab"><i style="background:var(--mint-700)"></i>Registered</span><span class="val num">${p.reg}</span></div>
+      <div class="wide"><span class="flab"><i style="background:var(--violet-600)"></i>Last activity</span><span class="val num">${p.seen}${branch}</span></div>
+    </div>
+    ${open ? `<span class="chev">${I.chev}</span>` : '<span></span>'}
+  </${tag}>`;
+}
+
+function skeleton() {
+  const line = (w, h = 10) => `<div class="skel" style="height:${h}px;width:${w}"></div>`;
+  return Array.from({ length: 8 }, () => `<div class="row grid" aria-hidden="true">
+    <div class="who"><span class="skel" style="width:44px;height:44px;border-radius:14px;flex:none"></span><div style="flex:1;display:grid;gap:8px">${line('52%', 12)}${line('36%')}</div></div>
+    <div class="c-phone">${line('80%')}</div><div class="c-reg">${line('70%')}</div><div class="c-seen">${line('64%')}</div>
+    <div class="facts"><div>${line('70%')}</div><div>${line('60%')}</div><div class="wide">${line('45%')}</div></div><span></span></div>`).join('');
+}
+
+function field({ id, key, hue, icon, label, value, options, active, proposed }) {
+  return `<div class="field">
+    <label for="${id}">${label}</label>${proposed ? '<span class="proposed">Proposed</span>' : ''}
+    <div class="fl ${hue} ${active ? 'on' : ''}"><span class="ico">${icon}</span><span class="v">${esc(value)}</span><span class="caret">${I.caret}</span>
+      <select id="${id}" data-f="${key}">${options}</select></div>
+  </div>`;
+}
+const opt = (pairs, cur) => pairs.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
+
+/* ---------------- page */
+function render() {
+  const r = role();
+  if (!r.practitioner) S.tab = 'all';
+  if (!branchFilterShown()) S.branch = '';
+  if (!doctorFilterShown()) S.doctor = '';
+  $('#avatar').textContent = r.ini; $('#whoName').textContent = r.name; $('#whoRole').textContent = r.sub;
+  $('#branchCtx').textContent = S.clinic === 'single' ? 'Bandra · single branch' : 'Bandra · 3 branches';
+
+  const mine = r.practitioner && S.tab === 'mine';
+  const a = applied();
+  const newBtn = () => (r.create ? `<button class="btn primary" type="button" title="${r.desk ? 'Opens the existing New Case popup' : 'Opens the existing registration page'}">${I.plus}<span>New<span class="lbl-long"> Patient</span></span></button>` : '');
+
+  /* The filters this role may use, in a fixed order. */
+  const fields = [
+    field({ id: 'fStatus', key: 'status', hue: 'h-teal', icon: I.status, label: 'Status', value: STATUS[S.status], options: opt(Object.entries(STATUS), S.status), active: S.status !== 'working' }),
+    field({ id: 'fReg', key: 'registered', hue: 'h-blue', icon: I.cal, label: 'Registered', value: REGISTERED[S.registered], options: opt(Object.entries(REGISTERED), S.registered), active: !!S.registered, proposed: true }),
+  ];
+  if (doctorFilterShown()) fields.push(field({ id: 'fDoc', key: 'doctor', hue: 'h-mint', icon: I.steth, label: 'Assigned doctor', value: S.doctor ? DOCTORS[S.doctor] : 'Any doctor', options: opt([['', 'Any doctor'], ...Object.entries(DOCTORS)], S.doctor), active: !!S.doctor, proposed: true }));
+  if (branchFilterShown()) { const all = r.reach ? 'All my branches' : 'All branches'; fields.push(field({ id: 'fBranch', key: 'branch', hue: 'h-violet', icon: I.pin, label: 'Branch', value: S.branch || all, options: opt([['', all], ...reach().map((b) => [b, b])], S.branch), active: !!S.branch })); }
+
+  const scopeSeg = r.practitioner ? `<div class="seg" role="group" aria-label="Whose patients"><button type="button" aria-pressed="${S.tab === 'mine'}" data-tab="mine">My Patients</button><button type="button" aria-pressed="${S.tab === 'all'}" data-tab="all">All Accessible</button></div>` : '';
+
+  const list = visible();
+  const searching = S.state === 'searching';
+  const colHead = `<div class="grid cols" aria-hidden="true"><div>Patient</div><div><i style="background:var(--blue-600)"></i>Mobile</div><div><i style="background:var(--mint-600)"></i>Registered</div><div><i style="background:var(--violet-600)"></i>Last activity</div><div></div></div>`;
+  let body;
+  if (S.state === 'loading') {
+    body = `${colHead}<div class="rows" aria-busy="true">${skeleton()}</div><p class="sr" role="status">Loading patients…</p>`;
+  } else if (S.state === 'empty') {
+    body = `<div class="state teal"><div class="ic">${I.user}</div><h3>No patients yet</h3><p>Patients appear here as soon as they are registered at the front desk or through New Case.</p><div class="acts">${r.create ? newBtn() : '<span class="aside">Reception registers new patients</span>'}</div></div>`;
+  } else if (S.state === 'error') {
+    body = `<div class="state rose" role="alert"><div class="ic">${I.alert}</div><h3>Patients didn’t load</h3><p>Nothing was changed. Check your connection and try again.</p><div class="acts"><button class="btn soft" type="button">Try again</button></div></div>`;
+  } else if (!searching && list.length === 0) {
+    if (S.q) {
+      body = `<div class="state blue"><div class="ic">${I.search(22)}</div><h3>No patient matches “${esc(S.q)}”</h3><p>Search starts from the beginning of a first or last name, a mobile number or a patient ID${a.length ? '. Your filters also apply' : ''}.</p><div class="acts"><button class="btn" type="button" data-act="clear">Clear search${a.length ? ' and filters' : ''}</button>${r.create ? newBtn() : ''}</div></div>`;
+    } else if (a.length) {
+      body = `<div class="state blue"><div class="ic">${I.search(22)}</div><h3>No patients match these filters</h3><p>No patient ${mine ? 'assigned to you ' : ''}matches all of: ${a.map((x) => esc(`${x.key}: ${x.val}`)).join(' · ')}. Remove a filter to widen the list.</p><div class="acts"><button class="btn soft" type="button" data-act="clearf">Clear filters</button></div></div>`;
+    } else if (mine) {
+      body = `<div class="state teal"><div class="ic">${I.user}</div><h3>No patients assigned to you</h3><p>Patients appear here when you are made their assigned doctor. Switch to All Accessible to see everyone at your branches.</p><div class="acts"><button class="btn soft" type="button" data-tab="all">Show All Accessible</button></div></div>`;
+    } else {
+      body = `<div class="state teal"><div class="ic">${I.user}</div><h3>No patients yet</h3><p>Patients appear here as soon as they are registered.</p></div>`;
+    }
+  } else {
+    const open = S.record === 'built';
+    const more = !S.q && !a.length && list.length >= 8; // stands in for next_cursor
+    body = `${colHead}
+      <div class="rows" ${searching ? 'style="opacity:.5;transition:opacity .2s"' : ''}>${list.map(row).join('')}</div>
+      <div class="pager"><button class="btn" type="button" disabled>← Newer</button><span>Newest registrations first · 25 per page</span><button class="btn soft" type="button" ${more ? '' : 'disabled'}>Older →</button></div>
+      ${open ? '' : '<div class="note">Rows don’t open yet: the patient record page isn’t built (<code>clinic.patients.show</code> is not available). They become links the day it ships.</div>'}`;
+  }
+
+  const showCaption = !['empty', 'error'].includes(S.state);
+  const heading = S.status === 'archived' ? 'Archived patients' : S.q ? `Results for “${esc(S.q)}”` : a.length ? 'Filtered patients' : 'Newest registrations';
+  const chipsHtml = a.map((x) => `<span class="chip ${x.hue}"><span class="k">${x.key}:</span>${esc(x.val)}<button type="button" data-rm="${x.k}" aria-label="Remove ${x.key.toLowerCase()} filter: ${esc(x.val)}">${I.x}</button></span>`).join('');
+
+  $('#page').innerHTML = `
+    <header class="head">
+      <div class="titles"><span class="mark" aria-hidden="true">${I.users}</span><div class="tt"><h1>${r.practitioner ? 'My Patients' : 'Patients'}</h1><p>${headDesc()}</p></div></div>
+      ${newBtn()}
+    </header>
+    <div class="toolbar ${scopeSeg ? 'doc' : ''}">
+      <div class="search"><span class="lead">${I.search()}</span><label class="sr" for="q">Search patients by name, patient ID or mobile number</label>
+        <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="${innerWidth < 768 ? 'Name, ID or mobile' : 'Name, patient ID or mobile'}" value="${esc(S.q)}" />
+        ${searching ? '<span class="spin" role="status" aria-label="Searching"></span>' : S.q ? `<button class="clear" type="button" data-act="q" aria-label="Clear search">${I.x}</button>` : ''}
+      </div>
+      ${scopeSeg}
+      <button type="button" class="fbtn ${a.length ? 'has' : ''}" aria-expanded="${S.open}" aria-controls="fPop" aria-label="Filters${a.length ? `, ${a.length} applied` : ''}"><span class="fi">${I.sliders}</span><span class="flbl">Filters</span>${a.length ? `<span class="count">${a.length}<span class="sr"> applied</span></span>` : ''}<span class="caret">${I.caret}</span></button>
+      <div class="pop" id="fPop" role="group" aria-label="Filters" ${S.open ? '' : 'hidden'}>
+        <div class="pop-head"><b>Filters</b><span>Applied as you choose</span></div>
+        <div class="pop-grid">${fields.join('')}</div>
+        <div class="pop-foot"><span class="pnote">${branchFilterShown() ? 'Branch narrows your list; it never widens access.' : 'Only patients you are allowed to see are listed.'}</span><div class="acts"><button type="button" class="btn" data-act="clearf" ${a.length ? '' : 'disabled'}>Clear</button><button type="button" class="btn soft" data-act="done">Done</button></div></div>
+      </div>
+    </div>
+    ${a.length && !S.open ? `<div class="chips" aria-label="Applied filters">${chipsHtml}<button type="button" class="clearall" data-act="clearf">Clear all</button></div>` : ''}
+    <section class="list" aria-label="Patients">
+      ${showCaption ? `<div class="caption"><h2 aria-live="polite">${heading}</h2>${scopeChip()}</div>` : ''}
+      ${body}
+    </section>`;
+  wire();
+  renderReview();
+}
+
+/* The list's scope in one chip: the authorised population, narrowed only by the Branch filter. */
+function scopeChip() {
+  const r = role(); const b = reach();
+  if (r.practitioner && S.tab === 'mine') return `<span class="scope teal">${I.steth}Assigned to you</span>`;
+  if (S.branch) return `<span class="scope">${I.pin}${esc(S.branch)} only</span>`;
+  if (!r.reach) return S.clinic === 'single' ? '' : `<span class="scope">${I.pin}All ${b.length} branches</span>`;
+  return `<span class="scope">${I.pin}Seen at ${esc(b.join(', '))}</span>`;
+}
+function headDesc() {
+  const r = role();
+  if (r.practitioner) return S.tab === 'mine' ? 'Patients assigned to you as their doctor.' : 'Everyone seen at your branches.';
+  if (!r.reach) return 'Everyone registered at this clinic.';
+  return 'Everyone seen at your branches.';
+}
+
+function closePop(focusBtn = true) { S.open = false; render(); if (focusBtn) $('.fbtn').focus(); }
+function wire() {
+  const q = $('#q');
+  q.oninput = (e) => { const pos = e.target.selectionStart; S.q = e.target.value; S.state = 'populated'; render(); const n = $('#q'); n.focus(); n.setSelectionRange(pos, pos); };
+  document.querySelectorAll('select[data-f]').forEach((sel) => (sel.onchange = (e) => {
+    S[e.target.dataset.f] = e.target.value; // one filter changes; the others stay as they are
+    render(); document.getElementById(e.target.id)?.focus();
+  }));
+  document.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); document.querySelector(`[data-tab="${S.tab}"]`)?.focus(); }));
+  document.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { const k = b.dataset.rm; S[k] = BLANK[k]; render(); (document.querySelector('[data-rm]') || $('.fbtn')).focus(); }));
+  $('.fbtn').onclick = () => { S.open = !S.open; render(); if (S.open) $('#fPop select')?.focus(); else $('.fbtn').focus(); };
+  document.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
+    const act = b.dataset.act;
+    if (act === 'done') return closePop();
+    if (act === 'q' || act === 'clear') S.q = '';
+    // Clearing filters never touches scope (My/All) or branch reach.
+    if (act === 'clear' || act === 'clearf') Object.assign(S, { status: 'working', registered: '', doctor: '', branch: '' });
+    const inPop = !!b.closest('.pop');
+    render(); (inPop ? $('#fPop select') : $('#q')).focus();
+  }));
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (S.open) { closePop(); return; }
+  if (!$('#rvPanel').hidden) $('#rvToggle').click();
+});
+document.addEventListener('mousedown', (e) => {
+  // A click outside the popover (desktop) closes it; the phone panel is inline and closes with Done.
+  if (S.open && innerWidth >= 768 && !e.target.closest('.pop') && !e.target.closest('.fbtn') && !e.target.closest('.review')) closePop(false);
+});
+
+function renderReview() {
+  document.querySelectorAll('.review .opts').forEach((box) => {
+    const k = box.dataset.k;
+    box.innerHTML = OPTS[k].map(([v, l]) => `<button type="button" aria-pressed="${S[k] === v}" data-v="${v}">${l}</button>`).join('');
+    box.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+      if (k === 'scenario') { applyScenario(b.dataset.v); } else { S[k] = b.dataset.v; S.scenario = ''; }
+      if (k === 'role') { S.tab = ROLES[S.role].practitioner ? 'mine' : 'all'; Object.assign(S, BLANK); }
+      if (k === 'notes') document.body.classList.toggle('notes', S.notes === 'on');
+      render();
+    }));
+  });
+  const r = role();
+  $('#rvScope').textContent = `${r.label}: reach ${r.reach ? reach().join(', ') : 'all branches'}${r.practitioner ? ', scope ' + (S.tab === 'mine' ? 'My patients' : 'All accessible') : ''}. Filters: Status, Registered${doctorFilterShown() ? ', Assigned doctor' : ''}${branchFilterShown() ? ', Branch' : ''}. ${r.create ? 'Can register.' : 'Cannot register.'}`;
+}
+function applyScenario(key) {
+  const [, s] = SCENARIOS[key];
+  Object.assign(S, BLANK, { state: 'populated', open: false, tab: ROLES[s.role].practitioner ? 'mine' : 'all' }, s, { scenario: key });
+}
+$('#rvToggle').onclick = (e) => { const p = $('#rvPanel'); p.hidden = !p.hidden; e.currentTarget.setAttribute('aria-expanded', String(!p.hidden)); e.currentTarget.textContent = p.hidden ? 'Review controls' : 'Close review controls'; };
+
+/* Deep links for screenshots: #scenario=owner-branch&state=loading&open=1&notes=1&shot=1 (any S key works too). */
+(function () {
+  const h = new URLSearchParams(location.hash.slice(1));
+  applyScenario(h.get('scenario') || 'owner-all');
+  ['role', 'clinic', 'state', 'record', 'q', 'status', 'registered', 'doctor', 'branch', 'tab'].forEach((k) => { if (h.has(k)) S[k] = h.get(k); });
+  if (h.get('open')) S.open = true;
+  if (h.get('notes')) { S.notes = 'on'; document.body.classList.add('notes'); }
+  if (h.get('shot')) document.body.classList.add('shot');
+})();
+render();
+</script>
+</body>
+</html>

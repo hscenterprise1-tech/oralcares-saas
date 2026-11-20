@@ -47,10 +47,13 @@ function seenAndSigned(object $test): ClinicalEncounter
 
 test('a signed consultation reaches the billing desk, priced from the clinic\'s own lists', function () {
     $encounter = seenAndSigned($this);
+    [$billingUser, $billingSession] = $this->f->memberWithRole(ClinicRole::BillingStaff);
 
-    ($this->asDesk)()->get('/clinic/billing')
+    // The ledger is billing staff's, and the desk's too since 2026-11-05; the desk bills the consultation from its checkout.
+    $this->actingAs($billingUser)->withSession($billingSession)->get('/clinic/billing')
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Billing/Index', false)->where('ready.0.id', $encounter->id));
+        ->assertInertia(fn (Assert $page) => $page->component('ClinicPortal/Billing/Index', false)->where('ready.0.id', $encounter->id)->where('ready.0.url', route('clinic.billing.checkout', $encounter)));
+    ($this->asDesk)()->get('/clinic/billing')->assertOk();
 
     ($this->asDesk)()->get("/clinic/billing/checkout/{$encounter->id}")
         ->assertInertia(fn (Assert $page) => $page
@@ -81,7 +84,7 @@ test('checkout raises one bill, never bills a service twice, and takes the payme
     expect($bill->fresh()->status)->toBe(BillingStatus::Paid)
         ->and((float) $bill->fresh()->outstanding_balance)->toBe(0.0);
 
-    ($this->asDesk)()->get('/clinic/billing')->assertInertia(fn (Assert $page) => $page->has('ready', 0)->has('unpaid', 0));
+    ($this->asDesk)()->get("/clinic/billing/checkout/{$encounter->id}")->assertInertia(fn (Assert $page) => $page->has('lines', 0)->where('bills.0.outstanding', 0));
 });
 
 test('an unsigned consultation is not billed, and a discount needs its own permission', function () {
@@ -93,12 +96,15 @@ test('an unsigned consultation is not billed, and a discount needs its own permi
         ->assertSessionHasErrors(['checkout' => 'Bill a consultation once the doctor has signed it.']);
 
     $encounter = seenAndSigned($this);
+    // A desk without discount.apply (the default desk has it since 2026-11-05).
+    withoutDeskLedger();
     ($this->asDesk)()->post("/clinic/billing/checkout/{$encounter->id}", ['prices' => ['consultation' => 500], 'discount' => 100])->assertForbidden();
 });
 
 test('a doctor without billing rights cannot bill or take payment', function () {
     $encounter = seenAndSigned($this);
 
+    withoutDoctorBillingRights();
     ($this->asDoctor)()->post("/clinic/billing/checkout/{$encounter->id}", ['prices' => ['consultation' => 500]])->assertForbidden();
 });
 

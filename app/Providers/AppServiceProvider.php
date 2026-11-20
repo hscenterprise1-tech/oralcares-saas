@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Contracts\MalwareScannerInterface;
 use App\Contracts\TenantConnectionResolver;
 use App\Contracts\VirusScannerInterface;
+use App\Events\PaymentRecorded;
 use App\Events\QueueItemTransitioned;
 use App\Jobs\SendCampaignMessageJob;
 use App\Models\Appointment;
@@ -26,6 +27,7 @@ use App\Models\MarketingWhatsAppConversation;
 use App\Models\Organization;
 use App\Models\PatientBilling;
 use App\Models\PatientBillingPayment;
+use App\Models\PatientProcedure;
 use App\Models\PatientTreatmentStage;
 use App\Models\Payment;
 use App\Models\PhysioSession;
@@ -41,6 +43,7 @@ use App\Observers\Marketing\MarketingWhatsAppConversationObserver;
 use App\Observers\Messaging\PatientMessageObserver;
 use App\Observers\OrganizationObserver;
 use App\Observers\PatientActivityObserver;
+use App\Observers\PatientCareObserver;
 use App\Observers\PaymentObserver;
 use App\Observers\Security\ClinicalAuditObserver;
 use App\Observers\Security\StaffIdentityAuditObserver;
@@ -54,6 +57,7 @@ use App\Services\Backup\DatabaseDumper;
 use App\Services\Backup\DatabaseRestorer;
 use App\Services\Backup\MysqlDumper;
 use App\Services\Backup\MysqlRestorer;
+use App\Services\Billing\BillInstalments;
 use App\Services\ClinicContext;
 use App\Services\Communication\PatientMessaging;
 use App\Services\Marketing\MarketingSettingsService;
@@ -321,6 +325,11 @@ class AppServiceProvider extends ServiceProvider
         foreach ([Appointment::class, ClinicalEncounter::class, PatientTreatmentStage::class, PhysioSession::class, PatientBilling::class, PatientBillingPayment::class] as $messagedModel) {
             $messagedModel::observe(PatientMessageObserver::class);
         }
+        // Patient-care automation: first doctor assigned, care advice after a procedure.
+        ClinicalEncounter::observe(PatientCareObserver::class);
+        PatientProcedure::observe(PatientCareObserver::class);
+        // A payment fills the bill's payment plan, earliest instalment first, inside the payment's own transaction.
+        Event::listen(PaymentRecorded::class, fn (PaymentRecorded $event) => app(BillInstalments::class)->allocate($event->payment));
         Event::listen(QueueItemTransitioned::class, function (QueueItemTransitioned $event) {
             match ($event->action) {
                 'checked_in' => DB::afterCommit(fn () => app(PatientMessaging::class)->checkedIn($event->queueItem)),

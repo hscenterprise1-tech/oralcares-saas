@@ -15,6 +15,8 @@ use App\Models\PatientVisit;
 use App\QueueItemStatus;
 use App\Services\Patient\CaseNumberGenerator;
 use App\Services\Patient\PatientCareGuard;
+use App\Services\Patient\PatientCaseService;
+use App\Services\Physio\PhysioConsultation;
 use App\Services\QueueStateMachine;
 use App\Support\ClinicClock;
 use App\VisitPriority;
@@ -48,10 +50,12 @@ class ReceptionCheckIn
         VisitPriority $priority = VisitPriority::Normal,
         ?ClinicEmployee $performer = null,
         ?VisitContext $context = null,
+        ?int $caseId = null,
+        bool $isNewCase = false,
     ): ClinicQueueItem {
         app(PatientCareGuard::class)->assertCanReceiveCare($patient);
 
-        return DB::transaction(function () use ($clinic, $branch, $patient, $appointment, $doctor, $priority, $performer, $context) {
+        return DB::transaction(function () use ($clinic, $branch, $patient, $appointment, $doctor, $priority, $performer, $context, $caseId, $isNewCase) {
             Branch::withoutGlobalScopes()->whereKey($branch->id)->lockForUpdate()->first();
             // The patient too (after the branch, always in that order): two desks at different
             // branches cannot both open a visit, or both classify one, at once.
@@ -79,6 +83,21 @@ class ReceptionCheckIn
             $visit = $this->todaysVisit($clinic, $branch, $patient, $doctor, $now->toDateString(), $context ?? new VisitContext);
             $caseNumber = $this->caseNumbers->forVisit($clinic, $visit);
 
+            // Phase C: Resolve and link the active PatientCase
+            $patientCase = app(PatientCaseService::class)->resolveCaseForVisit(
+                clinic: $clinic,
+                branch: $branch,
+                patient: $patient,
+                visit: $visit,
+                doctor: $doctor,
+                context: $context,
+                caseId: $caseId,
+                isNewCase: $isNewCase,
+            );
+            if ($patientCase !== null) {
+                $visit->update(['case_id' => $patientCase->id]);
+            }
+
             $item = ClinicQueueItem::create([
                 'clinic_queue_id' => $queue->id,
                 'patient_visit_id' => $visit->id,
@@ -97,7 +116,9 @@ class ReceptionCheckIn
                 'actor_id' => auth()->id(),
                 'event_type' => $appointment ? 'appointment_checked_in' : 'walk_in_registered',
                 'context' => [
-                    'case_number' => $caseNumber->case_number,
+                    'case_id' => $patientCase?->id,
+                    'case_number' => $patientCase?->case_number,
+                    'legacy_case_number' => $caseNumber->case_number,
                     'doctor' => $doctor?->name,
                     'priority' => $priority->value,
                     'visit_type' => $context?->visitTypeKey,
@@ -107,7 +128,12 @@ class ReceptionCheckIn
 
             $this->machine->admitted($item, $performer, $priority === VisitPriority::Emergency ? 'Checked in as an emergency' : null);
 
-            return $item->load(['patientVisit.caseNumber', 'doctor']);
+            // A physiotherapy problem chosen at the desk reaches the doctor already suggested.
+            if ($doctor && $context?->reasonKey && str_starts_with($context->reasonKey, 'physio:') && auth()->user()) {
+                app(PhysioConsultation::class)->suggestFromVisitReason($patient, $branch, $context->reasonKey, $doctor, auth()->user());
+            }
+
+            return $item->load(['patientVisit.caseNumber', 'patientVisit.case', 'doctor']);
         });
     }
 

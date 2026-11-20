@@ -30,9 +30,30 @@ export interface QueueRow {
   safety: SafetyFlag[];
   safety_more: number;
   can_correct: boolean;
-  /** Only on "done" rows: null without billing rights. */
-  payment?: 'paid' | 'due' | 'not_billed' | null;
-  links: { status: string; priority: string; doctor: string; visit: string; patient: string | null };
+  /** Only on "done" rows: null without billing rights. `none`: nothing was charged (e.g. paid from a package). */
+  payment?: 'paid' | 'due' | 'not_billed' | 'none' | null;
+  /** Only on "done" rows, for a member who may take it: the payment to collect from the row. */
+  collect?: DeskCollect | null;
+  links: {
+    status: string;
+    priority: string;
+    doctor: string;
+    visit: string;
+    patient: string | null;
+    /** The desk opens the physiotherapy visit for a therapist without a login (POST). */
+    desk_open?: string;
+    /** That visit's workspace, once opened. */
+    desk_workspace?: string;
+  };
+}
+
+/** A payment the desk takes in one step: a bill's balance, or (`bills`) the visit billed at the clinic's prices and paid. */
+export interface DeskCollect {
+  amount: number;
+  url: string;
+  bills: boolean;
+  encounter_id: number;
+  bill_id: number | null;
 }
 
 export interface BookingRow {
@@ -44,7 +65,8 @@ export interface BookingRow {
   type: string | null;
   scheduled_at: string | null;
   late_minutes: number | null;
-  links: { status: string };
+  /** `check_in`: only for a registered patient's booking (Reception's check-in, by the booking). */
+  links: { status: string; check_in?: string };
 }
 
 export interface DoctorRow {
@@ -88,10 +110,18 @@ export interface DeskBilling {
   methods: { value: string; label: string }[];
   ready: { encounter_id: number; number: string | null; patient: DeskPatientRef | null; doctor: string | null; lines: { description: string; quantity: number; amount: number }[]; total: number; links: { collect: string; checkout: string } }[];
   ready_more: boolean;
-  unpaid: { id: number; number: string | null; patient: DeskPatientRef | null; total: number; outstanding: number; links: { pay: string } }[];
+  unpaid: { id: number; number: string | null; patient: DeskPatientRef | null; total: number; outstanding: number; plan: { due_on: string; remaining: number; overdue: boolean; left: number } | null; links: { pay: string } }[];
   unpaid_count: number;
-  collected_today: { total: number; payments: number };
-  links: { all: string };
+  /** The day's takings: only for members who read the ledger (`billing.view`). */
+  collected_today: { total: number; payments: number } | null;
+  /** The Billing work center: only for members who read the ledger. */
+  links: { all: string | null; closing: string | null };
+}
+
+/** `FrontDesk::labCases`: dental lab work the desk moves: to send, out with the lab, or arrived and waiting for the patient. */
+export interface DeskLab {
+  count: { to_send: number; with_lab: number; late: number; arrived: number };
+  rows: { id: number; number: string | null; patient: DeskPatientRef | null; what: string; lab: string | null; state: 'to_send' | 'with_lab' | 'arrived'; due_on: string | null; late: boolean; steps: { send?: string; receive?: string }; links: { patient: string } }[];
 }
 
 export interface DeskFollowUps {

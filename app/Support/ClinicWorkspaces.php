@@ -77,6 +77,7 @@ class ClinicWorkspaces
         return match (true) {
             self::commandCenter($access) => 'clinic.dashboard',
             self::receptionHome($access) => 'clinic.reception',
+            self::doctorHome($access) => 'clinic.consultations.index',
             $access->primaryWorkspace() === 'billing' && $built('clinic.billing.index') => 'clinic.billing.index',
             $built('clinic.appointments.index') && $access->allows(ClinicNavigation::CALENDAR) => 'clinic.appointments.index',
             $built('clinic.patients.index') && $access->allows(['permissions' => ['patient.view'], 'module' => 'patients']) => 'clinic.patients.index',
@@ -98,5 +99,16 @@ class ClinicWorkspaces
     public static function receptionHome(ClinicAccess $access): bool
     {
         return ! self::commandCenter($access) && $access->primaryWorkspace() === 'front_desk' && Route::has('clinic.reception') && ClinicFrontend::available('clinic.reception');
+    }
+
+    /**
+     * Whether this user's dashboard is the Doctor Dashboard (Today): a
+     * practitioner whose primary workspace is their day of patients. The
+     * sidebar's Dashboard is then that page; Appointments stays the calendar.
+     */
+    public static function doctorHome(ClinicAccess $access): bool
+    {
+        return ! self::commandCenter($access) && ! self::receptionHome($access) && $access->primaryWorkspace() === 'today'
+            && Route::has('clinic.consultations.index') && ClinicFrontend::available('clinic.consultations.index');
     }
 }

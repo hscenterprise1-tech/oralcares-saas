@@ -9,6 +9,8 @@ use App\Models\Clinic;
 use App\Models\ClinicalDiagnosis;
 use App\Models\ClinicalEncounter;
 use App\Models\ClinicalEncounterAddendum;
+use App\Models\ClinicalOrder;
+use App\Models\ClinicalOrderItem;
 use App\Models\ClinicalProcedure;
 use App\Models\ClinicMembership;
 use App\Models\SecurityAuditLog;
@@ -339,4 +341,26 @@ test('a document is filed against a consultation only if it is that patient\'s',
     $upload($encounter->id)->assertRedirect();
 
     expect(AttachedDocument::where('patient_id', $this->patient->id)->sole()->encounter_id)->toBe($encounter->id);
+});
+
+test('Today lists the results back for my orders that wait for my review, and only mine', function () {
+    $encounter = consultationFor($this);
+    $order = fn (int $by) => ClinicalOrder::query()->withoutGlobalScopes()->forceCreate([
+        'clinic_id' => $this->f->clinic->id, 'branch_id' => $this->f->branch->id, 'encounter_id' => $encounter->id, 'patient_id' => $this->patient->id,
+        'ordered_by' => $by, 'order_number' => 'ORD-'.fake()->unique()->numerify('###'), 'order_type' => 'lab', 'status' => 'in_progress',
+    ]);
+    $item = fn ($order, string $name, string $status) => ClinicalOrderItem::query()->withoutGlobalScopes()->forceCreate([
+        'clinic_id' => $this->f->clinic->id, 'clinical_order_id' => $order->id, 'item_name' => $name, 'status' => $status, 'resulted_at' => now()->subDay(),
+    ]);
+    $mine = $order($this->doctorUser->id);
+    $item($mine, 'HbA1c', ClinicalOrderItem::RESULTED);
+    $item($mine, 'CBC', 'reviewed');
+    $item($order(User::factory()->create()->id), 'Lipid profile', ClinicalOrderItem::RESULTED);
+
+    ($this->asDoctor)()->get('/clinic/consultations')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('results.total', 1)
+            ->where('results.rows.0.test', 'HbA1c')
+            ->where('results.rows.0.url', route('clinic.orders.show', $mine->id)));
 });

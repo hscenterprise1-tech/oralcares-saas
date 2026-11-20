@@ -138,18 +138,28 @@ class ClinicNavigation
         usort($domains, fn (array $a, array $b) => ($a['order'] ?? 0) <=> ($b['order'] ?? 0));
 
         // One dashboard per job: the Command Center for whoever runs the clinic, the Front Desk for reception
-        // (the Dashboard entry opens it, and it is not listed twice). There is no staff dashboard any more, so
-        // anyone else has no Dashboard entry: their home is already in the list (the Calendar, or Billing).
+        // (the Dashboard entry opens it, and it is not listed twice), the Doctor Dashboard (Today) for a
+        // practitioner. There is no staff dashboard any more, so anyone else has no Dashboard entry: their
+        // home is already in the list (the Calendar, or Billing).
         $receptionHome = ClinicWorkspaces::receptionHome($access);
         $commandCenter = ClinicWorkspaces::commandCenter($access);
+        $doctorHome = ClinicWorkspaces::doctorHome($access);
 
         $resolved = [];
         foreach ($domains as $domain) {
             if ($receptionHome && $domain['key'] === 'front_desk') {
                 continue;
             }
-            if ($domain['key'] === 'dashboard' && ! $commandCenter && ! $receptionHome) {
+            if ($domain['key'] === 'dashboard' && ! $commandCenter && ! $receptionHome && ! $doctorHome) {
                 continue;
+            }
+            // A practitioner's Dashboard is their day of patients (the Doctor Dashboard).
+            if ($doctorHome && $domain['key'] === 'dashboard') {
+                $domain = ['route' => 'clinic.consultations.index', 'requires' => ['workspace' => ['today']], 'keywords' => [...($domain['keywords'] ?? []), 'queue', 'waiting', 'consultation', 'my patients']] + $domain;
+            }
+            // A practitioner without the clinic's reports gets their own: their work, scoped to them (`ClinicReports::scopedPractitioner`).
+            if ($doctorHome && ! $commandCenter && $domain['key'] === 'reports') {
+                $domain = ['label' => 'My reports', 'requires' => ['workspace' => ['today']], 'keywords' => [...($domain['keywords'] ?? []), 'my work', 'my patients', 'my treatments']] + $domain;
             }
             if ($receptionHome && $domain['key'] === 'dashboard') {
                 $domain = ['route' => 'clinic.reception', 'requires' => ['workspace' => ['front_desk']], 'keywords' => [...($domain['keywords'] ?? []), 'reception', 'front desk', 'queue', 'waiting', 'check in']] + $domain;

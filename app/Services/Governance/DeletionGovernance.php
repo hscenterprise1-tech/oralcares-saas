@@ -6,9 +6,8 @@ use App\Exceptions\OwnerModeRequired;
 use App\Models\DeletionRequest;
 use App\Models\User;
 use App\Services\ClinicContext;
-use App\Services\Governance\Actions\CorrectDeath;
+use App\Services\Governance\Actions\DeletePatient;
 use App\Services\Governance\Actions\MergePatient;
-use App\Services\Governance\Actions\RecordDeath;
 use App\Services\Governance\Actions\RemoveDocument;
 use App\Services\Governance\Actions\VoidBill;
 use App\Services\Governance\Actions\VoidEncounter;
@@ -61,7 +60,7 @@ class DeletionGovernance
         return $this->actions ??= collect([
             RemoveDocument::class, VoidEncounter::class, VoidToothEntry::class, VoidBill::class,
             VoidEndodonticRecord::class, VoidImplantRecord::class, VoidOrthodonticRecord::class, MergePatient::class,
-            RecordDeath::class, CorrectDeath::class,
+            DeletePatient::class,
         ])->map(fn (string $class) => app($class))->keyBy(fn (GovernedAction $action) => $action->key())->all();
     }
 
@@ -69,7 +68,11 @@ class DeletionGovernance
      * Actions that no longer exist but appear in decided requests kept as
      * history, with the name those requests are shown under.
      */
-    public const RETIRED = ['patient.archive' => 'Archive patient (no longer available)'];
+    public const RETIRED = [
+        'patient.archive' => 'Archive patient (no longer available)',
+        'patient.record_death' => 'Record death (no longer available)',
+        'patient.correct_death' => 'Correct death (no longer available)',
+    ];
 
     /** How a request's action is named in lists: the action's label, a retired action's name, else its key. */
     public function labelFor(string $key): string

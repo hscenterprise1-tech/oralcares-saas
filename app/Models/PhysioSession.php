@@ -46,6 +46,10 @@ class PhysioSession extends Model
         'pain_before',
         'pain_after',
         'modalities',
+        'given',
+        'session_type',
+        'addons',
+        'charge',
         'room_id',
         'package_id',
         'therapist_id',
@@ -61,6 +65,9 @@ class PhysioSession extends Model
         return [
             'exercises_performed' => 'array',
             'modalities' => 'array',
+            'given' => 'array',
+            'addons' => 'array',
+            'charge' => 'decimal:2',
             'pain_before' => 'integer',
             'pain_after' => 'integer',
             'session_number' => 'integer',
@@ -73,6 +80,12 @@ class PhysioSession extends Model
     public function performedExercises(): HasMany
     {
         return $this->hasMany(PhysioSessionExercise::class, 'physio_session_id')->orderBy('position')->orderBy('id');
+    }
+
+    /** The course (treatment) this session belongs to. */
+    public function treatment(): BelongsTo
+    {
+        return $this->belongsTo(PatientTreatment::class, 'patient_treatment_id');
     }
 
     public function encounter(): BelongsTo

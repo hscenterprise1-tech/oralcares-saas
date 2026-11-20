@@ -61,9 +61,12 @@ test('pages are the navigation\'s own: only what this member may open, and only 
     expect($titles(($this->search)($reception, 'appoint')))->toBe(['Appointments'])
         ->and($titles(($this->search)($billing, 'appoint')))->toBe([])
         ->and($titles(($this->search)($reception, 'support')))->toBe(['Support'])
-        // Billing is built and reception may open it.
+        // Billing (the ledger) is built; billing staff and the desk (full billing since 2026-11-05) may open it.
+        ->and($titles(($this->search)($billing, 'billing')))->toBe(['Billing'])
         ->and($titles(($this->search)($reception, 'billing')))->toBe(['Billing'])
-        ->and($titles(($this->search)($this->owner, 'reports')))->toBe([]);
+        // Reports is built: the owner may open it, the desk may not.
+        ->and($titles(($this->search)($this->owner, 'reports')))->toBe(['Reports'])
+        ->and($titles(($this->search)($reception, 'reports')))->toBe([]);
 });
 
 test('nothing comes from another clinic, or from another branch\'s Calendar', function () {

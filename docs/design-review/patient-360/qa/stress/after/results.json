@@ -1,0 +1,1308 @@
+[
+ {
+  "shot": "p359-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/114/36/114"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/114",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/130"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/114",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/62",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/130"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/52/36/52"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/36/36/36"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/36/36/36"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/48"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-owner",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/48"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "owner-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/114/36/114"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/70/36/70",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/42/36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/66/36/66"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/114",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/42",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/130"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/114",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/62",
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/130"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/46/36/46"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/90"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/52/36/52"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/36/36/36"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 26/36/36/36"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/48"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-dentist",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [
+   "relative grid grid-cols-[auto_minmax(0,1fr)] gap-x: 36/48"
+  ],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Recent activity",
+   "Billing",
+   "Recent clinical activity",
+   "Conditions and medicines",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "dentist-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p359-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p360-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1440-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-1024-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-768-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-390-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "p287-360-reception",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Appointment summary",
+   "Financial summary",
+   "Patient information",
+   "Documents and reports"
+  ]
+ },
+ {
+  "shot": "reception-console-errors",
+  "errors": []
+ },
+ {
+  "shot": "p359-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p359-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p360-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-1440-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-1024-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-768-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-390-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "p287-360-billing",
+  "overflowX": false,
+  "offscreen": [],
+  "clipped": [
+   "hidden: Mobile ending"
+  ],
+  "ragged": [],
+  "cards": [
+   "Care under way",
+   "Coming up",
+   "Billing",
+   "Treatment summary",
+   "Financial summary",
+   "Patient information"
+  ]
+ },
+ {
+  "shot": "billing-console-errors",
+  "errors": []
+ }
+]

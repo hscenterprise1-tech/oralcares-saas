@@ -53,7 +53,7 @@ class QueueStateMachine
         'complete' => 'Only a patient in consultation can be marked done.',
         'skip' => 'Only a waiting or called patient can be marked as not present.',
         'requeue' => 'Only a patient marked as not present can be put back in the queue.',
-        'cancel' => 'This patient has already been seen or has left the queue.',
+        'cancel' => 'This patient is no longer waiting: they have been seen, or their visit was already cancelled.',
     ];
 
     /**

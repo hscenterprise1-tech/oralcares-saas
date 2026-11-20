@@ -43,6 +43,10 @@ class ClinicalProcedureService
             'status' => $status,
             'performed_by' => $status === 'completed' ? auth()->id() : null,
             'performed_at' => $status === 'completed' ? now() : null,
+            // Optional: the amount fixed when it was done (billed as is) and the treatment it belongs to.
+            'charged_amount' => $data['charged_amount'] ?? null,
+            'patient_treatment_id' => $data['patient_treatment_id'] ?? null,
+            'quantity' => $data['quantity'] ?? 1,
         ]);
 
         PatientTimelineEvent::create([

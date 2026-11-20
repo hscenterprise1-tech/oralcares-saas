@@ -10,6 +10,7 @@ use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
 use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\Support\TreatmentFixture;
@@ -82,7 +83,7 @@ test('everyone signs in at their one home: the Command Center, the Front Desk, B
     'owner' => [null, 'clinic.dashboard', 'ClinicPortal/CommandCenter/Index'],
     'administrator' => [ClinicRole::ClinicAdmin, 'clinic.dashboard', 'ClinicPortal/CommandCenter/Index'],
     'reception' => [ClinicRole::Receptionist, 'clinic.reception', 'ClinicPortal/FrontDesk/Index'],
-    'doctor' => [ClinicRole::Doctor, 'clinic.appointments.index', 'ClinicPortal/Appointments/Index'],
+    'doctor' => [ClinicRole::Doctor, 'clinic.consultations.index', 'ClinicPortal/Today/Index'],
     'billing' => [ClinicRole::BillingStaff, 'clinic.billing.index', 'ClinicPortal/Billing/Index'],
 ]);
 
@@ -101,7 +102,12 @@ test('reception without billing rights: front office only — no Billing in the 
 
 test('reception granted billing keeps the Front Desk as its dashboard, with Billing in the sidebar', function () {
     $reception = ($this->member)(ClinicRole::Receptionist);
+    // The ledger is a default Reception right since 2026-11-05 (full billing at the desk).
     expect(ClinicRole::Receptionist->permissions())->toContain(ClinicPermission::BillingView->value);
+    setPermissionsTeamId(null);
+    Role::findByName(ClinicRole::Receptionist->value, 'web')->givePermissionTo(Permission::firstOrCreate(['name' => ClinicPermission::BillingView->value, 'guard_name' => 'web']));
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    $reception[0]->unsetRelation('roles')->unsetRelation('permissions');
 
     $page = ($this->page)(($this->as)($reception));
     expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
@@ -118,16 +124,20 @@ test('a user holding several roles gets their union: every destination once', fu
     $member[0]->unsetRelation('roles')->unsetRelation('permissions');
 
     $page = ($this->page)(($this->as)($member));
-    expect($page['nav'])->toContain('dashboard', 'billing', 'follow_ups')->not->toContain('front_desk')
+    // Neither role reads the ledger by default (OD-1 / OD-9): no Billing entry.
+    expect($page['nav'])->toContain('dashboard', 'follow_ups')->not->toContain('front_desk', 'billing')
         ->and($page['nav'])->toBe(array_values(array_unique($page['nav'])));
 });
 
-test('a doctor works from the Calendar: no dashboard of their own, no billing, no intake', function () {
+test('a doctor works from the Doctor Dashboard, with Appointments beside it: no billing, no intake', function () {
     $doctor = ($this->doctorMember)();
     $page = ($this->page)(($this->as)($doctor));
 
-    expect($page['nav'])->toBe(['appointments', 'patients', 'follow_ups', 'notifications', 'support']);
-    ($this->as)($doctor)->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
+    // The Dashboard entry is the doctor's day (Today); Appointments stays where it was; Reports is their own work.
+    expect($page['nav'])->toBe(['dashboard', 'appointments', 'patients', 'reports', 'follow_ups', 'notifications', 'support'])
+        ->and(collect($page['props']['clinic']['navigation'])->firstWhere('key', 'dashboard')['href'])->toBe('/clinic/consultations')
+        ->and(collect($page['props']['clinic']['navigation'])->firstWhere('key', 'reports')['label'])->toBe('My reports');
+    ($this->as)($doctor)->get('/clinic/dashboard')->assertRedirect(route('clinic.consultations.index'));
     ($this->as)($doctor)->get('/clinic/billing')->assertForbidden();
     ($this->as)($doctor)->getJson('/clinic/reception/intake')->assertForbidden();
 });

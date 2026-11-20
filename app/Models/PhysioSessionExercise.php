@@ -20,6 +20,9 @@ class PhysioSessionExercise extends Model
 
     public const SKIPPED = 'skipped';
 
+    /** Done, but less than prescribed: the actual sets and reps say how much. */
+    public const PARTIAL = 'partial';
+
     protected $fillable = [
         'clinic_id',
         'physio_session_id',

@@ -178,6 +178,8 @@ class PatientRegistrar
                     priority: $checkIn['priority'],
                     performer: $checkIn['performer'] ?? null,
                     context: $checkIn['context'],
+                    caseId: $checkIn['case_id'] ?? null,
+                    isNewCase: (bool) ($checkIn['new_case'] ?? true),
                 );
             }
 

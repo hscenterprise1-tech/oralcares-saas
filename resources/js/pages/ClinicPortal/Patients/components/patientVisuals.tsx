@@ -28,7 +28,6 @@ const AVATAR_SIZES = {
 
 /** The lifecycle states worth noticing. A current patient carries no badge. */
 const LIFECYCLE: Record<string, { label: string; className: string }> = {
-  deceased: { label: 'Deceased', className: 'border-cx-slate-bg bg-cx-slate-bg text-cx-slate-ink' },
   merged: { label: 'Merged', className: 'border-cx-m-purple-ring bg-cx-m-purple-bg text-cx-violet-ink' },
 };
 

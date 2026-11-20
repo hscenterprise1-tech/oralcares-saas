@@ -2,7 +2,6 @@
 
 namespace App\Services\Patient\Patient360;
 
-use App\ClinicPermission;
 use App\Models\Patient;
 use App\Models\PatientFollowUp;
 use App\Models\PatientSessionPackage;
@@ -10,6 +9,7 @@ use App\Models\PhysioAssessment;
 use App\Models\PhysioCarePlan;
 use App\Models\PhysioSession;
 use App\Models\User;
+use App\Services\Physio\SessionPackages;
 use Illuminate\Support\Collection;
 
 /**
@@ -96,7 +96,7 @@ class Patient360PhysioWorkspace
             'body_regions' => config('clinic_physio.body_regions'),
             'links' => [
                 // A package is sold for one treatment: here, the active plan's (none, no sale).
-                'sell_package' => $user->hasClinicPermission(ClinicPermission::BillingCreate) && $active?->patient_treatment_id ? route('clinic.patients.session-packages.store', $patient->id) : null,
+                'sell_package' => SessionPackages::maySell($user) && $active?->patient_treatment_id ? route('clinic.patients.session-packages.store', $patient->id) : null,
                 'sell_treatment_id' => $active?->patient_treatment_id,
                 'follow_up' => $this->access->canManageFollowUps($user) ? route('clinic.patients.follow-ups.store', $patient->id) : null,
             ],

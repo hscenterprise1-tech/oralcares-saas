@@ -36,6 +36,7 @@ class PatientBillingItem extends Model
         'item_type',
         'description',
         'clinical_procedure_id',
+        'doctor_id',
         'treatment_record_id',
         'source_type',
         'source_id',
@@ -67,6 +68,11 @@ class PatientBillingItem extends Model
     public function procedure(): BelongsTo
     {
         return $this->belongsTo(ClinicalProcedure::class, 'clinical_procedure_id');
+    }
+
+    public function doctor(): BelongsTo
+    {
+        return $this->belongsTo(ClinicEmployee::class, 'doctor_id');
     }
 
     public function treatmentRecord(): BelongsTo

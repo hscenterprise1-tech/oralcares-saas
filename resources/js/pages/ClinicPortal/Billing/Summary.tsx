@@ -60,13 +60,13 @@ export default function BillingSummary({ summary, filters, branches, tabs, links
       <section aria-labelledby="summary-billing" className="mb-6">
         <h2 id="summary-billing" className="mb-3 text-[15px] font-semibold text-cx-nav-ink">Patient billing</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Figure label="Billed" value={figures.billed} tone="brand" note={`${formatNumber(figures.bills)} bills issued in the period, not cancelled`} />
-          <Figure label="Collected" value={figures.collected} tone="green" note="Payments received in the period" />
-          <Figure label="Refunded" value={figures.refunded} tone="slate" note="Refunds recorded in the period" />
-          <Figure label="Net collected" value={figures.net_collected} tone="green" note="Collected less refunded" />
-          <Figure label="Discounts" value={figures.discounts} tone="slate" note="On bills issued in the period" />
-          <Figure label="Adjusted" value={figures.adjusted} tone="slate" note="Concessions and write-offs recorded in the period" />
-          <Figure label="Outstanding now" value={figures.outstanding} tone="amber" note="Still due on open bills today, whenever issued" />
+          <Figure period="This period" label="Billed" value={figures.billed} tone="brand" note={`${formatNumber(figures.bills)} bills issued in the period, not cancelled`} />
+          <Figure period="This period" label="Collected" value={figures.collected} tone="green" note="Payments received in the period" />
+          <Figure period="This period" label="Refunded" value={figures.refunded} tone="slate" note="Refunds recorded in the period" />
+          <Figure period="This period" label="Net collected" value={figures.net_collected} tone="green" note="Collected less refunded" />
+          <Figure period="This period" label="Discounts" value={figures.discounts} tone="slate" note="On bills issued in the period" />
+          <Figure period="This period" label="Adjusted" value={figures.adjusted} tone="slate" note="Concessions and write-offs recorded in the period" />
+          <Figure period="Now" label="Outstanding now" value={figures.outstanding} tone="amber" note="Still due on open bills today, whenever issued" />
         </div>
         <p className="mt-2 text-[12px] text-cx-text-3">
           Open the rows behind these: <Link className="font-medium text-cx-nav-ink underline-offset-2 hover:underline" href={withQuery(links.bills)}>bills issued</Link>,{' '}

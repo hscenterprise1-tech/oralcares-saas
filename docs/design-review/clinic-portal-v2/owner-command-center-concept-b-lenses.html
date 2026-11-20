@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Owner Command Center · Concept B, Lenses — OralCares design review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!--
+  DESIGN REVIEW CONCEPT — NOT PRODUCTION CODE.
+  Owner Command Center, Concept B: "Lenses" — a focus workspace. A rail of six
+  live lenses (Decisions, Money, Today, Team & access, Branches, Security), each
+  showing its headline and its state, beside one large stage that opens the
+  selected lens in depth. It opens on Decisions when anything waits, else Today.
+  Add #lens=money (or decisions, today, team, branches, security) to the URL to
+  open a lens directly.
+
+  SHELL: the frozen ClinicPortalShell / Sidebar / TopBar transcription, with the
+  owner's real navigation. Only <main> is new.
+
+  DATA: "QA snapshot" (default) = real OwnerCommandCenter output for the seeded
+  QA clinic on 23 Oct 2026; "Illustrative" = placeholder values (labelled).
+  Anything the backend does not send is shown as "not sent yet", never invented.
+-->
+<style>
+  :root {
+    /* Existing shell tokens (tailwind.config.js `cx`). */
+    --nav-canvas: #F5F8FC; --nav-bg: #EEF5FB; --nav-hover: #E1ECF6; --nav-active: #DDF2F2; --nav-line: #D6E3EF;
+    --nav-teal: #00A8A8; --nav-teal-strong: #007A7B; --nav-ink: #0B1F33; --nav-muted: #4A5D73; --rose-ink-shell: #B42318;
+    /* Dashboard content: ink, and the approved panel's three stops as the only accent family. */
+    --card: #FFFFFF; --line: #E6EAF1; --line-strong: #D5DBE6; --row: #EEF1F6;
+    --ink: #0F172A; --ink-2: #475467; --ink-3: #5F6B7E;
+    --teal: #0EA394; --teal-soft: #DDF5F2; --teal-ink: #0A7368;
+    --blue: #2B86D6; --blue-soft: #E1EFFB; --blue-ink: #1C5E9E;
+    --violet: #6B48DE; --violet-soft: #EEE9FD; --violet-ink: #5232C9;
+    /* Safety and urgency only — never decoration. */
+    --rose: #E5484D; --rose-soft: #FFE8EA; --rose-ink: #B42318; --amber-soft: #FFF2D9; --amber-ink: #8F5200;
+    --grad-schedule: linear-gradient(165deg, #0EA394 0%, #2B86D6 52%, #6B48DE 100%);
+    --grad-primary: linear-gradient(135deg, #2B86D6 0%, #6B48DE 100%);
+    --tint-teal: linear-gradient(150deg, #E8F8F6 0%, #D6F1EC 100%);
+    --tint-blue: linear-gradient(150deg, #EAF3FD 0%, #D9E8F8 100%);
+    --tint-violet: linear-gradient(150deg, #F2EFFE 0%, #E6E0FB 100%);
+    --shadow-card: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -16px rgba(15,23,42,.18);
+    --shadow-raised: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -22px rgba(40,40,120,.32);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--nav-canvas); -webkit-font-smoothing: antialiased; }
+  button { font: inherit; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .review { margin: 0; background: #0F172A; color: #fff; font-size: 12px; font-weight: 600; padding: 10px 16px; text-align: center; }
+  .review span { color: #C9C1FF; font-weight: 500; }
+
+  /* =================== EXISTING SHELL (transcribed, not redesigned) =================== */
+  .app { display: flex; min-height: 100vh; background: var(--nav-canvas); color: var(--ink); }
+  .side-col { position: sticky; top: 0; height: 100vh; width: 240px; flex-shrink: 0; display: none; }
+  @media (min-width: 1024px) { .side-col { display: block; } }
+  .sidebar { display: flex; height: 100%; flex-direction: column; overflow-y: auto; border-right: 1px solid var(--nav-line); background: var(--nav-bg); color: var(--nav-ink); scrollbar-width: none; }
+  .sb-mark { display: flex; height: 77px; flex-shrink: 0; flex-direction: column; justify-content: center; border-bottom: 1px solid var(--nav-line); padding: 0 24px; }
+  .sb-mark b { font-size: 21px; font-weight: 700; line-height: 1; letter-spacing: -.025em; }
+  .sb-mark small { margin-top: 6px; font-size: 11px; font-weight: 500; letter-spacing: .02em; color: var(--nav-muted); }
+  .sb-nav { flex: 1; padding: 8px 12px 16px; }
+  .sb-sec + .sb-sec { margin-top: 24px; }
+  .sb-label { padding: 0 12px 6px; margin: 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--nav-muted); }
+  .sb-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .sb-item { position: relative; display: flex; height: 40px; width: 100%; align-items: center; gap: 12px; border-radius: 6px; padding: 0 12px; font-size: 14px; font-weight: 500; color: var(--nav-ink); text-decoration: none; }
+  .sb-item:hover { background: var(--nav-hover); }
+  .sb-item .i { color: var(--nav-muted); }
+  .sb-item.current { background: var(--nav-active); font-weight: 600; }
+  .sb-item.current::before { content: ''; position: absolute; top: 8px; bottom: 8px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--nav-teal); }
+  .sb-item.current .i { color: var(--nav-teal-strong); }
+  .sb-item.soon { color: var(--nav-muted); cursor: default; }
+  .sb-item.soon:hover { background: transparent; }
+  .sb-item.soon .i { opacity: .8; }
+  .sb-item .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-item .tag { font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: .025em; color: var(--nav-muted); }
+  .sb-clinic { flex-shrink: 0; border-top: 1px solid var(--nav-line); background: #fff; padding: 16px; display: flex; gap: 12px; align-items: flex-start; }
+  .sb-clinic .logo { display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 8px; background: var(--nav-bg); box-shadow: inset 0 0 0 1px var(--nav-line); color: var(--nav-teal-strong); }
+  .sb-clinic p { margin: 0; }
+  .sb-clinic .k { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--nav-muted); }
+  .sb-clinic .n { margin-top: 2px; font-size: 13px; font-weight: 700; text-transform: uppercase; line-height: 1.3; letter-spacing: .05em; color: var(--nav-ink); }
+
+  /* Drawer below 1024px (Radix dialog in the app; a static toggle here). */
+  .drawer { position: fixed; inset: 0; z-index: 50; display: none; }
+  .drawer.open { display: block; }
+  .drawer .overlay { position: absolute; inset: 0; background: rgba(11,31,51,.35); }
+  .drawer .panel { position: absolute; inset: 0 auto 0 0; width: min(272px, 86vw); box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 18px 40px -18px rgba(15,23,42,.22); }
+  .drawer .close { position: absolute; right: 12px; top: 14px; display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 6px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  @media (min-width: 1024px) { .drawer, .drawer.open { display: none; } }
+
+  .col { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .topbar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--nav-line); background: #fff; }
+  .tb-row { display: flex; height: 76px; align-items: center; gap: 12px; padding: 0 16px; }
+  @media (min-width: 640px) { .tb-row { padding: 0 24px; } }
+  @media (min-width: 1024px) { .tb-row { gap: 16px; padding: 0 32px; } }
+  .tb-menu { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; color: var(--nav-muted); cursor: pointer; }
+  .tb-word { flex-shrink: 0; font-size: 18px; font-weight: 700; line-height: 1; letter-spacing: -.025em; color: var(--nav-ink); }
+  @media (min-width: 1024px) { .tb-menu, .tb-word { display: none; } }
+  .tb-search { position: relative; display: none; min-width: 220px; max-width: 720px; flex: 1; }
+  @media (min-width: 768px) { .tb-search { display: block; } }
+  .tb-search .i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--nav-muted); }
+  .tb-search input { height: 44px; width: 100%; border-radius: 6px; border: 1px solid var(--nav-line); background: #fff; padding: 0 56px 0 44px; font: 14px Inter, sans-serif; color: var(--nav-ink); }
+  .tb-search input::placeholder { color: var(--nav-muted); }
+  .tb-search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: none; border: 1px solid var(--nav-line); border-radius: 4px; padding: 2px 6px; font: 11px Inter, sans-serif; color: var(--nav-muted); }
+  @media (min-width: 1024px) { .tb-search kbd { display: block; } }
+  .tb-right { margin-left: auto; display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+  @media (min-width: 640px) { .tb-right { gap: 8px; } }
+  @media (min-width: 1024px) { .tb-right { gap: 12px; } }
+  .tb-clock { display: none; text-align: right; flex-shrink: 0; }
+  .tb-clock p { margin: 0; }
+  .tb-clock .d { font-size: 12px; line-height: 1.25; color: var(--nav-muted); }
+  .tb-clock .t { margin-top: 2px; font-size: 15px; font-weight: 600; line-height: 1.25; color: var(--nav-ink); font-variant-numeric: tabular-nums; }
+  .tb-div { width: 1px; height: 32px; flex-shrink: 0; background: var(--nav-line); margin: 0 4px; }
+  .tb-div.xl { display: none; }
+  .tb-div.md { display: none; }
+  @media (min-width: 768px) { .tb-div.md { display: block; } }
+  @media (min-width: 1280px) { .tb-clock, .tb-div.xl { display: block; } }
+  .tb-pair { display: flex; align-items: center; gap: 4px; }
+  .tb-round { position: relative; display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; border: 0; background: transparent; color: var(--nav-muted); cursor: pointer; }
+  .tb-round:hover { background: var(--nav-bg); color: var(--nav-ink); }
+  .tb-badge { position: absolute; right: 4px; top: 4px; display: flex; height: 18px; min-width: 18px; align-items: center; justify-content: center; border-radius: 999px; background: var(--rose-ink-shell); padding: 0 4px; font-size: 10.5px; font-weight: 700; color: #fff; }
+  .tb-account { display: flex; align-items: center; gap: 12px; border-radius: 6px; padding: 4px 6px 4px 4px; }
+  .tb-account .av { display: flex; width: 44px; height: 44px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 999px; background: var(--nav-ink); font-size: 14px; font-weight: 600; color: #fff; }
+  .tb-account .who, .tb-account .chev { display: none; }
+  .tb-account .who b { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--nav-ink); }
+  .tb-account .who span { display: block; max-width: 150px; font-size: 12.5px; color: var(--nav-muted); }
+  .tb-account .chev { width: 16px; height: 16px; color: var(--nav-muted); }
+  @media (min-width: 1280px) { .tb-account .who, .tb-account .chev { display: block; } }
+  .tb-row2 { border-top: 1px solid var(--nav-line); padding: 10px 16px; }
+  .tb-row2 .tb-search { display: block; max-width: none; min-width: 0; }
+  .tb-row2 .tb-search input { padding-right: 16px; }
+  @media (min-width: 768px) { .tb-row2 { display: none; } }
+  .main { margin: 0 auto; width: 100%; min-width: 0; max-width: 1600px; flex: 1; padding: 20px 16px; }
+  @media (min-width: 640px) { .main { padding: 24px; } }
+  @media (min-width: 1024px) { .main { padding: 24px 32px; } }
+  /* ======================== END OF EXISTING SHELL ======================== */
+
+  /* The owner's plan line under the clinic name in the sidebar footer (Sidebar.tsx ClinicIdentity). */
+  .sb-clinic { display: block; }
+  .sb-clinic .row { display: flex; gap: 12px; align-items: flex-start; }
+  .sb-plan { margin-top: 12px; border-top: 1px solid var(--nav-line); padding-top: 10px; }
+  .sb-plan .p { font-size: 12.5px; font-weight: 600; color: var(--nav-ink); }
+  .sb-plan .l { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--nav-muted); }
+  /* Doctor-owner in Owner Mode: AccountMenu draws a teal ring round the avatar. */
+  .tb-account .av.ring { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--nav-teal); }
+
+
+  /* ============================ CONCEPT A · PULSE ============================ */
+  :root {
+    --mint: #12A877; --mint-soft: #E2F7EE; --mint-ink: #0B6E4E;
+    --navy: #0B1F33;
+    --r-xl: 26px; --r-lg: 20px; --r-md: 14px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .src { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .src.real { background: var(--mint-soft); color: var(--mint-ink); }
+  .src.ph { background: var(--amber-soft); color: var(--amber-ink); }
+  .soon-t { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); white-space: nowrap; }
+  a, button { -webkit-tap-highlight-color: transparent; }
+  a:focus-visible, button:focus-visible { outline: 3px solid rgba(107,72,222,.4); outline-offset: 2px; }
+  .na { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 10px; border-radius: 999px; border: 1px dashed var(--line-strong); color: var(--ink-3); font-size: 12px; font-weight: 600; background: #fff; }
+  .na .i { width: 14px; height: 14px; }
+
+  /* The canvas: one composition over a soft ambient wash. */
+  .pulse { position: relative; isolation: isolate; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr);
+           grid-template-areas: "top" "brief" "next" "money" "floor" "guard" "branches" "dock"; }
+  .pulse::before { content: ''; position: absolute; z-index: -1; inset: -20px 0 auto 0; height: 620px; pointer-events: none;
+    background: radial-gradient(40% 55% at 22% 18%, rgba(14,163,148,.12), transparent 72%), radial-gradient(38% 55% at 82% 12%, rgba(107,72,222,.11), transparent 72%), radial-gradient(35% 45% at 52% 40%, rgba(43,134,214,.08), transparent 72%);
+    -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+  .pulse > * { min-width: 0; }
+  .a-top { grid-area: top; } .a-brief { grid-area: brief; } .a-next { grid-area: next; } .a-money { grid-area: money; }
+  .a-floor { grid-area: floor; } .a-guard { grid-area: guard; } .a-branches { grid-area: branches; } .a-dock { grid-area: dock; }
+  body:not(.multi) .a-branches { display: none; }
+  @media (min-width: 768px) { .pulse { gap: 18px; } }
+  @media (min-width: 1280px) {
+    .pulse { column-gap: 20px; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+             grid-template-areas: "top top" "brief next" "money money" "floor floor" "guard guard" "branches branches" "dock dock"; }
+  }
+  .surface { background: #fff; border: 1px solid rgba(213,219,230,.75); border-radius: var(--r-lg); box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 14px 36px -24px rgba(30,40,90,.28); }
+  .s-label { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+  .s-label .i { width: 15px; height: 15px; }
+  .s-title { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.015em; color: var(--navy); }
+  .s-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-3); }
+
+  /* Top line: date and place, the greeting, and one dock of actions. */
+  .a-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+  .a-top .meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .a-top .meta .place { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: rgba(255,255,255,.8); box-shadow: inset 0 0 0 1px rgba(14,163,148,.25); color: var(--teal-ink); white-space: nowrap; }
+  .a-top .meta .place::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px rgba(14,163,148,.18); }
+  .a-top .meta .om { display: none; height: 26px; align-items: center; padding: 0 10px; border-radius: 999px; background: var(--violet-soft); color: var(--violet-ink); }
+  body.doc-owner .a-top .meta .om { display: inline-flex; }
+  .a-top h1 { margin: 6px 0 0; font-size: 26px; line-height: 1.12; letter-spacing: -.03em; font-weight: 500; color: #33445E; }
+  .a-top h1 b { font-weight: 800; color: var(--navy); }
+  @media (min-width: 768px) { .a-top h1 { font-size: 32px; } }
+  .mine { margin-top: 10px; display: none; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; color: var(--ink-2); }
+  body.doc-owner .mine { display: flex; }
+  .mine b { color: var(--navy); }
+  .mine .lead { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--violet-ink); }
+  .mine .lead .i { width: 15px; height: 15px; }
+  .dock-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 6px; width: 100%; border-radius: 18px; background: rgba(255,255,255,.88); box-shadow: inset 0 0 0 1px rgba(213,219,230,.8), 0 10px 28px -22px rgba(30,40,90,.4); }
+  .act { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 13px; border: 0; background: transparent; color: var(--navy); font: 600 13.5px Inter, sans-serif; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background .18s, color .18s; }
+  .act:hover { background: var(--violet-soft); color: var(--violet-ink); }
+  .act .i { width: 16px; height: 16px; }
+  .act.tool { color: var(--ink-2); }
+  .dock-actions .sep { display: none; }
+  @media (min-width: 640px) {
+    .dock-actions { display: inline-flex; flex-wrap: wrap; max-width: 100%; width: auto; align-items: center; border-radius: 22px; padding: 4px; gap: 2px; }
+    .act { border-radius: 999px; }
+    .dock-actions .sep { display: block; width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
+  }
+  @media (min-width: 1280px) { .dock-actions { flex-wrap: nowrap; border-radius: 999px; } }
+
+  /* Today's brief: what is true now, as sentences built from the figures. */
+  .a-brief { position: relative; overflow: hidden; padding: 18px; border-radius: var(--r-xl); }
+  .a-brief::after { content: ''; position: absolute; right: -80px; top: -80px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(closest-side, rgba(43,134,214,.10), transparent); pointer-events: none; }
+  .brief-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+  .brief-top .rule { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+  .brief-main { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+  .lede { margin: 0; font-size: 19px; line-height: 1.35; font-weight: 600; letter-spacing: -.015em; color: var(--navy); }
+  .lede .hl { background: var(--grad-schedule); -webkit-background-clip: text; background-clip: text; color: transparent; white-space: nowrap; }
+  @media (min-width: 768px) { .a-brief { padding: 22px 24px; } .lede { font-size: 23px; } }
+  .ring { position: relative; width: 76px; height: 76px; flex-shrink: 0; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .track { fill: none; stroke: #EDF1F7; stroke-width: 9; }
+  .ring .val { fill: none; stroke: url(#ringGrad); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 1s var(--ease); }
+  .ring .mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  .ring .mid b { font-size: 18px; font-weight: 800; color: var(--navy); line-height: 1; }
+  .ring .mid small { font-size: 10.5px; font-weight: 600; color: var(--ink-3); margin-top: 2px; }
+  @media (min-width: 768px) { .ring { width: 112px; height: 112px; } .ring .mid b { font-size: 24px; } .ring .mid small { font-size: 11.5px; } }
+  .facts { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 4px; }
+  .facts li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px 4px 12px; border-radius: 14px; font-size: 14px; color: var(--ink-2); transition: background .18s; }
+  .facts li:hover { background: #F7F9FC; }
+  .facts li .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .facts li .t { flex: 1; min-width: 0; }
+  .facts li .t b { color: var(--navy); font-weight: 700; }
+  .facts li .go { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 4px; color: var(--violet-ink); font-size: 12.5px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+  .facts li .go .i { width: 14px; height: 14px; }
+  .d-amber { background: #F2A33A; } .d-violet { background: var(--violet); } .d-teal { background: var(--teal); } .d-rose { background: var(--rose); } .d-mint { background: var(--mint); }
+
+  /* Next best action: the single most useful thing, picked by a fixed rule. */
+  .a-next { position: relative; padding: 18px; border-radius: var(--r-xl); background: linear-gradient(#fff, #fff) padding-box, var(--grad-schedule) border-box; border: 2px solid transparent; box-shadow: 0 20px 44px -30px rgba(70,50,190,.55); display: flex; flex-direction: column; gap: 12px; animation: glow 5s ease-in-out infinite; }
+  @keyframes glow { 0%, 100% { box-shadow: 0 20px 44px -30px rgba(70,50,190,.55); } 50% { box-shadow: 0 22px 52px -26px rgba(14,163,148,.55); } }
+  .a-next .why { margin: 0; font-size: 12px; color: var(--ink-3); }
+  .a-next .what { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 800; letter-spacing: -.02em; color: var(--navy); }
+  .a-next .detail { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+  .cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 20px; border-radius: 999px; border: 0; background: var(--grad-primary); color: #fff; font: 700 14px Inter, sans-serif; text-decoration: none; box-shadow: 0 12px 24px -14px rgba(75,70,214,.9); transition: transform .18s var(--ease), box-shadow .18s var(--ease); align-self: flex-start; }
+  .cta:hover { transform: translateY(-1px); box-shadow: 0 16px 28px -14px rgba(75,70,214,1); }
+  .cta .i { width: 16px; height: 16px; }
+  .cta.dep { background: #F1F3F7; color: var(--ink-3); box-shadow: none; cursor: not-allowed; transform: none; }
+  .then { border-top: 1px solid var(--row); padding-top: 10px; display: grid; gap: 2px; }
+  .then .h { margin: 0 0 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .then a, .then div.row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: 12px; color: var(--navy); font-size: 13.5px; font-weight: 600; text-decoration: none; }
+  .then a:hover { background: #F7F9FC; }
+  .then .c { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+  .then .n { min-width: 26px; height: 24px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 12.5px; font-weight: 800; }
+  .then .row.dep { color: var(--ink-2); cursor: not-allowed; }
+  .calm { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 12px; background: var(--mint-soft); color: var(--mint-ink); font-size: 13px; font-weight: 600; }
+  .calm .i { width: 16px; height: 16px; }
+  .t-amber { background: var(--amber-soft); color: var(--amber-ink); } .t-rose { background: var(--rose-soft); color: var(--rose-ink); }
+  .t-violet { background: var(--violet-soft); color: var(--violet-ink); } .t-blue { background: var(--blue-soft); color: var(--blue-ink); }
+
+  /* Money: one scale for everything that came in and went back, then what is owed and what waits to go out. */
+  .a-money { padding: 18px; }
+  .m-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; }
+  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: #F1F4F9; }
+  .seg button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font: 600 13px Inter, sans-serif; cursor: pointer; transition: background .2s, color .2s, box-shadow .2s; }
+  .seg button[aria-pressed="true"] { background: #fff; color: var(--navy); box-shadow: 0 2px 8px -4px rgba(15,23,42,.3); }
+  .more { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--violet-ink); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+  .more .i { width: 15px; height: 15px; }
+  .m-body { margin-top: 12px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .m-body { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 22px; } }
+  .ladder { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .ladder li a, .ladder li > div { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; padding: 0 8px; border-radius: 12px; color: inherit; text-decoration: none; transition: background .18s; }
+  .ladder li a:hover { background: #F7F9FC; }
+  .ladder .k { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .ladder .v { font-size: 15px; font-weight: 800; color: var(--navy); text-align: right; min-width: 84px; }
+  .track { height: 12px; border-radius: 999px; background: #EEF2F7; overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 999px; transform-origin: left; animation: grow .9s var(--ease) both; }
+  @keyframes grow { from { transform: scaleX(0); } }
+  .b-billed { background: linear-gradient(90deg, #8DBEEB, #2B86D6); } .b-col { background: linear-gradient(90deg, #6FDDB4, #12A877); }
+  .b-ref { background: linear-gradient(90deg, #F8B4B8, #E5484D); } .b-net { background: linear-gradient(90deg, #5FD0C3, #0EA394); }
+  .ladder li.net .k { color: var(--navy); font-weight: 700; }
+  .fine { margin: 6px 8px 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink-3); }
+  .fine a { color: var(--ink-2); font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; }
+  .fine a:hover { color: var(--violet-ink); }
+  .owed { display: grid; gap: 10px; align-content: start; }
+  .due { position: relative; overflow: hidden; display: block; padding: 16px; border-radius: 18px; background: linear-gradient(150deg, #FFF7E8 0%, #FFE9C2 100%); color: inherit; text-decoration: none; transition: transform .2s var(--ease); }
+  .due:hover { transform: translateY(-2px); }
+  .due::after { content: ''; position: absolute; right: -30px; bottom: -40px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(closest-side, rgba(242,163,58,.25), transparent); }
+  .due .k { font-size: 12.5px; font-weight: 700; color: var(--amber-ink); }
+  .due .v { display: block; margin-top: 4px; font-size: 30px; line-height: 1; font-weight: 800; letter-spacing: -.03em; color: var(--navy); }
+  .due .s { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+  .out h3 { margin: 4px 0 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .out a, .out div.row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px; border-radius: 12px; color: var(--navy); text-decoration: none; font-size: 13.5px; font-weight: 600; transition: background .18s; }
+  .out a:hover { background: #F7F9FC; }
+  .out .amt { margin-left: auto; font-weight: 800; }
+  .out .cnt { min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; }
+
+  /* The clinic floor: one flow from booked to done, with any bottleneck named. */
+  .a-floor { padding: 18px; }
+  .flow { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 0; position: relative; }
+  .flow li { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 54px; }
+  .flow li::before { content: ''; position: absolute; left: 21px; top: 0; bottom: 0; width: 2px; background: linear-gradient(#5FD0C3, #8E73EC); opacity: .45; }
+  .flow li:first-child::before { top: 50%; } .flow li:last-child::before { bottom: 50%; }
+  .node { position: relative; z-index: 1; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: inset 0 0 0 2px var(--c, var(--teal)), 0 6px 14px -10px rgba(15,23,42,.5); font-size: 15px; font-weight: 800; color: var(--navy); }
+  .node.na-node { box-shadow: inset 0 0 0 2px var(--line-strong); color: var(--ink-3); background: repeating-linear-gradient(135deg, #fff 0 4px, #F4F6FA 4px 8px); }
+  .flow .lbl b { display: block; font-size: 13.5px; font-weight: 700; color: var(--navy); }
+  .flow .lbl small { display: block; font-size: 12px; color: var(--ink-3); }
+  @media (min-width: 640px) {
+    .flow { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .flow li { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; gap: 8px; padding-top: 2px; }
+    .flow li::before { left: 0; right: 0; top: 23px; bottom: auto; width: auto; height: 2px; background: linear-gradient(90deg, #5FD0C3, #8E73EC); }
+    .flow li:first-child::before { left: 50%; top: 23px; } .flow li:last-child::before { right: 50%; bottom: auto; }
+    .node { width: 48px; height: 48px; font-size: 16px; }
+  }
+  .bottle { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+  .chip .i { width: 15px; height: 15px; }
+  .people-line { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); }
+  .people-line b { color: var(--navy); }
+
+  /* Guardrails: plan, logins and security — gauges against the plan as it is enforced. */
+  .a-guard { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .plan { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 10px 12px; border-radius: 14px; font-size: 13px; }
+  .plan .i { width: 16px; height: 16px; }
+  .plan.none { background: var(--amber-soft); color: var(--amber-ink); } .plan.ok { background: var(--mint-soft); color: var(--mint-ink); }
+  .gauges { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+  .gauge { display: grid; justify-items: center; gap: 4px; text-align: center; }
+  .gauge svg { width: 72px; height: 72px; transform: rotate(-90deg); }
+  .gauge .tr { fill: none; stroke: #EDF1F7; stroke-width: 7; }
+  .gauge .tr.dash { stroke-dasharray: 3 4; stroke: #D5DBE6; }
+  .gauge .vl { fill: none; stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 1s var(--ease); }
+  .gauge .wrap { position: relative; }
+  .gauge .in { position: absolute; inset: 0; display: grid; place-content: center; font-size: 15px; font-weight: 800; color: var(--navy); }
+  .gauge b { font-size: 12.5px; font-weight: 700; color: var(--navy); }
+  .gauge small { font-size: 11.5px; color: var(--ink-3); line-height: 1.3; }
+  .sec { border-top: 1px solid var(--row); padding-top: 12px; display: grid; gap: 4px; }
+  .sec .row1 { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 700; color: var(--navy); }
+  .sec .row1 .i { width: 18px; height: 18px; }
+  .sec .ok { color: var(--mint-ink); } .sec .bad { color: var(--rose-ink); }
+  .events { list-style: none; margin: 4px 0 0; padding: 0; }
+  .events li { display: flex; align-items: center; gap: 10px; min-height: 34px; font-size: 12.5px; color: var(--ink-2); }
+  .events li .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); flex-shrink: 0; }
+  .events li.alert .dot { background: var(--rose); }
+  .events li .w { flex: 1; min-width: 0; } .events li .w small { color: var(--ink-3); }
+  .events li time { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+  /* Wide screens: the guardrails read as one band — plan, gauges, security — not a tall card. */
+  @media (min-width: 1024px) {
+    .a-guard { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1.1fr); grid-template-areas: "h g s" "p g s"; gap: 12px 24px; align-items: start; }
+    .a-guard > .m-head { grid-area: h; } .a-guard > .plan { grid-area: p; } .a-guard > .gauges { grid-area: g; align-self: center; } .a-guard > .sec { grid-area: s; border-top: 0; border-left: 1px solid var(--row); padding: 0 0 0 20px; }
+    .a-guard > .m-head .soon-t { display: none; }
+  }
+  /* Wide screens: the floor's flow and its bottlenecks share one band. */
+  @media (min-width: 1280px) {
+    .a-floor { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); grid-template-areas: "h h" "f b" "f l"; column-gap: 28px; }
+    .a-floor > .m-head { grid-area: h; } .a-floor > .flow { grid-area: f; } .a-floor > .bottle { grid-area: b; align-self: end; } .a-floor > .people-line { grid-area: l; align-self: start; }
+  }
+
+  /* Branches: each branch's day on the same scale (sent only for a clinic with several). */
+  .a-branches { padding: 18px; }
+  .blist { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+  @media (min-width: 900px) { .blist { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } }
+  .branch { padding: 14px; border-radius: 16px; background: linear-gradient(160deg, #F8FAFE, #F2F5FB); display: grid; gap: 8px; }
+  .branch .n { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-weight: 700; color: var(--navy); }
+  .branch .n span { font-size: 15px; font-weight: 800; }
+  .branch .m { display: grid; grid-template-columns: 92px minmax(0, 1fr) 34px; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+  .branch .m .num { text-align: right; font-weight: 700; color: var(--navy); }
+  .branch .track { height: 8px; }
+
+  /* Go to: one slim dock, not another card grid. */
+  .a-dock { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border-radius: 22px; background: rgba(255,255,255,.8); box-shadow: inset 0 0 0 1px rgba(213,219,230,.8); }
+  .a-dock .lead { padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .go-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); color: var(--navy); font-size: 13px; font-weight: 600; text-decoration: none; transition: transform .18s var(--ease), box-shadow .18s; }
+  a.go-chip:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px var(--violet), 0 8px 16px -12px rgba(107,72,222,.6); color: var(--violet-ink); }
+  .go-chip .i { width: 15px; height: 15px; color: var(--ink-3); }
+  .go-chip.dep { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--row); cursor: not-allowed; }
+  @media (max-width: 479px) { .go-chip .i { display: none; } .go-chip { padding: 0 12px; } }
+
+  .rise { animation: rise .55s var(--ease) both; }
+  .d1 { animation-delay: .04s; } .d2 { animation-delay: .1s; } .d3 { animation-delay: .16s; } .d4 { animation-delay: .22s; } .d5 { animation-delay: .28s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* Design-review foot. */
+  .review { background: #0F172A; color: #fff; padding: 16px; text-align: left; }
+  .review .inner { max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
+  .review p { margin: 0; font-size: 12.5px; font-weight: 600; } .review p span { color: #C9C1FF; font-weight: 500; }
+  .review .switches { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+  .review .switch { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .review .switch button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: #E6E3FF; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .review .switch button[aria-pressed="true"] { background: #fff; color: #0F172A; }
+  .review ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: #D5D9E3; display: grid; gap: 4px; }
+  .review ul b { color: #fff; }
+
+  /* ============================ CONCEPT B · LENSES ============================ */
+  .lenses { position: relative; isolation: isolate; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  .lenses::before { content: ''; position: absolute; z-index: -1; inset: -20px 0 auto 0; height: 520px; pointer-events: none;
+    background: radial-gradient(40% 60% at 15% 10%, rgba(14,163,148,.11), transparent 72%), radial-gradient(40% 60% at 75% 5%, rgba(107,72,222,.10), transparent 72%);
+    -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent); }
+  .lenses > * { min-width: 0; grid-area: auto; }
+  /* One status line, under the greeting: the whole clinic in a sentence. */
+  .statusline { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13.5px; color: var(--ink-2); }
+  .statusline b { color: var(--navy); }
+  .statusline .sep { color: var(--line-strong); }
+
+  .work { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1280px) { .work { grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; } }
+
+  /* The rail: six live lenses. Each shows its headline and its state; one is open in the stage. */
+  .rail { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 768px) { .rail { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+  @media (min-width: 1280px) { .rail { grid-template-columns: minmax(0, 1fr); position: sticky; top: 96px; } }
+  .lens { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic name" "ic val" "st st"; column-gap: 10px; row-gap: 2px; align-items: center; width: 100%; min-height: 44px; padding: 12px; border: 0; border-radius: 18px; background: rgba(255,255,255,.72); box-shadow: inset 0 0 0 1px rgba(213,219,230,.8); text-align: left; font: inherit; color: inherit; cursor: pointer; transition: background .2s, box-shadow .2s, transform .2s var(--ease); }
+  .lens:hover { background: #fff; transform: translateY(-1px); }
+  .lens .lic { grid-area: ic; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; }
+  .lens .lic .i { width: 18px; height: 18px; }
+  .lens .nm { grid-area: name; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+  .lens .vl { grid-area: val; font-size: 19px; line-height: 1.15; font-weight: 800; letter-spacing: -.02em; color: var(--navy); overflow-wrap: anywhere; }
+  @media (max-width: 479px) { .lens .vl { font-size: 16px; } }
+  .lens .st { grid-area: st; margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); line-height: 1.3; }
+  .lens .st .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .lens[aria-selected="true"] { background: #fff; box-shadow: inset 0 0 0 2px var(--lc), 0 16px 32px -22px rgba(30,40,90,.55); }
+  .lens[aria-selected="true"]::after { content: ''; position: absolute; right: 12px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--lc); box-shadow: 0 0 0 4px color-mix(in srgb, var(--lc) 22%, transparent); }
+  @media (min-width: 1280px) {
+    .lens { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic name val" "ic st st"; padding: 14px 16px; }
+    .lens .vl { text-align: right; font-size: 18px; }
+    .lens .st { margin-top: 0; }
+    .lens[aria-selected="true"]::after { right: auto; left: -6px; top: 50%; transform: translateY(-50%); width: 4px; height: 28px; border-radius: 4px; box-shadow: none; }
+  }
+  @media (max-width: 399px) { .lens { padding: 10px; } .lens .vl { font-size: 17px; } .lens .lic { width: 32px; height: 32px; } }
+
+  /* The stage: the open lens, in depth, over its own colour wash. */
+  .stage { position: relative; overflow: hidden; border-radius: 26px; background: #fff; border: 1px solid rgba(213,219,230,.75); box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 24px 48px -32px rgba(30,40,90,.35); padding: 18px; }
+  @media (min-width: 1280px) { .stage { min-height: 450px; } }
+  .stage::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 180px; background: linear-gradient(180deg, var(--sw, rgba(107,72,222,.10)), transparent); pointer-events: none; }
+  .stage > * { position: relative; }
+  @media (min-width: 768px) { .stage { padding: 24px; } }
+  .st-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; }
+  .st-head .eyebrow { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--lc, var(--violet-ink)); }
+  .st-head .eyebrow .i { width: 16px; height: 16px; }
+  .st-head h2 { margin: 6px 0 0; font-size: 24px; line-height: 1.15; font-weight: 800; letter-spacing: -.025em; color: var(--navy); }
+  .st-head p.d { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); }
+  @media (min-width: 768px) { .st-head h2 { font-size: 28px; } }
+  .st-body { margin-top: 18px; animation: rise .45s var(--ease) both; }
+
+  /* Decisions lens: large action rows, each with its own way in. */
+  .acts-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .arow { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "ic tx" "bt bt"; gap: 10px 12px; align-items: center; padding: 14px; border-radius: 18px; background: #F8FAFD; box-shadow: inset 0 0 0 1px #EDF1F7; transition: transform .2s var(--ease), box-shadow .2s; }
+  .arow:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px #E1E7F0, 0 12px 26px -20px rgba(30,40,90,.45); }
+  .arow .aic { grid-area: ic; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; }
+  .arow .aic .i { width: 20px; height: 20px; }
+  .arow .tx { grid-area: tx; min-width: 0; }
+  .arow .tx b { display: block; font-size: 15px; font-weight: 700; color: var(--navy); }
+  .arow .tx small { display: block; font-size: 12.5px; color: var(--ink-3); }
+  .arow .tx .meta { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .arow .bt { grid-area: bt; display: flex; justify-content: flex-end; }
+  .pill { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+  .sevp { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: #EEF1F6; color: var(--ink-2); }
+  .sevp.alert, .sevp.overdue { background: var(--rose-soft); color: var(--rose-ink); }
+  .btn2 { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 0; background: var(--grad-primary); color: #fff; font: 700 13.5px Inter, sans-serif; text-decoration: none; white-space: nowrap; box-shadow: 0 10px 22px -14px rgba(75,70,214,.9); transition: transform .18s var(--ease); }
+  .btn2:hover { transform: translateY(-1px); }
+  .btn2 .i { width: 15px; height: 15px; }
+  .btn2.dep { background: #EEF1F6; color: var(--ink-3); box-shadow: none; cursor: not-allowed; transform: none; }
+  @media (min-width: 640px) { .arow { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic tx bt"; } }
+  .rulenote { margin: 14px 2px 0; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+  .rulenote .i { width: 14px; height: 14px; }
+
+  /* Money lens. */
+  .mgrid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .mgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 22px; } }
+  .mleft { display: grid; gap: 12px; align-content: start; }
+  .collect { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 18px; background: linear-gradient(150deg, #EAFAF3, #D9F3E7); }
+  .collect .ring { width: 84px; height: 84px; }
+  .collect .ring .mid b { font-size: 18px; }
+  .collect p { margin: 0; font-size: 13px; color: var(--ink-2); }
+  .collect p b { display: block; font-size: 22px; font-weight: 800; color: var(--navy); letter-spacing: -.02em; }
+
+  /* Team & access lens, security lens. */
+  .twin { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .twin { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; } }
+  .minis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .mini { border-radius: 16px; background: #F7F9FC; padding: 12px 14px; }
+  .mini .v { font-size: 22px; font-weight: 800; color: var(--navy); }
+  .mini .k { font-size: 12px; color: var(--ink-2); }
+  .gauges.big .gauge svg { width: 88px; height: 88px; }
+  .tl { list-style: none; margin: 0; padding: 0 0 0 4px; }
+  .tl li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 0; font-size: 13.5px; color: var(--navy); }
+  .tl li::before { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: #E6EBF3; }
+  .tl li:first-child::before { top: 16px; } .tl li:last-child::before { bottom: calc(100% - 16px); }
+  .tl li .dot { position: relative; z-index: 1; width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px #fff; }
+  .tl li.alert .dot { background: var(--rose); }
+  .tl li small { display: block; color: var(--ink-3); font-size: 12px; }
+  .tl li time { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+  .tl h3, .twin h3 { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .empty-state { display: grid; gap: 6px; justify-items: start; padding: 18px; border-radius: 18px; background: #F7F9FC; box-shadow: inset 0 0 0 1px #EDF1F7; }
+  .empty-state b { font-size: 15px; color: var(--navy); }
+  .empty-state p { margin: 0; font-size: 13px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0EA394"/><stop offset=".55" stop-color="#2B86D6"/><stop offset="1" stop-color="#6B48DE"/></linearGradient>
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-hour" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 17.5v-11"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+  <symbol id="i-fu" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-buoy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M10 12h4M10 8h4M14 21v-3a2 2 0 0 0-4 0v3"/><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
+  <symbol id="i-steth" viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-userplus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-usersearch" viewBox="0 0 24 24"><circle cx="10" cy="8" r="5"/><path d="M2 21a8 8 0 0 1 10.434-7.62"/><circle cx="18" cy="18" r="3"/><path d="m22 22-1.9-1.9"/></symbol>
+  <symbol id="i-calplus" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8M3 10h18M16 19h6M19 16v6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M9.94 14.06 4 20M14.06 9.94 20 4M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+</defs></svg>
+
+
+<!-- The sidebar as the app renders it for a clinic owner today (ClinicNavigation × ClinicFrontend::AVAILABLE), with the owner's plan line. -->
+<template id="sidebar-tpl">
+  <div class="sidebar">
+    <div class="sb-mark"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav class="sb-nav" aria-label="Main">
+      <div class="sb-sec"><p class="sb-label">Main</p><ul>
+        <li><a class="sb-item current" href="#" aria-current="page"><svg class="i"><use href="#i-dash"/></svg><span class="lbl">Dashboard</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-cal"/></svg><span class="lbl">Appointments</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Patients</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Queue: coming soon"><svg class="i"><use href="#i-hour"/></svg><span class="lbl">Queue</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-receipt"/></svg><span class="lbl">Billing</span></a></li>
+        <li><span class="sb-item soon" aria-disabled="true" title="Reports: coming soon"><svg class="i"><use href="#i-chart"/></svg><span class="lbl">Reports</span><span class="tag">Soon</span></span></li>
+      </ul></div>
+      <div class="sb-sec"><p class="sb-label">Additional</p><ul>
+        <li><span class="sb-item soon" aria-disabled="true" title="Follow-ups: coming soon"><svg class="i"><use href="#i-fu"/></svg><span class="lbl">Follow-ups</span><span class="tag">Soon</span></span></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-bell"/></svg><span class="lbl">Notifications</span></a></li>
+        <li><a class="sb-item" href="#"><svg class="i"><use href="#i-buoy"/></svg><span class="lbl">Support</span></a></li>
+      </ul></div>
+    </nav>
+    <section class="sb-clinic" aria-label="Clinic">
+      <div class="row"><span class="logo"><svg class="i"><use href="#i-building"/></svg></span><div><p class="k">Clinic</p><p class="n" data-f="clinic">Smile Studio (browser test)</p></div></div>
+      <div class="sb-plan"><p class="p" data-f="planName">Plan</p><p class="l" data-f="planLine">No subscription on record</p></div>
+    </section>
+  </div>
+</template>
+
+<div class="app">
+  <aside class="side-col" id="side-col"></aside>
+  <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Navigation">
+    <div class="overlay" data-close></div>
+    <div class="panel" id="drawer-panel"><button class="close" aria-label="Close navigation" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+  </div>
+
+  <div class="col">
+    <header class="topbar">
+      <div class="tb-row">
+        <button class="tb-menu" id="open-menu" aria-label="Open navigation" aria-haspopup="dialog"><svg class="i"><use href="#i-menu"/></svg></button>
+        <span class="tb-word" aria-hidden="true">OralCares</span>
+        <div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search patients, pages, appointments and support…" aria-label="Search"><kbd>Ctrl K</kbd></div>
+        <div class="tb-right">
+          <div class="tb-clock"><p class="d">Fri, 23 Oct 2026</p><p class="t">11:03 am</p></div>
+          <span class="tb-div xl" aria-hidden="true"></span>
+          <div class="tb-pair">
+            <a class="tb-round" href="#" aria-label="Support" title="Support"><svg class="i"><use href="#i-buoy"/></svg></a>
+            <button class="tb-round" aria-label="Notifications"><svg class="i"><use href="#i-bell"/></svg></button>
+          </div>
+          <span class="tb-div md" aria-hidden="true"></span>
+          <div class="tb-account"><span class="av" id="avatar" aria-hidden="true" data-f="initials">PO</span><span class="who"><b data-f="userName">P360 Owner</b><span data-f="userRole">Clinic Owner</span></span><svg class="i chev"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+      <div class="tb-row2"><div class="tb-search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search pages and more…" aria-label="Search"></div></div>
+    </header>
+
+    <main class="main" id="main">
+      <div class="lenses">
+
+        <!-- Where and when, the greeting, the whole clinic in one line, and the actions dock. -->
+        <section class="a-top rise d1" aria-label="Today at the clinic">
+          <div>
+            <p class="meta"><span>Friday, 23 October</span><span class="place" data-f="place">Smile Studio · Main Branch</span><span class="om">Owner Mode on</span><span class="src real" data-f="srcTag">QA snapshot</span></p>
+            <h1>Good morning, <b data-f="firstName">P360</b></h1>
+            <p class="statusline" id="statusline"></p>
+            <p class="mine"><span class="lead"><svg class="i"><use href="#i-steth"/></svg>Your own patients</span><span><b class="num" data-f="mineWaiting">3</b> waiting for you</span><span><b class="num" data-f="mineSeen">5</b> seen</span><span><b class="num" data-f="mineNotes">1</b> note to finish</span><span class="src ph">Placeholder</span><span class="soon-t">Doctor Today · Soon</span></p>
+          </div>
+          <div class="dock-actions" aria-label="Quick actions">
+            <button class="act" type="button"><svg class="i"><use href="#i-userplus"/></svg>New Case</button>
+            <button class="act" type="button"><svg class="i"><use href="#i-usersearch"/></svg>Repeat Case</button>
+            <a class="act" href="#"><svg class="i"><use href="#i-calplus"/></svg>Book</a>
+            <a class="act" href="#"><svg class="i"><use href="#i-receipt"/></svg>Billing</a>
+            <span class="sep" aria-hidden="true"></span>
+            <button class="act tool" type="button" title="Choose what staff dashboards show"><svg class="i"><use href="#i-sliders"/></svg>Staff dashboards</button>
+            <button class="act tool" type="button" aria-label="Refresh figures"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button>
+          </div>
+        </section>
+
+        <!-- The workspace: the rail of lenses and the stage that opens one. -->
+        <div class="work">
+          <div class="rail rise d2" role="tablist" aria-label="Lenses" aria-orientation="vertical" id="rail"></div>
+          <section class="stage rise d3" role="tabpanel" id="stage" aria-live="polite"></section>
+        </div>
+
+        <!-- Go to: the owner's other work, one dock. -->
+        <nav class="a-dock rise d4" aria-label="Go to">
+          <span class="lead">Go to</span>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-users"/></svg>Patients</a>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-cal"/></svg>Appointments</a>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-receipt"/></svg>Bills &amp; collections</a>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-coins"/></svg>Expenses</a>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-chart"/></svg>Financial summary</a>
+          <a class="go-chip" href="#"><svg class="i"><use href="#i-gear"/></svg>Settings</a>
+          <span class="go-chip dep" title="Coming soon">Staff <span class="soon-t">Soon</span></span>
+          <span class="go-chip dep" title="Coming soon">Payroll <span class="soon-t">Soon</span></span>
+          <span class="go-chip dep" title="Coming soon">Approvals <span class="soon-t">Soon</span></span>
+          <span class="go-chip dep" title="Coming soon">Branches <span class="soon-t">Soon</span></span>
+          <span class="go-chip dep" title="Coming soon">Reports <span class="soon-t">Soon</span></span>
+        </nav>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="review" role="note">
+  <div class="inner">
+    <p>Design review · Owner Command Center · Concept B, Lenses <span>· shell copied from the app unchanged · built only from what OwnerCommandCenter sends today</span></p>
+    <div class="switches">
+      <div class="switch" role="group" aria-label="Data shown"><button type="button" data-data="qa" aria-pressed="true">QA snapshot (real)</button><button type="button" data-data="ill" aria-pressed="false">Illustrative (placeholder)</button></div>
+      <div class="switch" role="group" aria-label="Who is signed in"><button type="button" data-who="owner" aria-pressed="true">Owner who does not treat patients</button><button type="button" data-who="doc" aria-pressed="false">Doctor-owner in Owner Mode</button></div>
+    </div>
+    <ul>
+      <li><b>Real (QA snapshot)</b>: every lens headline and stage figure — money, spending, decisions, today's counts, logins and branches against the plan, leave, security and sensitive actions — from the live page for the seeded QA clinic.</li>
+      <li><b>Derived, not new data</b>: collection rate (collected ÷ billed), net collected, the status line, which lens opens first, and the order of the decisions — fixed rules over those figures.</li>
+      <li><b>Not sent yet</b>: completed consultations (clinic-wide), expenses paid out this month. Shown as "not sent yet", never estimated.</li>
+      <li><b>Pages not built</b>: Queue, Staff, Payroll, Approvals (D1), Branches, Reports, Follow-ups, WhatsApp, Doctor Today — shown with counts and "Soon", without links.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // ---------------------------------------------------------------------------
+  // DATA. Two sets in the shapes OwnerCommandCenter sends today.
+  //  qa  — REAL read-model output the live Command Center showed for the seeded
+  //        QA clinic (Smile Studio, browser test) on 23 Oct 2026 at 11:03.
+  //  ill — ILLUSTRATIVE placeholder values in the same shapes. Never real.
+  // `null` means the backend does not send this yet: the page says "unavailable".
+  // ---------------------------------------------------------------------------
+  const DATA = {
+    qa: {
+      src: 'QA snapshot', srcClass: 'real', clinic: 'Smile Studio (browser test)', short: 'Smile Studio', scope: 'Main Branch', multi: false,
+      planName: 'Plan', planLine: 'No subscription on record',
+      today: { appts: 0, patients: 0, waiting: 0, withDoc: 0, completed: null },
+      money: { outstanding: 8300, today: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 }, month: { billed: 15800, col: 7500, ref: 500, disc: 0, adj: 0 } },
+      spend: { dec: [2, 41200], pay: [0, 0], paidMonth: null },
+      decisions: [ { key: 'expenses_to_decide', sev: 'pending', tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 2, amount: 41200, page: 'Expenses', built: true, verb: 'Decide' } ],
+      plan: null,
+      seats: [ { key: 'doctors', label: 'Doctor logins', used: 1, allowed: null }, { key: 'logins', label: 'All logins', used: 5, allowed: null }, { key: 'branches', label: 'Branches', used: 1, allowed: null } ],
+      noLogin: 0, onLeave: 0,
+      security: { failed: 0, items: [ ['Owner Mode entered', null, '23 Oct, 12:43 AM', false], ['Owner Mode entered', null, '22 Oct, 12:39 PM', false] ] },
+      activity: [ ['Refund recorded', null, '23 Oct, 01:36 AM', false] ],
+      branches: [],
+      mine: null,
+    },
+    ill: {
+      src: 'Illustrative', srcClass: 'ph', clinic: 'Smile Studio', short: 'Smile Studio', scope: 'All branches', multi: true,
+      planName: 'Dental Growth', planLine: 'Renews 14 Jan 2027',
+      today: { appts: 46, patients: 38, waiting: 7, withDoc: 4, completed: null },
+      money: { outstanding: 184600, today: { billed: 96400, col: 71250, ref: 2500, disc: 3800, adj: 1200 }, month: { billed: 1842300, col: 1516900, ref: 18400, disc: 61200, adj: 9800 } },
+      spend: { dec: [3, 58900], pay: [2, 22400], paidMonth: null },
+      decisions: [
+        { key: 'long_waits', sev: 'overdue', tone: 'rose', icon: 'hour', primary: 'Long waits', secondary: 'Waiting over 30 min', count: 2, page: 'Queue', built: false, verb: 'See' },
+        { key: 'doctor_overload', sev: 'alert', tone: 'rose', icon: 'steth', primary: 'Doctors with a long queue', secondary: '5 or more waiting', count: 1, page: 'Queue', built: false, verb: 'Rebalance' },
+        { key: 'expenses_to_decide', sev: 'pending', tone: 'amber', icon: 'coins', primary: 'Expenses to decide', secondary: 'Recorded, waiting for an approver', count: 3, amount: 58900, page: 'Expenses', built: true, verb: 'Decide' },
+        { key: 'expenses_to_pay', sev: 'pending', tone: 'blue', icon: 'wallet', primary: 'Expenses to pay', secondary: 'Approved, not yet paid', count: 2, amount: 22400, page: 'Expenses', built: true, verb: 'Pay' },
+        { key: 'approvals', sev: 'pending', tone: 'violet', icon: 'shield', primary: 'Approvals waiting', secondary: 'Requests that need your decision', count: 1, page: 'Approvals', built: false, verb: 'Review' },
+        { key: 'payroll_to_finalise', sev: 'pending', tone: 'violet', icon: 'bank', primary: 'Payroll to finalise', secondary: 'A month is open, not yet finalised', count: 1, page: 'Payroll', built: false, verb: 'Finalise' },
+        { key: 'messages_failed', sev: 'overdue', tone: 'rose', icon: 'msg', primary: 'Messages not delivered', secondary: 'WhatsApp, last 7 days', count: 4, page: 'WhatsApp', built: false, verb: 'Check' },
+      ],
+      plan: { name: 'Dental Growth', status: 'Active', ends: '14 Jan 2027' },
+      seats: [ { key: 'doctors', label: 'Doctor logins', used: 6, allowed: 8 }, { key: 'staff', label: 'Staff logins', used: 11, allowed: 12 }, { key: 'logins', label: 'All logins', used: 17, allowed: 20 }, { key: 'branches', label: 'Branches', used: 3, allowed: 3 } ],
+      noLogin: 2, onLeave: 1,
+      security: { failed: 2, items: [ ['Wrong password at sign-in', null, '23 Oct, 09:12 AM', true], ['Owner Mode: wrong password', null, '22 Oct, 06:40 PM', true], ['Owner Mode entered', null, '22 Oct, 06:41 PM', false] ] },
+      activity: [ ['Refund recorded', 'Meena (Billing)', '23 Oct, 10:20 AM', false], ['Expense approved', 'Ravi Kapoor', '22 Oct, 05:02 PM', false], ['Staff roles changed', 'Ravi Kapoor', '21 Oct, 11:45 AM', false] ],
+      branches: [ { name: 'Indiranagar', appts: 21, visits: 18, col: 38400 }, { name: 'Koramangala', appts: 16, visits: 13, col: 24850 }, { name: 'Whitefield', appts: 9, visits: 7, col: 8000 } ],
+      mine: { waiting: 3, seen: 5, notes: 1 },
+    },
+  };
+  const WHO = {
+    owner: { qa: ['P360 Owner', 'PO', 'Clinic Owner', 'P360'], ill: ['Ravi Kapoor', 'RK', 'Clinic Owner', 'Ravi'] },
+    doc: { qa: ['P360 Owner', 'PO', 'Clinic Owner · Owner Mode', 'P360'], ill: ['Dr. Anil Kapoor', 'AK', 'Clinic Owner · Owner Mode', 'Dr. Kapoor'] },
+  };
+  // The one fixed ranking used for "what needs you first": alert, then overdue, then pending; then the larger count.
+  // A deterministic rule over live counts — not AI, not a recommendation engine.
+  const SEVERITY = { alert: 0, overdue: 1, pending: 2 };
+  const ranked = (items) => [...items].sort((a, b) => (SEVERITY[a.sev] - SEVERITY[b.sev]) || (b.count - a.count));
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  // How each open item reads as an action, from its key and count.
+  const ACT = {
+    expenses_to_decide: (n) => `Decide ${plural(n, 'expense', 'expenses')}`,
+    expenses_to_pay: (n) => `Pay ${plural(n, 'approved expense', 'approved expenses')}`,
+    long_waits: (n) => `See ${plural(n, 'long wait', 'long waits')}`,
+    unassigned: (n) => `Assign ${plural(n, 'waiting patient', 'waiting patients')}`,
+    doctor_overload: (n) => `Rebalance ${plural(n, 'doctor queue', 'doctor queues')}`,
+    approvals: (n) => `Review ${plural(n, 'approval request', 'approval requests')}`,
+    payroll_to_finalise: (n) => `Finalise ${plural(n, 'payroll month', 'payroll months')}`,
+    messages_failed: (n) => `Check ${plural(n, 'undelivered message', 'undelivered messages')}`,
+  };
+  const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const set = (k, v) => document.querySelectorAll(`[data-f="${k}"]`).forEach((el) => { el.textContent = v; });
+  const state = { data: location.hash.includes('illustrative') ? 'ill' : 'qa', who: location.hash.includes('doctor-owner') ? 'doc' : 'owner' };
+
+  // Mockup only: place the sidebar (desktop column and the phone/tablet drawer), as the shell does.
+  const tpl = document.getElementById('sidebar-tpl');
+  document.getElementById('side-col').appendChild(tpl.content.cloneNode(true));
+  document.getElementById('drawer-panel').prepend(tpl.content.cloneNode(true));
+  const drawer = document.getElementById('drawer');
+  document.getElementById('open-menu').addEventListener('click', () => drawer.classList.add('open'));
+  drawer.querySelectorAll('[data-close]').forEach((el) => el.addEventListener('click', () => drawer.classList.remove('open')));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') drawer.classList.remove('open'); });
+
+  function renderShell(d) {
+    const [userName, initials, role, first] = WHO[state.who][state.data];
+    document.body.classList.toggle('multi', d.multi);
+    document.body.classList.toggle('doc-owner', state.who === 'doc');
+    document.getElementById('avatar').classList.toggle('ring', state.who === 'doc');
+    set('clinic', d.clinic); set('planName', d.planName); set('planLine', d.planLine);
+    set('userName', userName); set('initials', initials); set('userRole', role); set('firstName', first);
+    document.querySelectorAll('[data-f="srcTag"]').forEach((tag) => { tag.textContent = d.src; tag.className = `src ${d.srcClass}`; });
+    document.querySelectorAll('.review [data-data]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.data === state.data)));
+    document.querySelectorAll('.review [data-who]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.who === state.who)));
+  }
+  function wireReview(render) {
+    document.querySelectorAll('.review [data-data]').forEach((b) => b.addEventListener('click', () => { state.data = b.dataset.data; render(); }));
+    document.querySelectorAll('.review [data-who]').forEach((b) => b.addEventListener('click', () => { state.who = b.dataset.who; render(); }));
+  }
+  function lockUnbuilt() {
+    document.querySelectorAll('.dep, [aria-disabled="true"]').forEach((el) => { el.setAttribute('tabindex', '-1'); el.setAttribute('aria-disabled', 'true'); });
+  }
+  let period = 'month';
+  const C = 263.9;
+  const hashLens = (location.hash.match(/lens=(\w+)/) || [])[1];
+  let lens = hashLens || null;
+
+  const LENSES = [
+    { key: 'decisions', name: 'Decisions', icon: 'target', color: '#6B48DE', soft: 'var(--violet-soft)', ink: 'var(--violet-ink)', wash: 'rgba(107,72,222,.10)' },
+    { key: 'money', name: 'Money', icon: 'wallet', color: '#D98A1C', soft: 'var(--amber-soft)', ink: 'var(--amber-ink)', wash: 'rgba(242,163,58,.13)' },
+    { key: 'today', name: 'Today', icon: 'flow', color: '#0EA394', soft: 'var(--teal-soft)', ink: 'var(--teal-ink)', wash: 'rgba(14,163,148,.11)' },
+    { key: 'team', name: 'Team & access', icon: 'key', color: '#2B86D6', soft: 'var(--blue-soft)', ink: 'var(--blue-ink)', wash: 'rgba(43,134,214,.11)' },
+    { key: 'branches', name: 'Branches', icon: 'branch', color: '#12A877', soft: 'var(--mint-soft)', ink: 'var(--mint-ink)', wash: 'rgba(18,168,119,.10)' },
+    { key: 'security', name: 'Security', icon: 'shield', color: '#E5484D', soft: 'var(--rose-soft)', ink: 'var(--rose-ink)', wash: 'rgba(229,72,77,.08)' },
+  ];
+
+  function headline(d, key) {
+    const items = ranked(d.decisions); const n = items.reduce((s, x) => s + x.count, 0);
+    const mon = d.money.month; const rate = mon.billed ? Math.round((mon.col / mon.billed) * 100) : 0;
+    const full = d.seats.filter((s) => s.allowed !== null && s.used / s.allowed >= .85);
+    switch (key) {
+      case 'decisions': return n ? [`${n} waiting`, items.some((x) => x.sev !== 'pending') ? 'rose' : 'violet', items.some((x) => x.sev !== 'pending') ? 'Some are overdue' : 'Needs you'] : ['All clear', 'mint', 'Nothing waits on you'];
+      case 'money': return [`${inr(d.money.outstanding)} due`, 'amber', `${rate}% of this month collected`];
+      case 'today': return [`${d.today.patients} checked in`, 'teal', `${d.today.waiting} waiting · ${d.today.withDoc} with a doctor`];
+      case 'team': return [`${d.seats.find((s) => s.key === 'logins').used} logins`, d.plan ? (full.length ? 'amber' : 'mint') : 'amber', d.plan ? (full.length ? `${full.length} limit${full.length === 1 ? '' : 's'} nearly full` : 'Within the plan') : 'No plan on record'];
+      case 'branches': return d.branches.length > 1 ? [`${d.branches.length} branches`, 'mint', `${d.branches[0].name} leads today`] : ['1 branch', 'grey', 'Comparison needs two or more'];
+      case 'security': return [d.security.failed ? `${d.security.failed} failed` : 'No failures', d.security.failed ? 'rose' : 'mint', `${d.activity.length} sensitive action${d.activity.length === 1 ? '' : 's'} this week`];
+    }
+  }
+  const DOT = { rose: 'var(--rose)', violet: 'var(--violet)', amber: '#F2A33A', teal: 'var(--teal)', mint: 'var(--mint)', grey: 'var(--line-strong)' };
+
+  function stageHtml(d, key) {
+    const L = LENSES.find((l) => l.key === key);
+    const head = (title, desc, right = '') => `<div class="st-head"><div><p class="eyebrow"><svg class="i"><use href="#i-${L.icon}"/></svg>${L.name}</p><h2>${title}</h2><p class="d">${desc}</p></div>${right}</div>`;
+    const items = ranked(d.decisions);
+    if (key === 'decisions') {
+      const total = items.reduce((s, x) => s + x.count, 0);
+      if (!total) return head('You\'re clear', 'Nothing waits on a decision right now.') + '<div class="st-body"><div class="empty-state"><b>Nothing to decide</b><p>New expenses, approvals, payroll and queue problems appear here as they happen.</p></div></div>';
+      return head(`${plural(total, 'thing waits', 'things wait')} on you`, 'Most urgent first: alerts, then overdue, then pending.')
+        + `<div class="st-body"><ul class="acts-list">${items.map((x) => `<li class="arow"><span class="aic t-${x.tone}"><svg class="i"><use href="#i-${x.icon}"/></svg></span><span class="tx"><b>${esc(ACT[x.key](x.count))}</b><small>${esc(x.secondary)}${x.amount ? ` · ${inr(x.amount)}` : ''}</small><span class="meta"><span class="sevp ${x.sev}">${x.sev}</span></span></span><span class="bt">${x.built ? `<a class="btn2" href="#">Open ${esc(x.page.toLowerCase())}<svg class="i"><use href="#i-arrow"/></svg></a>` : `<span class="btn2 dep" aria-disabled="true" title="Coming soon: the ${esc(x.page)} page">${esc(x.page)} · Soon</span>`}</span></li>`).join('')}</ul>
+          <p class="rulenote"><svg class="i"><use href="#i-info"/></svg>Ranked by a fixed rule over live counts — not AI. Items appear only for what you may decide.</p></div>`;
+    }
+    if (key === 'money') {
+      const m = d.money; const p = m[period]; const mon = m.month; const rate = mon.billed ? Math.round((mon.col / mon.billed) * 100) : 0; const scale = Math.max(1, p.billed);
+      const rung = (k, v, cls, link, net) => `<li class="${net ? 'net' : ''}">${link ? '<a href="#">' : '<div>'}<span class="k">${k}</span><span class="track"><i class="${cls}" style="width:${Math.max(v ? 1.5 : 0, (v / scale) * 100)}%"></i></span><span class="v num">${inr(v)}</span>${link ? '</a>' : '</div>'}</li>`;
+      return head(`${inr(m.outstanding)} outstanding`, `Billing at ${esc(d.scope)} · every amount opens its list`, `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px"><div class="seg" role="group" aria-label="Period"><button type="button" data-period="today" aria-pressed="${period === 'today'}">Today</button><button type="button" data-period="month" aria-pressed="${period === 'month'}">This month</button></div><a class="more" href="#">Financial summary<svg class="i"><use href="#i-arrow"/></svg></a></div>`)
+        + `<div class="st-body"><div class="mgrid"><div class="mleft">
+            <a class="due" href="#"><span class="k">Outstanding now</span><span class="v num">${inr(m.outstanding)}</span><span class="s">Still due on open bills, all dates</span></a>
+            <div class="collect"><div class="ring" role="img" aria-label="${rate}% of this month's billing collected"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="val" cx="50" cy="50" r="42" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - rate / 100)}"/></svg><span class="mid"><b class="num">${rate}%</b></span></div><p><b class="num">${inr(mon.col)}</b>collected of ${inr(mon.billed)} billed this month</p></div>
+          </div><div>
+            <ul class="ladder">${rung('Billed', p.billed, 'b-billed', true) + rung('Collected', p.col, 'b-col', true) + rung('Refunded', p.ref, 'b-ref', true) + rung('Net collected', p.col - p.ref, 'b-net', false, true)}</ul>
+            <p class="fine"><a href="#">Adjusted ${inr(p.adj)}</a><span style="display:inline-flex;align-items:center;min-height:44px">Discounts ${inr(p.disc)}</span></p>
+            <div class="out"><h3>Waiting to go out</h3>
+              <a href="#"><span class="cnt t-amber num">${d.spend.dec[0]}</span>Expenses to decide<span class="amt num">${inr(d.spend.dec[1])}</span></a>
+              <a href="#"><span class="cnt t-blue num">${d.spend.pay[0]}</span>Approved, to pay<span class="amt num">${inr(d.spend.pay[1])}</span></a>
+              <div class="row"><span class="na"><svg class="i"><use href="#i-info"/></svg>Paid out this month · not sent yet</span></div></div>
+          </div></div></div>`;
+    }
+    if (key === 'today') {
+      const t = d.today;
+      const node = (n, label, sub, color) => `<li><span class="node${n === null ? ' na-node' : ''}" style="--c:${color}">${n === null ? '–' : n}</span><span class="lbl"><b>${label}</b><small>${sub}</small></span></li>`;
+      const queue = items.filter((x) => ['long_waits', 'unassigned', 'doctor_overload'].includes(x.key));
+      return head(t.patients ? `${t.patients} patients through the door` : 'A quiet start so far', `Right now at ${esc(d.scope)}`, '<span class="soon-t">Queue page · Soon</span>')
+        + `<div class="st-body"><ol class="flow">${node(t.appts, 'Booked', 'appointments today', '#2B86D6') + node(t.patients, 'Checked in', 'patients today', '#0EA394') + node(t.waiting, 'Waiting', 'in the queue', '#12A877') + node(t.withDoc, 'With a doctor', 'in consultation', '#6B48DE') + node(t.completed, 'Completed', 'not sent yet', '#D5DBE6')}</ol>
+          <div class="bottle">${queue.length ? queue.map((x) => `<span class="chip t-${x.tone}"><svg class="i"><use href="#i-alert"/></svg>${x.count} · ${esc(x.primary.toLowerCase())}</span>`).join('') : '<span class="chip" style="background:var(--mint-soft);color:var(--mint-ink)"><svg class="i"><use href="#i-check"/></svg>No queue bottlenecks right now</span>'}</div>
+          <p class="people-line"><span><b class="num">${d.onLeave}</b> on leave today</span><span><b class="num">${d.noLogin}</b> staff profiles without a login</span></p></div>`;
+    }
+    if (key === 'team') {
+      const G = 2 * Math.PI * 30;
+      const gauges = d.seats.map((s) => { const has = s.allowed !== null; const pct = has ? Math.min(1, s.used / s.allowed) : 0; const color = !has ? '#D5DBE6' : pct >= 1 ? '#E5484D' : pct >= .85 ? '#F2A33A' : 'url(#ringGrad)';
+        return `<li class="gauge"><span class="wrap" role="img" aria-label="${esc(s.label)}: ${s.used}${has ? ` of ${s.allowed}` : ' in use, no limit on record'}"><svg viewBox="0 0 72 72"><circle class="tr${has ? '' : ' dash'}" cx="36" cy="36" r="30"/>${has ? `<circle class="vl" cx="36" cy="36" r="30" stroke="${color}" stroke-dasharray="${G}" stroke-dashoffset="${G * (1 - pct)}"/>` : ''}</svg><span class="in num">${s.used}</span></span><b>${esc(s.label)}</b><small>${has ? `of ${s.allowed}${pct >= 1 ? ' · full' : pct >= .85 ? ' · nearly full' : ''}` : 'no limit on record'}</small></li>`; }).join('');
+      const fullSeat = d.seats.some((s) => s.allowed !== null && s.used >= s.allowed);
+      const nearSeat = d.seats.some((s) => s.allowed !== null && s.used / s.allowed >= .85);
+      return head(d.plan ? `${esc(d.plan.name)}: ${fullSeat ? 'a limit is full' : nearSeat ? 'nearly at a limit' : 'within limits'}` : 'No plan on record', 'Logins counted as the plan enforces them', '<span class="soon-t">Staff · Soon</span>')
+        + `<div class="st-body" style="display:grid;gap:16px"><div class="plan ${d.plan ? 'ok' : 'none'}">${d.plan ? `<svg class="i"><use href="#i-check"/></svg><b>${esc(d.plan.name)}</b> · ${esc(d.plan.status)} · renews ${esc(d.plan.ends)}` : '<svg class="i"><use href="#i-alert"/></svg><b>No active plan on record</b> · limits can\'t be checked until OralCares records your plan'}</div>
+          <ul class="gauges big">${gauges}</ul>
+          <div class="minis"><div class="mini"><div class="v num">${d.noLogin}</div><div class="k">Staff profiles without a login (never a seat)</div></div><div class="mini"><div class="v num">${d.onLeave}</div><div class="k">On approved leave today</div></div></div></div>`;
+    }
+    if (key === 'branches') {
+      if (d.branches.length < 2) return head('One branch', 'Branch comparison appears when the clinic has two or more.', '<span class="soon-t">Branch pages · Soon</span>') + `<div class="st-body"><div class="empty-state"><b>${esc(d.scope)} is your only branch</b><p>Its day is in the Today and Money lenses. Adding a branch is a Branches-page task (not built yet) within your plan's branch limit.</p></div></div>`;
+      const maxA = Math.max(1, ...d.branches.map((b) => b.appts)); const maxC = Math.max(1, ...d.branches.map((b) => b.col));
+      return head(`${esc(d.branches[0].name)} leads today`, 'Each branch\'s day on the same scale', '<span class="soon-t">Branch pages · Soon</span>')
+        + `<div class="st-body"><ul class="blist" style="grid-template-columns:minmax(0,1fr)">${d.branches.map((b) => `<li class="branch"><span class="n">${esc(b.name)}<span class="num">${inr(b.col)}</span></span>
+          <span class="m">Appointments<span class="track"><i class="b-billed" style="width:${(b.appts / maxA) * 100}%"></i></span><span class="num">${b.appts}</span></span>
+          <span class="m">Visits<span class="track"><i class="b-net" style="width:${(b.visits / maxA) * 100}%"></i></span><span class="num">${b.visits}</span></span>
+          <span class="m">Collected<span class="track"><i class="b-col" style="width:${(b.col / maxC) * 100}%"></i></span><span class="num"></span></span></li>`).join('')}</ul></div>`;
+    }
+    if (key === 'security') {
+      const tl = (list) => list.map(([p1, who, time, alert]) => `<li class="${alert ? 'alert' : ''}"><span class="dot"></span><span>${esc(p1)}${who ? `<small>${esc(who)}</small>` : ''}</span><time>${esc(time)}</time></li>`).join('');
+      return head(d.security.failed ? `${plural(d.security.failed, 'failed check', 'failed checks')} this week` : 'No failed checks this week', 'Sign-in and Owner Mode checks, and money, access and governance changes — last 7 days')
+        + `<div class="st-body"><div class="twin"><div><h3>Sign-in and Owner Mode</h3><ul class="tl">${tl(d.security.items)}</ul></div><div><h3>Sensitive actions</h3><ul class="tl">${tl(d.activity)}</ul></div></div></div>`;
+    }
+  }
+
+  function render() {
+    const d = DATA[state.data];
+    renderShell(d);
+    set('place', `${d.short} · ${d.scope}`);
+    if (d.mine) { set('mineWaiting', d.mine.waiting); set('mineSeen', d.mine.seen); set('mineNotes', d.mine.notes); }
+    const items = ranked(d.decisions); const n = items.reduce((s, x) => s + x.count, 0);
+    const mon = d.money.month; const rate = mon.billed ? Math.round((mon.col / mon.billed) * 100) : 0;
+    document.getElementById('statusline').innerHTML = `<span><b>${inr(d.money.outstanding)}</b> outstanding</span><span class="sep">·</span><span><b>${rate}%</b> of this month collected</span><span class="sep">·</span><span><b>${n}</b> ${n === 1 ? 'decision' : 'decisions'} waiting</span><span class="sep">·</span><span><b>${d.today.patients}</b> checked in today</span>`;
+    // Which lens opens: the one asked for, else Decisions when anything waits, else Today.
+    const open = lens || (n ? 'decisions' : 'today');
+    document.getElementById('rail').innerHTML = LENSES.map((L) => {
+      const [val, tone, line] = headline(d, L.key);
+      return `<button type="button" class="lens" role="tab" id="tab-${L.key}" aria-controls="stage" aria-selected="${L.key === open}" data-lens="${L.key}" style="--lc:${L.color}"><span class="lic" style="background:${L.soft};color:${L.ink}"><svg class="i"><use href="#i-${L.icon}"/></svg></span><span class="nm">${L.name}</span><span class="vl num">${esc(val)}</span><span class="st"><span class="dot" style="background:${DOT[tone]}"></span>${esc(line)}</span></button>`;
+    }).join('');
+    const L = LENSES.find((l) => l.key === open);
+    const stage = document.getElementById('stage');
+    stage.style.setProperty('--lc', L.color); stage.style.setProperty('--sw', L.wash);
+    stage.setAttribute('aria-labelledby', `tab-${open}`);
+    stage.innerHTML = stageHtml(d, open);
+    document.querySelectorAll('[data-lens]').forEach((b) => b.addEventListener('click', () => { lens = b.dataset.lens; render(); }));
+    document.querySelectorAll('[data-period]').forEach((b) => b.addEventListener('click', () => { period = b.dataset.period; render(); }));
+    lockUnbuilt();
+  }
+  wireReview(render);
+  render();
+</script>
+</body>
+</html>

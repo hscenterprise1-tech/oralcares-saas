@@ -1,112 +1,157 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { ArrowLeft, ShieldAlert, Stethoscope, UserPlus, UserRound } from 'lucide-react';
-import { ChoiceChips, duplicateOverrideProblem, Field, humanize, Notice, Select } from '@/clinic';
+import { ArrowLeft, UserPlus } from 'lucide-react';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
-import { useIntake } from '@/clinic/shell/IntakeContext';
 import { Button, ButtonLink } from '@/clinic/ui/Button';
-import { Card } from '@/clinic/ui/Card';
+import { Notice } from '@/clinic/ui/Notice';
 import { PageHeader } from '@/clinic/ui/PageHeader';
 import {
-  DuplicateSuggestions,
-  EMPTY_PATIENT,
-  forModule,
-  MedicalSafetyFields,
-  MoreDetailsFields,
-  moreFields,
-  NO_OVERRIDE,
-  overridePayload,
-  PatientIdentityFields,
-  patientPayload,
   requestKey,
-  required,
-  shown,
-  showsSafety,
+  validPhone,
   useDuplicateSuggestions,
-  validatePatient,
-  type DuplicateOverrideState,
-  type PatientErrors,
-  type PatientForm,
-  type RegistrationConfig,
 } from '@/pages/Clinic/Reception/intake/PatientFields';
 import type { DuplicateMatch, PractitionerOption, SpecialtyOption } from './registration/types';
+import { PersonalInfoSection, type PersonalInfoData } from './components/form/PersonalInfoSection';
+import { ContactInfoSection, type ContactInfoData } from './components/form/ContactInfoSection';
+import { MedicalHistorySection, type MedicalHistoryData, type MedicalChoice } from './components/form/MedicalHistorySection';
+import { ModuleSpecificSection, type ModuleSpecificData } from './components/form/ModuleSpecificSection';
+import { DocumentsSection, type PendingDocument } from './components/form/DocumentsSection';
+import { RegistrationSummaryPanel } from './components/form/RegistrationSummaryPanel';
+
+interface RegistrationConfig {
+  fields: Record<string, { state: 'required' | 'optional' | 'hidden'; order?: number; label?: string; help?: string }>;
+  catalogue: {
+    conditions: { key: string; name: string; category?: string | null }[];
+    allergies: { key: string; name: string }[];
+    medications: { key: string; name: string }[];
+    alerts?: { key: string; name: string }[];
+  };
+  quick_care: { allergy_status: string };
+  can: { record_clinical: boolean };
+}
 
 interface CreateProps {
   practitioners: PractitionerOption[];
   specialties: SpecialtyOption[];
   branch: { id: number; name: string } | null;
-  /** The shared registration fields' configuration (`PatientController::registrationForm`). */
   form: RegistrationConfig | null;
   links: { index: string };
 }
 
-/**
- * Patients → Add patient: the full registration form, for a clinic admin or
- * anyone registering away from the front desk (the desk itself uses the New
- * Case popup). The same fields, rules and duplicate review as New Case
- * (`PatientFields`), laid out on a page; no visit is created here.
- *
- * Saving is an ordinary Inertia form post with a request key made when the
- * page opened, so a double click or a resubmitted form registers once
- * (`IntakeSubmissions::onceRedirect`). Leaving with unsaved work asks first.
- */
 export default function PatientsCreate(props: CreateProps) {
   return (
-    <ClinicPortalShell title="Add patient">
-      <Registration {...props} />
+    <ClinicPortalShell title="Add Patient">
+      <RegistrationForm {...props} />
     </ClinicPortalShell>
   );
 }
 
-/** The server's field names that are not the form's own. */
-function patientErrorsFrom(errors: Record<string, string>): PatientErrors {
-  return { ...errors, conditions: errors.medical_conditions ?? errors['medical_conditions.0'], allergies: errors.allergies ?? errors['allergies.0'] } as PatientErrors;
-}
-
-function Registration({ practitioners, specialties, branch, form, links }: CreateProps) {
+function RegistrationForm({ practitioners, specialties, branch, form, links }: CreateProps) {
   const page = usePage<{ flash?: { possible_duplicates?: DuplicateMatch[] | null } }>();
-  const intake = useIntake();
-  const [data, setData] = useState<PatientForm>(EMPTY_PATIENT);
-  const [specialty, setSpecialty] = useState(specialties.length === 1 ? specialties[0].key : '');
-  const [doctorId, setDoctorId] = useState('');
-  const [doctorError, setDoctorError] = useState<string | null>(null);
-  const [errors, setErrors] = useState<PatientErrors>({});
+
+  // 1. Personal Information State
+  const [personal, setPersonal] = useState<PersonalInfoData>({
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    gender: 'female',
+    date_of_birth: '',
+    dob_unknown: false,
+    age: '',
+    blood_group: '',
+  });
+
+  // 2. Contact Information State
+  const [contact, setContact] = useState<ContactInfoData>({
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+  });
+
+  // 3. Medical History State
+  const [medical, setMedical] = useState<MedicalHistoryData>({
+    conditions: [],
+    allergies: [],
+    allergy_none: false,
+    medications: [],
+    medical_notes: '',
+  });
+
+  // 4. Module-Specific State
+  const [moduleData, setModuleData] = useState<ModuleSpecificData>({
+    dental_history: '',
+    dental_treatments: [],
+    physio_pain_area: '',
+    physio_pain_duration: '',
+    physio_mobility_limitation: '',
+    physio_notes: '',
+  });
+
+  // 5. Document Attachments
+  const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([]);
+
+  // Duplicate Override State
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideReasonError, setOverrideReasonError] = useState<string | undefined>();
+
+  // Validation & Form Error States
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [override, setOverride] = useState<DuplicateOverrideState>(NO_OVERRIDE);
   const [saving, setSaving] = useState(false);
   const key = useRef(requestKey());
   const leaving = useRef(false);
 
-  const [matches, setMatches] = useDuplicateSuggestions(data, form !== null);
+  // Debounced duplicate detection
+  const duplicateInput = {
+    phone: contact.phone,
+    first_name: personal.first_name,
+    last_name: personal.last_name,
+    date_of_birth: personal.dob_unknown ? '' : personal.date_of_birth,
+    dob_unknown: personal.dob_unknown,
+  };
+  const [matches, setMatches] = useDuplicateSuggestions(duplicateInput as any, true);
 
-  // The server's own duplicate check, when it stopped a save the live check had not.
+  // Server-flashed duplicate override
   const flashed = page.props.flash?.possible_duplicates;
   useEffect(() => {
     if (flashed && flashed.length > 0) {
       setMatches(flashed);
     }
   }, [flashed, setMatches]);
+
   useEffect(() => {
     if (matches.length === 0) {
-      setOverride(NO_OVERRIDE);
+      setOverrideConfirmed(false);
+      setOverrideReason('');
+      setOverrideReasonError(undefined);
     }
   }, [matches.length]);
 
-  const dirty = JSON.stringify(data) !== JSON.stringify(EMPTY_PATIENT);
+  // Unsaved changes prompt
+  const isDirty = Boolean(
+    personal.first_name ||
+      personal.last_name ||
+      contact.phone ||
+      contact.email ||
+      contact.address ||
+      medical.conditions.length > 0 ||
+      pendingDocs.length > 0,
+  );
 
-  // Leaving with unsaved work asks first: another page in the portal, or closing the tab.
   useEffect(() => {
-    if (!dirty) {
-      return;
-    }
+    if (!isDirty) return;
+
     const removeBefore = router.on('before', (event) => {
-      if (leaving.current || event.detail.visit.method !== 'get') {
-        return;
-      }
+      if (leaving.current || event.detail.visit.method !== 'get') return;
       if (!window.confirm('Leave without registering this patient? What you entered will be lost.')) {
         event.preventDefault();
       }
     });
+
     const onUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
@@ -116,218 +161,359 @@ function Registration({ practitioners, specialties, branch, form, links }: Creat
       removeBefore();
       window.removeEventListener('beforeunload', onUnload);
     };
-  }, [dirty]);
+  }, [isDirty]);
 
-  const setField = useCallback(<K extends keyof PatientForm>(field: K, value: PatientForm[K]) => {
-    setData((current) => ({ ...current, [field]: value }));
-    setErrors((current) => (field in current || current.form ? { ...current, [field]: undefined, form: undefined } : current));
-  }, []);
+  const setPersonalField = useCallback(
+    <K extends keyof PersonalInfoData>(field: K, value: PersonalInfoData[K]) => {
+      setPersonal((prev) => ({ ...prev, [field]: value }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
+    },
+    [],
+  );
 
-  if (!form) {
-    return <Notice tone="warning">Choose a clinic before registering a patient.</Notice>;
-  }
+  const setContactField = useCallback(
+    <K extends keyof ContactInfoData>(field: K, value: ContactInfoData[K]) => {
+      setContact((prev) => ({ ...prev, [field]: value }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
+    },
+    [],
+  );
 
-  const specialtyLabel = (value: string) => specialties.find((option) => option.key === value)?.label ?? humanize(value);
-  const doctors = practitioners.filter((doctor) => !specialty || !doctor.specialty || doctor.specialty === specialty);
+  const setMedicalField = useCallback(
+    <K extends keyof MedicalHistoryData>(field: K, value: MedicalHistoryData[K]) => {
+      setMedical((prev) => ({ ...prev, [field]: value }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
+    },
+    [],
+  );
 
-  const reveal = () =>
+  const setModuleField = useCallback(
+    <K extends keyof ModuleSpecificData>(field: K, value: ModuleSpecificData[K]) => {
+      setModuleData((prev) => ({ ...prev, [field]: value }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
+    },
+    [],
+  );
+
+  const handleAddPendingDocs = (docs: PendingDocument[]) => {
+    setPendingDocs((prev) => [...prev, ...docs]);
+  };
+
+  const handleRemovePendingDoc = (id: string) => {
+    setPendingDocs((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  // Scroll to first error
+  const scrollToError = () => {
     window.requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>('main [aria-invalid="true"], main [role=alert], main [id$="-duplicate-heading"]');
+      const target = document.querySelector<HTMLElement>('main [aria-invalid="true"], main [role=alert]');
       target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       if (target?.matches('input, select, textarea')) {
         target.focus();
       }
     });
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (saving) {
-      return;
-    }
-    setFormError(null);
-    // The settings as they apply to the chosen module (the server applies the same).
-    const found = validatePatient(forModule(form, specialty), data);
-    const doctorProblem = shown(form, 'doctor_id') && required(form, 'doctor_id') && doctorId === '' ? 'Choose the assigned doctor.' : null;
-    setDoctorError(doctorProblem);
-    if (matches.length > 0) {
-      if (!override.open) {
-        found.form = 'A possible existing patient was found. Check the matches, or confirm this is a different person.';
-      } else {
-        const problem = duplicateOverrideProblem(override.confirmed, override.reason);
-        if (problem) {
-          found.duplicate_reason = problem;
-        }
-      }
-    }
-    setErrors(found);
-    if (Object.values(found).some(Boolean) || doctorProblem) {
-      reveal();
-
-      return;
-    }
-
-    router.post(
-      route('clinic.patients.store'),
-      {
-        surface: 'full_page',
-        idempotency_key: key.current,
-        ...patientPayload(forModule(form, specialty), data),
-        specialties: specialty ? [specialty] : [],
-        doctor_id: shown(form, 'doctor_id') && doctorId ? Number(doctorId) : null,
-        ...overridePayload(matches, override),
-      } as never,
-      {
-        preserveScroll: true,
-        onStart: () => {
-          setSaving(true);
-          leaving.current = true;
-        },
-        onFinish: () => {
-          setSaving(false);
-          leaving.current = false;
-        },
-        onError: (serverErrors) => {
-          const fieldErrors = serverErrors as Record<string, string>;
-          setErrors({ ...patientErrorsFrom(fieldErrors), form: fieldErrors.duplicate });
-          setDoctorError(fieldErrors.doctor_id ?? null);
-          setFormError(fieldErrors.duplicate ? null : (fieldErrors.idempotency_key ?? fieldErrors.specialties ?? 'Some details need attention.'));
-          reveal();
-        },
-        onSuccess: () => {
-          // The server redirected away (the directory, with its notice); a new visit to this page gets a new key.
-          key.current = requestKey();
-        },
-        onNetworkError: () => {
-          setFormError('The patient was not saved. Check the connection and try again; nothing you entered was lost.');
-
-          return false;
-        },
-        onHttpException: () => {
-          setFormError('The patient was not saved. Try again; nothing you entered was lost.');
-
-          return false;
-        },
-      },
-    );
   };
 
+  const handleSubmit = (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (saving) return;
+
+    setFormError(null);
+    setOverrideReasonError(undefined);
+    const newErrors: Record<string, string> = {};
+
+    // Validate Personal Info
+    if (!personal.first_name.trim()) {
+      newErrors.first_name = 'First name is required.';
+    }
+    const lastNameSetting = form?.fields?.last_name?.state;
+    if (lastNameSetting === 'required' && !personal.last_name.trim()) {
+      newErrors.last_name = 'Last name is required.';
+    }
+    if (!personal.gender) {
+      newErrors.gender = 'Choose a gender.';
+    }
+    if (personal.dob_unknown) {
+      const parsedAge = Number(personal.age);
+      if (!personal.age || isNaN(parsedAge) || parsedAge < 0 || parsedAge > 150) {
+        newErrors.age = 'Enter an age between 0 and 150.';
+      }
+    }
+
+    // Validate Contact Info
+    if (!contact.phone.trim()) {
+      newErrors.phone = 'Mobile number is required.';
+    } else if (!validPhone(contact.phone)) {
+      newErrors.phone = 'Enter a valid mobile number (e.g. 98765 43210).';
+    }
+    if (contact.email.trim() && !/^\S+@\S+\.\S+$/.test(contact.email.trim())) {
+      newErrors.email = 'Enter a valid email address.';
+    }
+
+    // Validate Duplicate Override
+    if (matches.length > 0) {
+      if (!overrideConfirmed) {
+        newErrors.form = 'A possible existing patient was found. Confirm this is a different person to continue.';
+      } else if (overrideReason.trim().length < 3) {
+        setOverrideReasonError('Provide a brief reason (e.g. Family member sharing mobile).');
+        newErrors.form = 'Please provide an override explanation for duplicate confirmation.';
+      }
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      scrollToError();
+      return;
+    }
+
+    // Construct form data for multipart upload
+    const formData = new FormData();
+    formData.append('surface', 'full_page');
+    formData.append('idempotency_key', key.current);
+
+    // Personal fields
+    formData.append('first_name', personal.first_name.trim());
+    if (personal.middle_name.trim()) formData.append('middle_name', personal.middle_name.trim());
+    if (personal.last_name.trim()) formData.append('last_name', personal.last_name.trim());
+    if (personal.gender) formData.append('gender', personal.gender);
+    if (!personal.dob_unknown && personal.date_of_birth) {
+      formData.append('date_of_birth', personal.date_of_birth);
+    }
+    if (personal.dob_unknown && personal.age) {
+      formData.append('age', personal.age);
+    }
+    if (personal.blood_group) formData.append('blood_group', personal.blood_group);
+
+    // Contact fields
+    formData.append('phone', contact.phone.trim());
+    if (contact.email.trim()) formData.append('email', contact.email.trim());
+    if (contact.address.trim()) formData.append('address', contact.address.trim());
+    if (contact.city.trim()) formData.append('city', contact.city.trim());
+    if (contact.state.trim()) formData.append('state', contact.state.trim());
+    if (contact.pincode.trim()) formData.append('pincode', contact.pincode.trim());
+
+    // Medical conditions
+    medical.conditions.forEach((cond, idx) => {
+      if (cond.key) formData.append(`medical_conditions[${idx}][key]`, cond.key);
+      formData.append(`medical_conditions[${idx}][label]`, cond.label);
+    });
+
+    // Allergies
+    medical.allergies.forEach((allergy, idx) => {
+      if (allergy.key) formData.append(`allergies[${idx}][key]`, allergy.key);
+      formData.append(`allergies[${idx}][label]`, allergy.label);
+    });
+    if (medical.allergies.length === 0 && medical.allergy_none) {
+      formData.append('allergy_status', 'none_known');
+    }
+
+    // Medications
+    medical.medications.forEach((med, idx) => {
+      formData.append(`medications[${idx}][label]`, med.label);
+    });
+
+    // Medical notes combined with module notes
+    const combinedNotes = [
+      medical.medical_notes.trim(),
+      moduleData.dental_history ? `[Dental History]: ${moduleData.dental_history.trim()}` : null,
+      moduleData.dental_treatments?.length ? `[Dental Treatments]: ${moduleData.dental_treatments.join(', ')}` : null,
+      moduleData.physio_pain_area ? `[Physio Pain Area]: ${moduleData.physio_pain_area}` : null,
+      moduleData.physio_pain_duration ? `[Physio Duration]: ${moduleData.physio_pain_duration}` : null,
+      moduleData.physio_mobility_limitation ? `[Physio Mobility]: ${moduleData.physio_mobility_limitation}` : null,
+      moduleData.physio_notes ? `[Physio Notes]: ${moduleData.physio_notes.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (combinedNotes) {
+      formData.append('notes', combinedNotes);
+    }
+
+    // Specialties
+    const activeSpecialtyKeys = specialties.map((s) => s.key);
+    activeSpecialtyKeys.forEach((specKey) => {
+      formData.append('specialties[]', specKey);
+    });
+
+    // Duplicate overrides
+    if (matches.length > 0 && overrideConfirmed) {
+      matches.forEach((m: DuplicateMatch) => {
+        formData.append('duplicate_acknowledged_ids[]', String(m.id));
+      });
+      formData.append('duplicate_reason', overrideReason.trim());
+    }
+
+    // Attached files
+    pendingDocs.forEach((doc, idx) => {
+      formData.append(`documents[${idx}]`, doc.file);
+      formData.append(`document_types[${idx}]`, doc.type);
+    });
+
+    router.post(route('clinic.patients.store'), formData as any, {
+      preserveScroll: true,
+      onStart: () => {
+        setSaving(true);
+        leaving.current = true;
+      },
+      onFinish: () => {
+        setSaving(false);
+        leaving.current = false;
+      },
+      onError: (serverErrors) => {
+        const fieldErrors = serverErrors as Record<string, string>;
+        setErrors(fieldErrors);
+        setFormError(
+          fieldErrors.duplicate ||
+            fieldErrors.duplicate_reason ||
+            fieldErrors.phone ||
+            'Some fields require attention. Review the errors highlighted above.',
+        );
+        scrollToError();
+      },
+      onSuccess: () => {
+        key.current = requestKey();
+      },
+      onNetworkError: () => {
+        setFormError('Connection issue: Registration was not saved. Try again without losing your entered data.');
+        return false;
+      },
+      onHttpException: () => {
+        setFormError('Server response error: Could not save patient. Try again.');
+        return false;
+      },
+    });
+  };
+
+  const activeSpecialtyKeys = specialties.map((s) => s.key);
+
   return (
-    <>
+    <div className="mx-auto w-full max-w-[1360px] pb-16">
       <PageHeader
-        eyebrow={<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-cx-nav-teal-strong">Patients</span>}
-        title="Add patient"
-        description={`Register a patient${branch ? ` at ${branch.name}` : ''}. The patient number is assigned on saving.`}
+        eyebrow={<span className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#0D9488]">Patient Management</span>}
+        title="Add New Patient"
+        description={`Create a permanent healthcare record${branch ? ` at ${branch.name}` : ''}. UHID is automatically assigned on registration.`}
         actions={
-          <ButtonLink href={links.index} tone="ghost" icon={ArrowLeft}>
-            Patient directory
+          <ButtonLink href={links.index} tone="ghost" icon={ArrowLeft} className="text-slate-600 hover:text-slate-900">
+            Back to Directory
           </ButtonLink>
         }
       />
 
-      <Card as="div" className="overflow-hidden">
-        <form noValidate onSubmit={submit}>
-          {formError && (
-            <div className="px-5 pt-5 sm:px-6">
-              <Notice tone="danger">{formError}</Notice>
-            </div>
-          )}
-          <div className="grid grid-cols-1 gap-8 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-0 lg:divide-x lg:divide-cx-line">
-            <Section title="Patient" icon={UserRound} className="lg:pr-8">
-              <div className="space-y-4">
-                <PatientIdentityFields config={forModule(form, specialty)} data={data} setField={setField} errors={errors} idPrefix="pr" autoFocus />
-                {errors.form && (
-                  <p role="alert" className="text-[12.5px] font-semibold text-amber-900">
-                    {errors.form}
-                  </p>
-                )}
-                <DuplicateSuggestions
-                  matches={matches}
-                  specialtyLabel={specialtyLabel}
-                  // At the front desk, a returning patient is checked in with Repeat Case instead; nothing is registered.
-                  onUse={intake.available ? (match) => intake.open('repeat', { id: match.id, uhid: match.uhid, name: match.name }) : undefined}
-                  useLabel="Check in instead"
-                  override={override}
-                  onOverrideChange={(patch) => {
-                    setOverride((current) => ({ ...current, ...patch }));
-                    setErrors((current) => ({ ...current, duplicate_reason: undefined, form: undefined }));
-                  }}
-                  reasonError={errors.duplicate_reason}
-                  idPrefix="pr"
-                />
-                {moreFields(forModule(form, specialty)).length > 0 && (
-                  <div className="space-y-3 border-t border-cx-line pt-4">
-                    <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">Contact &amp; details</p>
-                    <MoreDetailsFields config={forModule(form, specialty)} data={data} setField={setField} errors={errors} idPrefix="pr" />
-                  </div>
-                )}
-              </div>
-            </Section>
+      {formError && (
+        <div className="mb-6">
+          <Notice tone="danger">{formError}</Notice>
+        </div>
+      )}
 
-            <Section title="Care & safety" icon={Stethoscope} className="lg:pl-8">
-              <div className="space-y-5">
-                {specialties.length > 1 && (
-                  <div>
-                    <p className="mb-1.5 text-[12px] font-semibold text-clinic-ink">Care</p>
-                    <ChoiceChips label="Care" id="pr-specialty" options={specialties.map((option) => ({ value: option.key, label: option.label }))} value={specialty} onChange={setSpecialty} />
-                    <p className="mt-1.5 text-[12px] text-clinic-secondary">Narrows the medical history and allergies offered. Optional.</p>
-                  </div>
-                )}
-                {shown(form, 'doctor_id') && doctors.length > 0 && (
-                  <Field label="Assigned doctor" htmlFor="pr-doctor" required={required(form, 'doctor_id')} error={doctorError ?? undefined}>
-                    <Select
-                      id="pr-doctor"
-                      value={doctorId}
-                      onChange={(event) => {
-                        setDoctorId(event.target.value);
-                        setDoctorError(null);
-                      }}
-                      options={doctors.map((doctor) => ({ value: String(doctor.id), label: doctor.name }))}
-                      placeholder="Not assigned"
-                      invalid={!!doctorError}
-                    />
-                  </Field>
-                )}
-                {showsSafety(forModule(form, specialty)) ? (
-                  <div className="space-y-3">
-                    <p className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">
-                      <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                      Medical safety
-                    </p>
-                    <MedicalSafetyFields config={forModule(form, specialty)} data={data} setField={setField} errors={errors} specialty={specialty} area={null} generalOnly={specialties.length > 1 && specialty === ''} />
-                  </div>
-                ) : (
-                  <p className="rounded-xl bg-clinic-inset/60 px-3 py-2.5 text-[12.5px] text-clinic-secondary">Medical history and allergies are recorded by clinical staff.</p>
-                )}
-              </div>
-            </Section>
-          </div>
+      {/* Main 2-Column Desktop Grid / 1-Column Mobile Layout */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+        {/* Left Column: Form Sections */}
+        <form noValidate onSubmit={handleSubmit} className="space-y-6">
+          {/* Section 1: Personal Information (Soft Blue) */}
+          <PersonalInfoSection
+            data={personal}
+            onChange={setPersonalField}
+            errors={errors}
+            lastNameRequired={form?.fields?.last_name?.state === 'required'}
+            autoFocus
+          />
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-cx-line px-5 py-4 sm:px-6">
-            <ButtonLink href={links.index} tone="ghost" className="mr-auto">
+          {/* Section 2: Contact Details (Soft Teal) */}
+          <ContactInfoSection
+            data={contact}
+            onChange={setContactField}
+            errors={errors}
+          />
+
+          {/* Section 3: Medical History & Safety (Soft Lavender) */}
+          <MedicalHistorySection
+            data={medical}
+            onChange={setMedicalField}
+            catalogueConditions={form?.catalogue?.conditions}
+            catalogueAllergies={form?.catalogue?.allergies}
+            errors={errors}
+          />
+
+          {/* Section 4: Specialty Clinical Information (Soft Pink) */}
+          <ModuleSpecificSection
+            specialties={activeSpecialtyKeys}
+            data={moduleData}
+            onChange={setModuleField}
+            errors={errors}
+          />
+
+          {/* Section 5: Documents & Records (Soft Yellow) */}
+          <DocumentsSection
+            pendingFiles={pendingDocs}
+            onAddPending={handleAddPendingDocs}
+            onRemovePending={handleRemovePendingDoc}
+          />
+
+          {/* Desktop Fallback Bottom Bar */}
+          <div className="hidden lg:flex items-center justify-between border-t border-slate-200/90 pt-4">
+            <ButtonLink href={links.index} tone="ghost" className="text-slate-600 hover:text-slate-900">
               Cancel
             </ButtonLink>
-            <Button type="submit" tone="primary" icon={UserPlus} loading={saving} loadingLabel="Registering…" disabled={saving}>
-              Register patient
+            <Button
+              type="submit"
+              tone="primary"
+              icon={UserPlus}
+              loading={saving}
+              loadingLabel="Registering…"
+              disabled={saving}
+              className="h-11 px-6 font-bold shadow-md shadow-blue-500/20"
+            >
+              Register Patient
             </Button>
           </div>
         </form>
-      </Card>
-    </>
-  );
-}
 
-function Section({ title, icon: Icon, className, children }: { title: string; icon: typeof UserRound; className?: string; children: ReactNode }) {
-  const id = `register-${title.replace(/\W+/g, '-').toLowerCase()}`;
+        {/* Right Column: Sticky Summary & Duplicate Telemetry (Desktop Only) */}
+        <aside className="hidden lg:block">
+          <RegistrationSummaryPanel
+            firstName={personal.first_name}
+            middleName={personal.middle_name}
+            lastName={personal.last_name}
+            phone={contact.phone}
+            gender={personal.gender}
+            dateOfBirth={personal.date_of_birth}
+            age={personal.age}
+            dobUnknown={personal.dob_unknown}
+            conditionsCount={medical.conditions.length}
+            allergiesCount={medical.allergies.length}
+            documentsCount={pendingDocs.length}
+            duplicateMatches={matches}
+            overrideConfirmed={overrideConfirmed}
+            overrideReason={overrideReason}
+            onOverrideConfirmChange={setOverrideConfirmed}
+            onOverrideReasonChange={setOverrideReason}
+            overrideReasonError={overrideReasonError}
+            saving={saving}
+            cancelHref={links.index}
+            onSubmit={() => handleSubmit()}
+          />
+        </aside>
+      </div>
 
-  return (
-    <section aria-labelledby={id} className={className}>
-      <h2 id={id} className="mb-4 flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.06em] text-cx-nav-teal-strong">
-        <span className="grid h-5 w-5 place-items-center rounded-md bg-gradient-to-br from-[#E3F6F2] to-[#E6F0FB] text-[#0F7C6E]" aria-hidden="true">
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-        {title}
-      </h2>
-      {children}
-    </section>
+      {/* Mobile Sticky Bottom Action Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between gap-3 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur shadow-lg">
+        <ButtonLink href={links.index} tone="ghost" className="text-[13.5px] text-slate-600">
+          Cancel
+        </ButtonLink>
+        <Button
+          type="button"
+          tone="primary"
+          icon={UserPlus}
+          onClick={() => handleSubmit()}
+          loading={saving}
+          loadingLabel="Saving…"
+          disabled={saving}
+          className="h-11 px-5 font-bold shadow-md"
+        >
+          Register Patient
+        </Button>
+      </div>
+    </div>
   );
 }

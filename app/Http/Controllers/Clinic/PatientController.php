@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Patient\RegisterPatientRequest;
 use App\Http\Requests\Patient\UpdatePatientRequest;
 use App\Models\Appointment;
+use App\Models\AttachedDocument;
 use App\Models\Branch;
 use App\Models\Clinic;
 use App\Models\ClinicEmployee;
@@ -38,6 +39,9 @@ use App\Services\Reception\IntakeSubmissions;
 use App\Services\Reception\PatientFlowConfigService;
 use App\Services\Reception\ReceptionCheckIn;
 use App\Services\Reception\VisitContext;
+use App\Services\Security\Malware\ScannedUploadIntake;
+use App\Services\Security\Malware\UploadRejectedException;
+use App\Services\Security\SecurityAudit;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
 use App\Support\ClinicFrontend;
@@ -46,12 +50,15 @@ use App\VisitPriority;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class PatientController extends Controller
 {
@@ -94,7 +101,17 @@ class PatientController extends Controller
             'specialty' => ['nullable', 'string', 'max:50'],
             'branch_id' => ['nullable', 'integer'],
             'practitioner_id' => ['nullable', 'regex:/^(none|\d{1,18})$/'],
+            'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'other'])],
+            'status' => ['nullable', 'string'],
+            'treatment_status' => ['nullable', 'string', Rule::in(['ongoing', 'completed', 'not_started'])],
             'active_care' => ['nullable', 'boolean'],
+            'patient_type' => ['nullable', 'string', Rule::in(['new', 'repeat'])],
+            'age_min' => ['nullable', 'integer', 'min:0', 'max:130'],
+            'age_max' => array_values(array_filter(['nullable', 'integer', 'min:0', 'max:130', $request->filled('age_min') ? 'gte:age_min' : null])),
+            'registered_from' => ['nullable', 'date'],
+            'registered_to' => array_values(array_filter(['nullable', 'date', $request->filled('registered_from') ? 'after_or_equal:registered_from' : null])),
+            'last_visit_from' => ['nullable', 'date'],
+            'last_visit_to' => array_values(array_filter(['nullable', 'date', $request->filled('last_visit_from') ? 'after_or_equal:last_visit_from' : null])),
             'view' => ['nullable', Rule::in([PatientDirectoryAudience::VIEW_MINE, PatientDirectoryAudience::VIEW_TODAY, PatientDirectoryAudience::VIEW_ALL])],
             // The earlier "My patients / All patients" switch, kept for old links.
             'tab' => ['nullable', Rule::in(['mine', 'all'])],
@@ -111,33 +128,59 @@ class PatientController extends Controller
             'q' => trim((string) ($validated['q'] ?? '')),
             'specialty' => $validated['specialty'] ?? null,
             'branch_id' => isset($validated['branch_id']) ? (int) $validated['branch_id'] : null,
-            'active_care' => ($validated['active_care'] ?? false) ? true : null,
             'practitioner_id' => $practitioner,
+            'gender' => $validated['gender'] ?? null,
+            'status' => in_array($validated['status'] ?? null, PatientStatus::working(), true) ? $validated['status'] : null,
+            'treatment_status' => $validated['treatment_status'] ?? null,
+            'active_care' => ($validated['active_care'] ?? false) ? true : null,
+            'patient_type' => $validated['patient_type'] ?? null,
+            'age_min' => isset($validated['age_min']) ? (int) $validated['age_min'] : null,
+            'age_max' => isset($validated['age_max']) ? (int) $validated['age_max'] : null,
+            'registered_from' => $validated['registered_from'] ?? null,
+            'registered_to' => $validated['registered_to'] ?? null,
+            'last_visit_from' => $validated['last_visit_from'] ?? null,
+            'last_visit_to' => $validated['last_visit_to'] ?? null,
         ], fn ($value) => $value !== null && $value !== '');
 
+        $canSeeContact = $audience->canSeeContact($request->user());
+        $canSeeBilling = $request->user()->hasClinicPermission(ClinicPermission::BillingView);
+
         return Inertia::render('ClinicPortal/Patients/Index', [
-            'patients' => $this->directory->page($clinic->id, [...$filters, ...$scope], $validated['cursor'] ?? null, PatientDirectory::PER_PAGE, $audience->canSeeContact($request->user())),
+            'patients' => $this->directory->page($clinic->id, [...$filters, ...$scope], $validated['cursor'] ?? null, PatientDirectory::PER_PAGE, $canSeeContact, $canSeeBilling),
             'filters' => [
                 'q' => $filters['q'] ?? '',
-                // There is no patient-status filter; the key stays empty so the page's contract keeps its shape.
-                'status' => '',
+                'status' => $filters['status'] ?? '',
                 'specialty' => $filters['specialty'] ?? '',
                 'branch_id' => isset($filters['branch_id']) ? (string) $filters['branch_id'] : '',
                 'practitioner_id' => isset($filters['practitioner_id']) ? (string) $filters['practitioner_id'] : '',
+                'gender' => $filters['gender'] ?? '',
+                'treatment_status' => $filters['treatment_status'] ?? '',
                 'active_care' => isset($filters['active_care']) ? '1' : '',
+                'patient_type' => $filters['patient_type'] ?? '',
+                'age_min' => isset($filters['age_min']) ? (string) $filters['age_min'] : '',
+                'age_max' => isset($filters['age_max']) ? (string) $filters['age_max'] : '',
+                'registered_from' => $filters['registered_from'] ?? '',
+                'registered_to' => $filters['registered_to'] ?? '',
+                'last_visit_from' => $filters['last_visit_from'] ?? '',
+                'last_visit_to' => $filters['last_visit_to'] ?? '',
                 'view' => $view,
             ],
             'options' => [
                 'specialties' => $this->specialtyOptions($clinic),
-                // The directory lists the current patients; there is no other lifecycle view to choose.
-                'statuses' => [],
+                'statuses' => [
+                    ['value' => 'active', 'label' => 'Active'],
+                    ['value' => 'inactive', 'label' => 'Inactive'],
+                ],
                 'views' => $audience->views(),
                 'doctors' => collect(ClinicEmployee::activePractitioners($clinic->id))->map(fn (array $doctor) => ['id' => $doctor['id'], 'name' => $doctor['name']])->all(),
             ],
             'audience' => $who,
             'today' => ClinicClock::now()->toDateString(),
             'isPractitioner' => $who === PatientDirectoryAudience::DOCTOR,
-            'can' => ['create' => $request->user()->can('create', Patient::class)],
+            'can' => [
+                'create' => $request->user()->can('create', Patient::class),
+                'billing' => $canSeeBilling,
+            ],
             // Only pages that are built (`ClinicFrontend`); a page still to come is not linked.
             'links' => [
                 'index' => route('clinic.patients.index'),
@@ -222,6 +265,21 @@ class PatientController extends Controller
             ->where('ps.clinic_id', $clinic->id)->where('ps.patient_id', $patient->id)->where('ps.status', 'active')
             ->pluck('cs.specialty_key')->values()->all();
 
+        $documents = AttachedDocument::query()
+            ->where('patient_id', $patient->id)
+            ->where('clinic_id', $clinic->id)
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->get(['id', 'file_name', 'document_type', 'file_size_bytes', 'created_at'])
+            ->map(fn ($doc) => [
+                'id' => $doc->id,
+                'file_name' => $doc->file_name,
+                'document_type' => $doc->document_type,
+                'size_bytes' => $doc->file_size_bytes,
+                'created_at' => $doc->created_at?->toDateString(),
+                'download_url' => route('clinic.patients.documents.download', [$patient->id, $doc->id]),
+            ])->values()->all();
+
         return Inertia::render('ClinicPortal/Patients/Edit', [
             'patient' => [
                 'id' => $patient->id,
@@ -251,13 +309,22 @@ class PatientController extends Controller
                 // The clinical record goes only to roles that may see it; every
                 // role that can open the patient gets the safety flags.
                 'allergies' => $canViewClinical ? $this->clinicalEntries->allergyLabels($patient) : [],
+                'conditions' => $canViewClinical ? $this->clinicalEntries->labelsFor($patient, DefaultClinicalCatalogue::KIND_CONDITION) : [],
+                'medications' => $canViewClinical ? $this->clinicalEntries->labelsFor($patient, DefaultClinicalCatalogue::KIND_MEDICATION) : [],
+                'notes' => $patient->medicalHistory?->notes ?? '',
                 'medical_alerts' => $canViewClinical ? $patient->alerts->where('type', 'manual')->pluck('description')->values()->all() : [],
                 'safety_flags' => $this->clinicalEntries->safetyFlags($clinic->id, [$patient->id])[$patient->id] ?? [],
                 'specialties' => $enrolled,
                 'current_practitioner_name' => $patient->currentPractitioner?->name,
                 'registered_on' => $patient->created_at?->toDateString(),
+                'documents' => $documents,
             ],
             'clinical' => ['can_view' => $canViewClinical, 'can_edit' => $this->privacy->canEdit(request()->user())],
+            'form' => $clinic ? $this->registrationForm($clinic, request()->user()) : null,
+            'links' => [
+                'index' => route('clinic.patients.index'),
+                'show' => route('clinic.patients.show', $patient->id),
+            ],
             ...$this->formOptions($clinic),
         ]);
     }
@@ -349,7 +416,8 @@ class PatientController extends Controller
         // submit returns the first registration instead of making a second.
         $key = $request->validated('idempotency_key');
         if ($key && $request->expectsJson()) {
-            return app(IntakeSubmissions::class)->once($clinic, $request->user(), $key, 'register', fn () => $this->register($request, $clinic));
+            // Atomic, as a check-in here can take money: a saved payment's key is never freed.
+            return app(IntakeSubmissions::class)->once($clinic, $request->user(), $key, 'register', fn () => $this->register($request, $clinic), atomic: true);
         }
         if ($key) {
             $registered = null;
@@ -444,6 +512,8 @@ class PatientController extends Controller
                 'performer' => $this->clinicContext->currentEmployee(),
                 'context' => $visit,
                 'appointment' => $appointment,
+                'case_id' => $request->validated('case_id') ? (int) $request->validated('case_id') : null,
+                'new_case' => (bool) ($request->validated('new_case') ?? true),
             ];
         }
         // Medical history, allergies, medications, past surgery and family history: only from a member who may record them.
@@ -473,10 +543,11 @@ class PatientController extends Controller
                 allergyStatus: $allergyStatus,
             );
             $charge = $result['queue_item'] ? app(CheckInCharges::class)->chargeVisit(
-                $clinic, $branch, $result['patient'], $result['queue_item']->patientVisit, $result['queue_item']->doctor, $request->user(), $this->clinicContext->currentEmployee(), null,
+                $clinic, $branch, $result['patient'], $result['queue_item']->patientVisit, $result['queue_item']->doctor, $request->user(), $this->clinicContext->currentEmployee(), $request->validated('payment'),
                 // The amount the desk showed, checked against the server's own (sent by New Case; absent from older callers).
                 verify: $request->has('expected_charge'),
                 expected: $request->validated('expected_charge') !== null ? (float) $request->validated('expected_charge') : null,
+                payLater: $request->validated('pay_later') !== null ? (bool) $request->validated('pay_later') : null,
             ) : null;
 
             return [$result, $charge];
@@ -485,17 +556,95 @@ class PatientController extends Controller
         $queueItem = $result['queue_item'];
         $registered = $patient;
 
-        if ($request->expectsJson()) {
-            return response()->json(app(IntakeOutcome::class)->present(
-                $clinic, $request->user(), $patient, $queueItem, $context ?? null, $visit ?? null,
-                $queueItem ? "{$patient->short_name} registered and checked in." : "{$patient->short_name} registered.",
-                app(CheckInCharges::class)->present($charge, $request->user()),
-            ), 201);
+        // The patient is registered by now; a document that cannot be saved is reported, never dropped silently.
+        $documentProblems = $this->attachRegistrationDocuments($request, $clinic, $patient);
+
+        if ($request->filled('notes')) {
+            $notes = trim((string) $request->input('notes'));
+            $patient->medicalHistory()->updateOrCreate(
+                ['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id],
+                ['notes' => $notes, 'notes_updated_by' => $request->user()->id, 'notes_updated_at' => now()]
+            );
         }
 
-        return redirect()
+        if ($request->expectsJson()) {
+            return response()->json([
+                ...app(IntakeOutcome::class)->present(
+                    $clinic, $request->user(), $patient, $queueItem, $context ?? null, $visit ?? null,
+                    $queueItem ? "{$patient->short_name} registered and checked in." : "{$patient->short_name} registered.",
+                    app(CheckInCharges::class)->present($charge, $request->user()),
+                ),
+                'documents_not_saved' => $documentProblems,
+            ], 201);
+        }
+
+        $redirect = redirect()
             ->to($this->afterRegistration($patient))
             ->with('success', "Patient {$patient->full_name} registered successfully. UHID: {$patient->uhid}");
+
+        return $documentProblems === [] ? $redirect : $redirect->with('warning', implode(' ', $documentProblems));
+    }
+
+    /**
+     * The documents chosen on the registration form, each through the one
+     * secure intake (quarantine → malware scan → private disk), filed,
+     * audited and on the timeline as a Patient 360 upload is. A file that is
+     * refused or cannot be stored is named in the answer with a safe reason;
+     * the cause is logged without the file's path or contents.
+     *
+     * @return list<string> one sentence per document that was not saved
+     */
+    private function attachRegistrationDocuments(Request $request, Clinic $clinic, Patient $patient): array
+    {
+        $problems = [];
+        foreach ((array) $request->file('documents', []) as $index => $file) {
+            $fileName = $file instanceof UploadedFile ? mb_substr($file->getClientOriginalName(), 0, 255) : 'A document';
+            if (! $file instanceof UploadedFile || ! $file->isValid()) {
+                $problems[] = "{$fileName} was not saved: the upload did not complete. Upload it again from the patient's record.";
+
+                continue;
+            }
+            $documentType = in_array($request->input("document_types.{$index}"), ['medical_report', 'id_proof', 'xray', 'intraoral_photo', 'lab_report', 'other'], true)
+                ? $request->input("document_types.{$index}") : 'medical_report';
+
+            try {
+                $admitted = app(ScannedUploadIntake::class)->admit($file, "clinic_{$clinic->id}/patients/{$patient->id}/documents");
+            } catch (UploadRejectedException $e) {
+                $problems[] = "{$fileName} was not saved: {$e->getMessage()}";
+
+                continue;
+            } catch (Throwable $e) {
+                Log::warning('Registration document could not be stored.', ['clinic_id' => $clinic->id, 'patient_id' => $patient->id, 'exception' => $e::class]);
+                $problems[] = "{$fileName} was not saved: it could not be stored right now. Upload it again from the patient's record.";
+
+                continue;
+            }
+
+            $document = AttachedDocument::create([
+                'clinic_id' => $clinic->id,
+                'patient_id' => $patient->id,
+                'uploaded_by' => auth()->id(),
+                'file_name' => $fileName,
+                'file_path' => $admitted['path'],
+                'file_size_bytes' => $file->getSize(),
+                'document_type' => $documentType,
+                'scan_status' => AttachedDocument::SCAN_CLEAN,
+                'scanned_at' => now(),
+                'scanner' => $admitted['scanner'],
+                'file_sha256' => $admitted['sha256'],
+            ]);
+            PatientTimelineEvent::create([
+                'organization_id' => $clinic->organization_id,
+                'clinic_id' => $clinic->id,
+                'patient_id' => $patient->id,
+                'actor_id' => auth()->id(),
+                'event_type' => 'document_uploaded',
+                'context' => ['file_name' => $fileName, 'document_type' => $documentType, 'uploaded_by' => auth()->user()?->name ?? 'Staff'],
+            ]);
+            app(SecurityAudit::class)->record('document.uploaded', $document, ['patient_id' => $patient->id, 'document_type' => $documentType, 'size_bytes' => $document->file_size_bytes]);
+        }
+
+        return $problems;
     }
 
     /** Where the full page goes after registering: the profile once that page is built, the directory until then. */
@@ -633,6 +782,15 @@ class PatientController extends Controller
             if ($this->medicalHistoryService->syncManualAlerts($patient, array_values(array_filter($validated['medical_alerts'] ?? [])))) {
                 $changedFields[] = 'medical_alerts';
             }
+        }
+
+        if (array_key_exists('medical_notes', $validated)) {
+            $notes = trim((string) $validated['medical_notes']);
+            $patient->medicalHistory()->updateOrCreate(
+                ['clinic_id' => $clinic->id, 'organization_id' => $clinic->organization_id],
+                ['notes' => $notes === '' ? null : $notes, 'notes_updated_by' => $request->user()->id, 'notes_updated_at' => now()]
+            );
+            $changedFields[] = 'medical_notes';
         }
 
         if (! empty($changedFields)) {

@@ -226,6 +226,7 @@ test('the balance is the ledger: consume, reversal and audited adjustment', func
     $package->fill(['sessions_used' => 0])->save();
     expect($package->fresh()->sessions_used)->toBe(1);
     ($this->asTherapist)();
+    withoutDoctorBillingRights();
     expect(fn () => $this->packages->adjust($package, 1, 'I want more', $this->therapistUser))->toThrow(AuthorizationException::class)
         ->and(fn () => $this->packages->adjust($package->fresh(), -20, 'Too much', $this->t->actAsOwner()))->toThrow(DomainException::class, 'below zero');
 });

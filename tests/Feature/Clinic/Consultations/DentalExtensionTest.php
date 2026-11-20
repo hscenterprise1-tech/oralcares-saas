@@ -135,7 +135,7 @@ test('another doctor can read the chart but not write it', function () {
     $this->f->doctor('Dr. Colleague', $colleagueUser);
     $asColleague = fn () => $this->actingAs($colleagueUser)->withSession($colleagueSession);
 
-    $asColleague()->get("/clinic/consultations/{$this->encounter->id}")
+    $asColleague()->get("/clinic/consultations/{$this->encounter->id}?record=1")
         ->assertInertia(fn (Assert $page) => $page->where('dental.teeth.0.tooth', 21)->where('dental.can_write', false));
     $asColleague()->post("/clinic/consultations/{$this->encounter->id}/dental/chart", ['tooth' => 21, 'condition' => 'sound'])->assertForbidden();
 });

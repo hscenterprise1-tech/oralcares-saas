@@ -47,8 +47,8 @@ const CONDITIONS: { key: string; label: string; icon: typeof HeartPulse; on: str
 export const UNSPECIFIED_ALLERGY = 'Allergy (unspecified)';
 
 const INPUT =
-  'h-10 w-full rounded-xl border border-[#D8E0EC] bg-[#FBFCFF] px-3.5 text-[14.5px] text-[#0F2A44] placeholder:text-[#94A3B8] motion-safe:transition-[border-color,box-shadow,background-color] motion-safe:duration-150 hover:border-[#B9C6D8] focus:border-[#14917F] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#14917F]/15 [@media(pointer:coarse)]:h-11';
-const INVALID = 'border-[#E5484D] bg-[#FFF8F8] focus:border-[#E5484D] focus:ring-[#E5484D]/15';
+  'h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 text-[14px] text-slate-900 placeholder:text-slate-400 transition-colors hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 [@media(pointer:coarse)]:h-11';
+const INVALID = 'border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-500 focus:ring-rose-500/15';
 
 export interface NewCaseFormProps {
   config: IntakeConfig;
@@ -74,12 +74,12 @@ export function NewCaseForm(props: NewCaseFormProps) {
   const { config, fields, data, setField, patchData, errors, matches, visit, onVisit, visitErrors, noun, missingRequired, createUrl } = props;
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-4">
       {missingRequired.length > 0 && (
-        <p role="status" className="rounded-2xl border border-[#F5D9A8] bg-[#FFF8EB] px-4 py-3 text-[13px] leading-5 text-[#7A4B06]">
+        <p role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[13px] leading-5 text-amber-900">
           This clinic also requires {missingRequired.join(', ')} at registration, which this quick form does not ask.{' '}
           {createUrl ? (
-            <a href={createUrl} className="font-semibold underline underline-offset-2">
+            <a href={createUrl} className="font-bold underline underline-offset-2">
               Use the full registration page
             </a>
           ) : (
@@ -89,16 +89,16 @@ export function NewCaseForm(props: NewCaseFormProps) {
         </p>
       )}
 
-      {/* One form: three quiet headings and hairlines, the fields paired across the width. */}
-      <div>
-        <FormGroup id="nc-group-patient" title="Patient details" icon={UserRound} first>
+      {/* Form sections styled with Patient Edit's SectionCard tones */}
+      <div className="space-y-4">
+        <FormGroup id="nc-group-patient" title="Patient Details" icon={UserRound} tone="blue" first>
           <PatientFields fields={fields} data={data} setField={setField} errors={errors} matches={matches} />
         </FormGroup>
-        <FormGroup id="nc-group-health" title="Health" hint="Optional · tap what the patient reports" icon={HeartPulse}>
+        <FormGroup id="nc-group-health" title="Health & Safety Alerts" hint="Optional · tap reported conditions" icon={HeartPulse} tone="lavender">
           <HealthStep config={config} fields={fields} data={data} patchData={patchData} visit={visit} />
           <FieldError id="nc-health-error" message={errors.allergy_status ?? errors.conditions ?? errors.medical_conditions ?? errors.allergies} />
         </FormGroup>
-        <FormGroup id="nc-group-visit" title="Today’s visit" icon={Stethoscope}>
+        <FormGroup id="nc-group-visit" title="Today’s Visit Details" icon={Stethoscope} tone="teal">
           <VisitStep config={config} visit={visit} onVisit={onVisit} errors={visitErrors} noun={noun} />
         </FormGroup>
       </div>
@@ -108,20 +108,64 @@ export function NewCaseForm(props: NewCaseFormProps) {
 
 /* ------------------------------------------------------------ the groups */
 
-/** A quiet heading with a hairline beside it; a light separator above every group but the first. */
-export function FormGroup({ id, title, hint, icon: Icon, first = false, children }: { id: string; title: string; hint?: string; icon: typeof UserRound; first?: boolean; children: ReactNode }) {
+/** SectionCard-styled group with pastel top border and gradient icon tile */
+export function FormGroup({
+  id,
+  title,
+  hint,
+  icon: Icon,
+  tone = 'teal',
+  first = false,
+  children,
+}: {
+  id: string;
+  title: string;
+  hint?: string;
+  icon: typeof UserRound;
+  tone?: 'blue' | 'teal' | 'lavender';
+  first?: boolean;
+  children: ReactNode;
+}) {
+  const toneStyles = {
+    blue: {
+      borderAccent: 'border-t-[3.5px] border-t-[#2563EB]',
+      iconBg: 'bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-white shadow-blue-500/25',
+    },
+    teal: {
+      borderAccent: 'border-t-[3.5px] border-t-[#0D9488]',
+      iconBg: 'bg-gradient-to-br from-[#14B8A6] to-[#0F766E] text-white shadow-teal-500/25',
+    },
+    lavender: {
+      borderAccent: 'border-t-[3.5px] border-t-[#8B5CF6]',
+      iconBg: 'bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] text-white shadow-purple-500/25',
+    },
+  }[tone];
+
   return (
-    // The separator fades from teal into blue; the heading carries a small teal tile and a hairline after it.
-    <section aria-labelledby={id} className={cn('relative min-w-0', !first && 'mt-3.5 pt-3 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-[#CDEBE5] before:via-[#DCE8F7] before:to-transparent')}>
-      <h3 id={id} className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.06em] text-[#0F6B5F]">
-          <span className="grid h-5 w-5 place-items-center rounded-md bg-gradient-to-br from-[#E3F6F2] to-[#E6F0FB] text-[#0F7C6E]" aria-hidden="true">
-            <Icon className="h-3.5 w-3.5" />
+    <section
+      aria-labelledby={id}
+      className={cn(
+        'relative min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-[0_2px_12px_rgba(15,23,42,0.03)]',
+        toneStyles.borderAccent,
+      )}
+    >
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <h3 id={id} className="flex flex-wrap items-center gap-2.5">
+          <span
+            className={cn(
+              'grid h-8 w-8 shrink-0 place-items-center rounded-xl shadow-sm',
+              toneStyles.iconBg
+            )}
+            aria-hidden="true"
+          >
+            <Icon className="h-4 w-4" strokeWidth={2.2} />
           </span>
-          {title}
-        </span>
-        {hint && <span className="text-[12.5px] font-medium text-[#64748B]">{hint}</span>}
-      </h3>
+          <span className="text-[14.5px] font-bold tracking-tight text-slate-900 sm:text-[15px]">
+            {title}
+          </span>
+        </h3>
+        {hint && <span className="text-[12px] font-medium text-slate-500">{hint}</span>}
+      </div>
       {children}
     </section>
   );

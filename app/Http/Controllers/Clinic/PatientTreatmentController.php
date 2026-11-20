@@ -15,6 +15,7 @@ use App\Models\PatientTreatment;
 use App\Models\PatientTreatmentStage;
 use App\Services\ClinicContext;
 use App\Services\Patient\ClinicSpecialties;
+use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\PatientBranchAccess;
 use App\Services\Treatment\PatientTreatments;
 use App\Services\Treatment\TreatmentAccess;
@@ -48,7 +49,7 @@ class PatientTreatmentController extends Controller
         $this->authorize('view', $patient);
         $openOnly = $request->boolean('open');
 
-        return response()->json(['data' => $this->readModel->forPatient($patient->clinic_id, $patient->id, $this->branchAccess->branchIds(), $openOnly, $this->seesMoney($request), 100)]);
+        return response()->json(['data' => $this->readModel->forPatient($patient->clinic_id, $patient->id, $this->branchAccess->branchIds(), $openOnly, $this->seesMoney($request), 100, ownEstimatesFor: $this->ownEstimatesFor($request))]);
     }
 
     /** What the signed-in practitioner may start for this patient (T7's picker). */
@@ -61,6 +62,7 @@ class PatientTreatmentController extends Controller
         $specialties = $this->access->boardSpecialties($request->user()) ?? $this->clinicSpecialties->activeKeys($clinic);
         $specialties = array_values(array_intersect($specialties, $this->clinicSpecialties->activeKeys($clinic)));
 
+        // Catalogue prices are the price list, not a patient's agreed estimate: the ledger's readers only.
         return response()->json(['data' => $this->readModel->startable($clinic->id, $specialties, $this->clinicContext->workingBranch()?->id, $this->seesMoney($request))]);
     }
 
@@ -88,7 +90,7 @@ class PatientTreatmentController extends Controller
                 'targets' => (array) ($data['targets'] ?? []),
             ]);
 
-            return ['data' => $this->readModel->detail($treatment->fresh(), $this->seesMoney($request))];
+            return ['data' => $this->readModel->detail($treatment->fresh(), $this->seesMoney($request), $this->ownEstimatesFor($request))];
         }, 201);
     }
 
@@ -97,7 +99,7 @@ class PatientTreatmentController extends Controller
         $this->inActiveClinic($treatment);
         $this->access->assertCanView($request->user(), $treatment);
 
-        return response()->json(['data' => $this->readModel->detail($treatment, $this->seesMoney($request))]);
+        return response()->json(['data' => $this->readModel->detail($treatment, $this->seesMoney($request), $this->ownEstimatesFor($request))]);
     }
 
     public function startStage(Request $request, PatientTreatment $treatment, PatientTreatmentStage $stage): JsonResponse
@@ -196,6 +198,12 @@ class PatientTreatmentController extends Controller
     {
         $treatment = PatientTreatment::query()->withoutGlobalScopes()->where('clinic_id', $this->clinicContext->clinic()->id)->findOrFail($treatmentId);
 
-        return ['data' => $this->readModel->detail($treatment, $this->seesMoney($request))];
+        return ['data' => $this->readModel->detail($treatment, $this->seesMoney($request), $this->ownEstimatesFor($request))];
+    }
+
+    /** A practitioner limited to their own fees sees the agreed estimates of their own treatments only. */
+    private function ownEstimatesFor(Request $request): ?int
+    {
+        return app(Patient360Access::class)->ownFeesPractitionerId($request->user());
     }
 }

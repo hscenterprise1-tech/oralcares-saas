@@ -17,9 +17,12 @@ use App\Models\PatientBilling;
 use App\Models\PatientBillingItem;
 use App\Models\PatientBillingPayment;
 use App\Models\PatientBillingRefund;
+use App\Models\PatientCase;
 use App\Models\PatientFollowUp;
 use App\Models\PatientProcedure;
+use App\Models\PatientSessionPackage;
 use App\Models\PatientTimelineEvent;
+use App\Models\PatientTreatment;
 use App\Models\PatientVisit;
 use App\Models\PhysioCarePlan;
 use App\Models\Prescription;
@@ -28,15 +31,19 @@ use App\Models\SecurityAuditLog;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Models\User;
+use App\Services\Billing\BillInstalments;
 use App\Services\ClinicContext;
 use App\Services\Communication\ManualShare;
 use App\Services\Governance\DeletionGovernance;
 use App\Services\OwnerMode\OwnerMode;
+use App\Services\Patient\CrossBranchClinicalAccess;
+use App\Services\Patient\PatientCaseLifecycle;
 use App\Services\PaymentService;
 use App\Services\TemplateService;
 use App\Services\Treatment\TreatmentReadModel;
 use App\Support\ClinicClock;
 use App\Support\ClinicFrontend;
+use App\Support\Specialty\SpecialtyRegistry;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -120,10 +127,15 @@ class Patient360Sections
      */
     public function encounters(Patient $patient, User $user, int $page): array
     {
-        $encounters = $this->summary->encounters($patient)
+        // Another branch's consultations too, while the patient attends here today (`CrossBranchClinicalAccess`); each one shown is audited.
+        $crossBranch = app(CrossBranchClinicalAccess::class);
+        $branchIds = $crossBranch->encounterBranchIds($user, $patient);
+        $encounters = ClinicalEncounter::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->when($branchIds !== null, fn (Builder $query) => $query->whereIn('branch_id', $branchIds ?: [0]))
             ->with(['doctor:id,name', 'branch:id,name', 'diagnoses' => fn ($query) => $query->orderByDesc('is_primary')])
             ->withCount(['procedures', 'prescriptions', 'orders'])
             ->latest('started_at')->paginate(self::PER_PAGE, ['*'], 'page', $page);
+        $encounters->getCollection()->each(fn (ClinicalEncounter $encounter) => $crossBranch->record($user, $encounter, 'encounter_summary'));
 
         $voidMode = $this->governance->modeFor($user, 'encounter.void');
 
@@ -193,7 +205,7 @@ class Patient360Sections
         $visitModels = PatientVisit::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('id', $ids['visit'] ?? [])
             ->with(['doctor' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'name']), 'branch' => $branch, 'caseNumber:id,case_number',
                 'queueItem' => fn ($q) => $q->withoutGlobalScopes()->with(['appointment' => fn ($a) => $a->withoutGlobalScopes()->select(['id', 'scheduled_at'])])])
-            ->when($clinical, fn ($q) => $q->with(['encounter' => fn ($e) => $e->withoutGlobalScopes()->select(['id', 'patient_visit_id', 'encounter_number', 'status', 'finalized_at', 'voided_at'])]))
+            ->when($clinical, fn ($q) => $q->with(['encounter' => fn ($e) => $e->withoutGlobalScopes()->select(['id', 'clinic_id', 'branch_id', 'patient_visit_id', 'encounter_number', 'status', 'finalized_at', 'voided_at'])]))
             ->get()->keyBy('id');
         $bookingModels = Appointment::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('id', $ids['booking'] ?? [])
             ->with(['practitioner' => fn ($q) => $q->withoutGlobalScopes()->select(['id', 'name']), 'branch' => $branch])
@@ -210,12 +222,12 @@ class Patient360Sections
         ];
 
         return $this->page($rows, fn ($row) => $row->kind === 'visit'
-            ? $this->visitRow($visitModels[$row->id], $clinical, $calendar)
+            ? $this->visitRow($visitModels[$row->id], $clinical, $calendar, $user)
             : $this->bookingRow($bookingModels[$row->id], $calendar), ['counts' => $counts]);
     }
 
     /** @return array<string, mixed> */
-    private function visitRow(PatientVisit $visit, bool $clinical, \Closure $calendar): array
+    private function visitRow(PatientVisit $visit, bool $clinical, \Closure $calendar, User $user): array
     {
         $status = (string) ($visit->visit_status ?? 'registered');
         $queue = $visit->queueItem;
@@ -240,8 +252,8 @@ class Patient360Sections
             'consultation' => $encounter ? [
                 'number' => $encounter->encounter_number,
                 'status' => $encounter->voided_at ? 'voided' : ($encounter->finalized_at ? 'signed' : 'open'),
-                // The consultation screen is not built yet (`ClinicFrontend`).
-                'url' => null,
+                // The consultation workspace, for members its policy lets open it.
+                'url' => ClinicFrontend::available('clinic.consultations.show') && $user->can('view', $encounter) ? route('clinic.consultations.show', $encounter) : null,
             ] : null,
             'calendar_url' => $queue?->appointment ? $calendar($visit->visit_date?->toDateString() ?? '') : null,
         ];
@@ -353,7 +365,7 @@ class Patient360Sections
             // The treatment engine: every treatment (legacy dental lines and physio
             // plans are mirrored into it). `plans` / `care_plans` below are the legacy
             // reads the current screen still uses.
-            'treatments' => $this->treatmentReadModel->forPatient($patient->clinic_id, $patient->id, $this->access->branchIds(), false, $this->access->canViewBilling($user)),
+            'treatments' => $this->treatmentReadModel->forPatient($patient->clinic_id, $patient->id, $this->access->branchIds(), false, $this->access->canViewBilling($user), ownEstimatesFor: $this->access->ownFeesPractitionerId($user)),
             'plans' => TreatmentPlan::query()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
                 ->with(['records' => fn ($query) => $query->orderBy('sort_order'), 'author:id,name'])->latest('id')->limit(10)->get()
                 ->map(fn (TreatmentPlan $plan) => $this->dentalPlan($plan))->values(),
@@ -476,6 +488,10 @@ class Patient360Sections
      */
     public function billing(Patient $patient, User $user, int $page): array
     {
+        if (! $this->policy->field($user, $patient, 'financial')) {
+            return $this->ownFees($patient, $user, $page);
+        }
+
         $live = fn () => $this->summary->bills($patient)->where('status', '!=', BillingStatus::Cancelled->value);
         $bills = $this->summary->bills($patient)->latest('issued_at')->latest('id')->paginate(10, ['*'], 'page', $page);
         $billIds = fn () => $this->summary->bills($patient)->select('id');
@@ -492,12 +508,50 @@ class Patient360Sections
                 ->latest('id')->limit(8)->get()->map(fn (PatientBillingPayment $payment) => [
                     'receipt' => $payment->receipt_number, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method?->label(),
                     'date' => ($payment->paid_at ?? $payment->created_at)?->toIso8601String(), 'bill' => $payment->billing?->billing_number,
+                    'receipt_url' => $this->receiptUrl($payment),
                 ])->values(),
             'refunds' => PatientBillingRefund::query()->whereIn('patient_billing_id', $billIds())->with('billing:id,billing_number')
                 ->latest('id')->limit(8)->get()->map(fn (PatientBillingRefund $refund) => [
                     'number' => $refund->refund_number, 'amount' => (float) $refund->amount, 'reason' => $refund->reason,
                     'date' => $refund->created_at?->toIso8601String(), 'bill' => $refund->billing?->billing_number,
                 ])->values(),
+        ];
+    }
+
+    /**
+     * A practitioner's own fees for this patient (`billing.view_own_fees`):
+     * the lines of the bills raised for their care (`patient_billings.doctor_id`),
+     * leaving out any line charged to another practitioner. No bill totals,
+     * payments, refunds, balances or clinic figures, and no bill to open.
+     *
+     * @return array<string, mixed>
+     */
+    private function ownFees(Patient $patient, User $user, int $page): array
+    {
+        $me = $this->clinicContext->currentEmployee();
+        $mine = fn ($items) => $items->where(fn ($q) => $q->whereNull('doctor_id')->orWhere('doctor_id', $me?->id ?? 0));
+        $bills = $this->summary->bills($patient)
+            ->where('doctor_id', $me?->id ?? 0)
+            ->where('status', '!=', BillingStatus::Cancelled->value)
+            ->with(['items' => $mine])
+            ->latest('issued_at')->latest('id')->paginate(10, ['*'], 'page', $page);
+
+        return [
+            'scope' => 'own_fees',
+            'summary' => null,
+            ...$this->page($bills, fn (PatientBilling $bill) => [
+                'id' => $bill->id,
+                'number' => $bill->billing_number,
+                'status' => null,
+                'date' => ($bill->issued_at ?? $bill->created_at)?->toIso8601String(),
+                'total' => round((float) $bill->items->sum('final_amount'), 2),
+                'paid' => null,
+                'outstanding' => null,
+                'detail_url' => null,
+                'items' => $bill->items->map(fn (PatientBillingItem $item) => ['description' => $item->description, 'amount' => (float) $item->final_amount])->values(),
+            ]),
+            'payments' => [],
+            'refunds' => [],
         ];
     }
 
@@ -535,14 +589,18 @@ class Patient360Sections
                 'id' => $payment->id, 'receipt' => $payment->receipt_number, 'amount' => (float) $payment->amount,
                 'method' => $payment->payment_method?->label(), 'reference' => $payment->transaction_reference ?? null,
                 'date' => ($payment->paid_at ?? $payment->created_at)?->toIso8601String(),
+                'receipt_url' => $this->receiptUrl($payment),
             ])->values(),
             'refunds' => $bill->refunds->map(fn (PatientBillingRefund $refund) => [
                 'number' => $refund->refund_number, 'amount' => (float) $refund->amount, 'reason' => $refund->reason, 'date' => $refund->created_at?->toIso8601String(),
             ])->values(),
             // Only what this clinic accepts: the server refuses anything else.
             'payment_methods' => app(PaymentService::class)->methodOptions($this->clinicContext->clinic()),
+            // The payment plan the patient agreed to, with where each instalment stands today.
+            'instalments' => app(BillInstalments::class)->forBill($bill),
             'actions' => [
                 'pay_url' => $collect && $live && (float) $bill->outstanding_balance > 0 ? route('clinic.billing.payments.store', $bill) : null,
+                'instalments_url' => $collect && $live && (float) $bill->outstanding_balance > 0 ? route('clinic.billing.instalments.store', $bill) : null,
                 'refund_url' => $refund && $live && (float) $bill->paid_amount - (float) $bill->refunded_amount > 0 ? route('clinic.billing.refunds.store', $bill) : null,
                 // A concession or write-off on what is still due (`PaymentService::recordAdjustment`).
                 'adjust_url' => $adjust && $live && (float) $bill->outstanding_balance > 0 ? route('clinic.billing.adjustments.store', $bill) : null,
@@ -733,6 +791,131 @@ class Patient360Sections
      *
      * @return array<string, mixed>
      */
+    /**
+     * Cases & Plans: the patient's cases at the member's branches, open ones
+     * first, each with its lead practitioner (who leads the case) and the
+     * practitioners who treated its visits (who saw the patient), its visits,
+     * and — for clinical members — the treatments started in its
+     * consultations with their progress, agreed estimates (per the billing
+     * rules) and session packages. Treatments started outside any case are
+     * listed apart, never guessed into one. The internal case number is not
+     * sent. Lifecycle actions are offered as `PatientCaseLifecycle` allows.
+     *
+     * @return array<string, mixed>
+     */
+    public function cases(Patient $patient, User $user): array
+    {
+        $branchIds = $this->access->branchIds();
+        $cases = PatientCase::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->when($branchIds !== null, fn (Builder $query) => $query->whereIn('branch_id', $branchIds ?: [0]))
+            ->with(['leadPractitioner:id,name', 'branch:id,name'])
+            ->orderByRaw("case when status in ('".implode("','", PatientCase::OPEN)."') then 0 else 1 end")->latest('opened_at')->limit(50)->get();
+        $lifecycle = app(PatientCaseLifecycle::class);
+        $clinical = $this->policy->field($user, $patient, 'clinical');
+        $workspaces = $this->access->specialtyWorkspaces($patient);
+
+        $visits = $cases->isEmpty() ? collect() : PatientVisit::query()->withoutGlobalScopes()->whereIn('case_id', $cases->pluck('id'))
+            ->with('doctor:id,name')->orderByDesc('visit_date')->limit(2000)->get(['id', 'case_id', 'doctor_id', 'visit_date', 'visit_status'])->groupBy('case_id');
+        $treatmentIds = $clinical ? $lifecycle->treatmentIdsByCase($cases) : collect();
+        $treatments = $this->presentTreatments($patient, $user, $treatmentIds->flatten()->unique()->values()->all());
+
+        $rows = $cases->map(function (PatientCase $case) use ($patient, $user, $lifecycle, $visits, $treatmentIds, $treatments, $clinical, $workspaces) {
+            $module = $lifecycle->isPhysio($case) ? 'physio' : (in_array('odontogram', $this->specialtyRegistry()->get((string) $case->specialty)['extensions'] ?? [], true) ? 'dental' : 'general');
+            $caseVisits = $visits->get($case->id, collect());
+            $can = $lifecycle->abilities($case, $user);
+            $transition = fn (string $step) => route('clinic.patients.cases.transition', [$patient->id, $case->id, $step]);
+
+            return [
+                'id' => $case->id,
+                'module' => $module,
+                // A case of a module the clinic no longer offers stays visible as history.
+                'module_offered' => $module === 'general' || ($workspaces[$module] ?? false),
+                'specialty' => $this->specialtyRegistry()->get((string) $case->specialty)['label'] ?? Str::headline((string) $case->specialty),
+                'title' => $case->title,
+                'complaint' => $case->chief_complaint,
+                'status' => $case->status,
+                'lead' => $case->leadPractitioner?->name,
+                'branch' => $case->branch?->name,
+                'opened_at' => $case->opened_at?->toIso8601String(),
+                'closed_at' => $case->closed_at?->toIso8601String(),
+                'discharge_summary' => $clinical ? $case->discharge_summary : null,
+                'visits' => [
+                    'count' => $caseVisits->count(),
+                    'last' => $caseVisits->first()?->visit_date?->toDateString(),
+                    // Who treated the patient on the case's visits: the session's practitioner, not the case's lead.
+                    'treated_by' => $caseVisits->pluck('doctor.name')->filter()->unique()->values()->all(),
+                ],
+                'treatments' => $clinical ? $treatmentIds->get($case->id, collect())->map(fn (int $id) => $treatments[$id] ?? null)->filter()->values()->all() : null,
+                'actions' => [
+                    'recommend' => $can['recommend'] ? $transition('recommend') : null,
+                    'close' => $can['close'] ? $transition('close') : null,
+                    'reopen' => $can['reopen'] ? $transition('reopen') : null,
+                ],
+            ];
+        })->values();
+
+        $linked = $treatmentIds->flatten()->unique()->all();
+        $loose = $clinical ? collect($this->treatmentReadModel->forPatient($patient->clinic_id, $patient->id, $branchIds, false, $this->access->canViewBilling($user), ownEstimatesFor: $this->access->ownFeesPractitionerId($user)))
+            ->reject(fn (array $treatment) => in_array($treatment['id'], $linked, true))->values() : null;
+
+        return [
+            'data' => $rows->all(),
+            'other_treatments' => $loose?->all(),
+            'statuses' => [PatientCase::ACTIVE => 'Active', PatientCase::COMPLETION_RECOMMENDED => 'Completion recommended', PatientCase::CLOSED => 'Closed'],
+        ];
+    }
+
+    /**
+     * The open cases for the persistent Active Cases bar: modules the clinic
+     * offers only, with the lead practitioner, start and a one-line summary.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function activeCases(Patient $patient, User $user): array
+    {
+        return collect($this->cases($patient, $user)['data'])
+            ->filter(fn (array $case) => in_array($case['status'], PatientCase::OPEN, true) && $case['module_offered'])
+            ->map(fn (array $case) => [
+                ...collect($case)->only(['id', 'module', 'specialty', 'title', 'status', 'lead', 'opened_at'])->all(),
+                'summary' => collect($case['treatments'] ?? [])->map(function (array $treatment) {
+                    $package = collect($treatment['packages'] ?? [])->first(fn (array $p) => $p['remaining'] > 0);
+                    $progress = $treatment['progress']['total'] ? "{$treatment['progress']['done']} of {$treatment['progress']['total']}" : null;
+
+                    return implode(' · ', array_filter([$treatment['title'], $progress, $package ? "{$package['remaining']} sessions left" : null]));
+                })->take(2)->values()->all(),
+            ])->values()->all();
+    }
+
+    /**
+     * Treatments by id as the treatment section presents them, with their
+     * session packages' remaining sessions.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function presentTreatments(Patient $patient, User $user, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $rows = PatientTreatment::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('id', $ids)->with('practitioner:id,name')->get();
+        $packages = PatientSessionPackage::query()->withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->whereIn('patient_treatment_id', $ids)
+            ->where('status', '!=', PatientSessionPackage::CANCELLED)->get()->groupBy('patient_treatment_id');
+
+        return collect($this->treatmentReadModel->present($rows, $this->access->canViewBilling($user), $this->access->ownFeesPractitionerId($user)))
+            ->map(fn (array $treatment) => [
+                ...$treatment,
+                'packages' => $packages->get($treatment['id'], collect())->map(fn (PatientSessionPackage $package) => [
+                    'name' => $package->name, 'sessions_total' => $package->sessions_total, 'remaining' => $package->remaining(), 'status' => $package->status,
+                ])->values()->all(),
+            ])->keyBy('id')->all();
+    }
+
+    private function specialtyRegistry(): SpecialtyRegistry
+    {
+        return app(SpecialtyRegistry::class);
+    }
+
     public function physio(Patient $patient, User $user): array
     {
         return $this->physioWorkspace->build($patient, $user);
@@ -800,6 +983,14 @@ class Patient360Sections
         ];
     }
 
+    /** The thermal receipt of one payment (`CheckoutController::printBill`, which checks access again). */
+    private function receiptUrl(PatientBillingPayment $payment): ?string
+    {
+        return $payment->receipt_number
+            ? route('clinic.billing.bills.print', ['bill' => $payment->patient_billing_id, 'layout' => 'receipt', 'payment' => $payment->id])
+            : null;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -842,6 +1033,10 @@ class Patient360Sections
 
         return match ($event->event_type) {
             'registered' => 'Registered at the front desk.',
+            // Notes, summaries and reasons may be clinical: the case's title and who acted only.
+            'case_completion_recommended' => ($c['title'] ?? 'Case').(! empty($c['by']) ? " — recommended by {$c['by']}" : '').'.',
+            'case_closed' => ($c['title'] ?? 'Case').(! empty($c['by']) ? " — closed by {$c['by']}" : '').'.',
+            'case_reopened' => ($c['title'] ?? 'Case').(! empty($c['by']) ? " — reopened by {$c['by']}" : '').'.',
             'appointment_scheduled' => 'Booked'.(! empty($c['practitioner']) ? " with {$c['practitioner']}" : '').(! empty($c['scheduled_at']) ? " for {$c['scheduled_at']}" : '').'.',
             'appointment_rescheduled' => 'Moved'.(! empty($c['scheduled_at']) ? " to {$c['scheduled_at']}" : '').'.',
             'appointment_cancelled' => 'Cancelled'.(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
@@ -878,9 +1073,10 @@ class Patient360Sections
             'orthodontic_visit_recorded' => 'Adjustment in '.($c['encounter_number'] ?? 'a consultation').(! empty($c['phase']) ? " · {$c['phase']} phase" : '').'.',
             'lab_order_created', 'lab_case_send', 'lab_case_start', 'lab_case_receive', 'lab_case_remake', 'lab_case_fit', 'lab_case_complete', 'lab_case_cancel' => ($c['lab_order_number'] ?? 'Lab case').(! empty($c['restoration']) ? " · {$c['restoration']}" : '').(! empty($c['teeth']) ? ' · teeth '.implode(', ', (array) $c['teeth']) : '').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
             'patient_archive_cleared' => 'Patient archiving was removed from OralCares; this record is a current patient again.',
+            'patient_death_cleared' => 'The deceased status was removed from OralCares; this record is a current patient again'.(! empty($c['date_of_death']) ? " (date of death recorded: {$c['date_of_death']})" : '').'.',
             'patient_death_recorded' => 'Date of death '.($c['date_of_death'] ?? '').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
             'patient_death_corrected' => 'The recorded death'.(! empty($c['previous_date_of_death']) ? " ({$c['previous_date_of_death']})" : '').' was corrected'.(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
-            'patient_archived', 'document_removed', 'encounter_voided', 'tooth_entry_voided', 'dental_record_voided' => ($c['label'] ?? 'Record').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
+            'patient_archived', 'patient_deleted', 'document_removed', 'encounter_voided', 'tooth_entry_voided', 'dental_record_voided' => ($c['label'] ?? 'Record').(! empty($c['reason']) ? " — {$c['reason']}" : '').'.',
             default => Str::headline($event->event_type).'.',
         };
     }
@@ -910,6 +1106,10 @@ class Patient360Sections
     private const TIMELINE = [
         'registered' => ['registration', 'Registered'],
         'demographics_updated' => ['record', 'Details updated'],
+        // The case lifecycle (`PatientCaseLifecycle`).
+        'case_completion_recommended' => ['record', 'Case completion recommended'],
+        'case_closed' => ['record', 'Case closed'],
+        'case_reopened' => ['record', 'Case reopened'],
         'doctor_transferred' => ['record', 'Doctor reassigned'],
         'appointment_scheduled' => ['appointment', 'Appointment booked'],
         'appointment_confirmed' => ['appointment', 'Appointment confirmed'],
@@ -980,6 +1180,9 @@ class Patient360Sections
         'patient_archive_cleared' => ['governance', 'Returned to current patients'],
         'patient_death_recorded' => ['governance', 'Death recorded'],
         'patient_death_corrected' => ['governance', 'Death record corrected'],
+        // History from before the deceased status was removed (2026-11-02); kept so old timelines still read.
+        'patient_death_cleared' => ['governance', 'Returned to current patients'],
+        'patient_deleted' => ['governance', 'Patient deleted'],
         'document_removed' => ['governance', 'Document removed'],
         'encounter_voided' => ['consultation', 'Consultation voided'],
         'tooth_entry_voided' => ['dental', 'Chart entry voided'],

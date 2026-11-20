@@ -167,6 +167,19 @@ class PatientRegistrationService
             // 4. The patient's case number for this period, linked to the visit
             $caseNumber = $this->caseNumberGenerator->forVisit($clinic, $visit);
 
+            // Phase C: Resolve and link the active PatientCase
+            $patientCase = app(PatientCaseService::class)->resolveCaseForVisit(
+                clinic: $clinic,
+                branch: $branch,
+                patient: $patient,
+                visit: $visit,
+                doctor: $visit->doctor,
+                context: null,
+            );
+            if ($patientCase !== null) {
+                $visit->update(['case_id' => $patientCase->id]);
+            }
+
             // 5. Create timeline event
             PatientTimelineEvent::create([
                 'organization_id' => $clinic->organization_id,
@@ -183,7 +196,7 @@ class PatientRegistrationService
             PatientRegistered::dispatch($patient);
             PatientVisitCreated::dispatch($visit, $caseNumber);
 
-            return $visit->load(['patient', 'caseNumber']);
+            return $visit->load(['patient', 'caseNumber', 'case']);
         });
     }
 
@@ -210,9 +223,24 @@ class PatientRegistrationService
             // 2. The patient's case number for this period (reused if one exists)
             $caseNumber = $this->caseNumberGenerator->forVisit($clinic, $visit);
 
+            // Phase C: Resolve and link the active PatientCase
+            $patientCase = app(PatientCaseService::class)->resolveCaseForVisit(
+                clinic: $clinic,
+                branch: $branch,
+                patient: $patient,
+                visit: $visit,
+                doctor: $visit->doctor,
+                context: null,
+                caseId: $visitData['case_id'] ?? null,
+                isNewCase: (bool) ($visitData['new_case'] ?? false),
+            );
+            if ($patientCase !== null) {
+                $visit->update(['case_id' => $patientCase->id]);
+            }
+
             PatientVisitCreated::dispatch($visit, $caseNumber);
 
-            return $visit->load(['patient', 'caseNumber']);
+            return $visit->load(['patient', 'caseNumber', 'case']);
         });
     }
 

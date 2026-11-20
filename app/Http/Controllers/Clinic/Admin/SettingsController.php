@@ -7,12 +7,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Clinic\UpdateCaseNumberConfigRequest;
 use App\Models\Clinic;
 use App\Models\ClinicSettingAudit;
+use App\Models\ClinicWhatsAppSettings;
+use App\Services\Appointments\AppointmentSettingsService;
 use App\Services\Clinical\ClinicalCatalogue;
 use App\Services\ClinicContext;
 use App\Services\Patient\CaseNumberConfigService;
 use App\Services\Patient\ClinicSpecialties;
+use App\Services\Patient\ClinicWorkAlerts;
+use App\Services\Patient\PatientAutomation;
 use App\Services\PatientFieldConfigService;
+use App\Services\Physio\PhysioCareSummary;
+use App\Services\Physio\PhysioCatalogue;
 use App\Services\Reception\PatientFlowConfigService;
+use App\Services\WhatsApp\ClinicWhatsApp;
 use App\Support\ClinicAccess\ClinicModules;
 use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
@@ -26,6 +33,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 
 class SettingsController extends Controller
 {
@@ -178,6 +186,9 @@ class SettingsController extends Controller
                 'fields' => route('admin.settings.patient-fields'),
                 'template' => route('admin.settings.patient-fields.template'),
                 'quick_care' => route('admin.settings.quick-care'),
+                'automation' => route('admin.settings.automation'),
+                'physio' => $this->physioLink($clinic),
+                'self' => route('admin.settings.patient-form'),
                 'check_in' => route('admin.settings.check-in'),
                 'catalogue' => route('admin.settings.catalogue.index', ['kind' => '__KIND__']),
             ],
@@ -277,7 +288,7 @@ class SettingsController extends Controller
 
         try {
             $catalogue->configure($context->clinic(), $request->user(), $kind, $key, $validated);
-        } catch (\InvalidArgumentException) {
+        } catch (InvalidArgumentException) {
             abort(404);
         }
 
@@ -334,6 +345,183 @@ class SettingsController extends Controller
      * and the yearly restart wait for the next period. Numbers already issued
      * never change. Every change is written to `clinic_setting_audits`.
      */
+    /** Recall intervals offered (months); 0 turns the dental recall off. */
+    public const RECALL_MONTHS = [0, 3, 6, 9, 12];
+
+    /**
+     * The owner's automation settings in one place: what runs by itself for
+     * patients (missed appointments, dental recall) and which WhatsApp
+     * messages go out (`ClinicWhatsApp` automations).
+     */
+    public function automation(ClinicContext $context, AppointmentSettingsService $appointments, ClinicWhatsApp $whatsApp, PatientAutomation $automation): Response
+    {
+        $clinic = $context->clinic();
+        $booking = $appointments->resolve($clinic);
+        $settings = $whatsApp->settings($clinic);
+        $groups = (array) config('clinic_whatsapp.groups', []);
+
+        return Inertia::render('ClinicPortal/Settings/Automation', [
+            'patient' => [
+                'auto_no_show' => $booking['auto_no_show'],
+                'no_show_after_minutes' => $booking['no_show_after_minutes'],
+                'recall_months' => $automation->recallMonths($clinic),
+                'recall_choices' => self::RECALL_MONTHS,
+                'staff_alerts' => app(ClinicWorkAlerts::class)->enabled($clinic),
+                'morning_digest' => (bool) ($clinic->communication_config['morning_digest'] ?? true),
+                'auto_assign_doctor' => $automation->assignsFirstDoctor($clinic),
+            ],
+            'whatsapp' => [
+                'enabled' => (bool) $settings->enabled,
+                'require_opt_in' => (bool) ($settings->require_opt_in ?? true),
+                'status' => $whatsApp->status($clinic, $settings),
+                'automations' => collect($whatsApp->availableAutomations($clinic))->map(fn (array $item, string $key) => [
+                    'key' => $key,
+                    'label' => $item['label'],
+                    'group' => $groups[$item['group']] ?? $item['group'],
+                    'enabled' => $settings->automationEnabled($key),
+                ])->values()->all(),
+            ],
+            'links' => ['update' => route('admin.settings.automation.update'), 'patient_form' => route('admin.settings.patient-form'), 'self' => route('admin.settings.automation'), 'physio' => $this->physioLink($clinic)],
+        ]);
+    }
+
+    /**
+     * The owner's physiotherapy price list: the treatments given in a session
+     * (usual minutes, price for a visit paid on the day) and the session
+     * packages the clinic sells (`PhysioCatalogue`). Only for a clinic that
+     * practises physiotherapy.
+     */
+    public function physio(ClinicContext $context, PhysioCatalogue $catalogue, ClinicSpecialties $specialties): Response
+    {
+        $clinic = $context->clinic();
+        abort_if($specialties->active($clinic, PhysioCareSummary::SPECIALTY) === null, 404);
+
+        return Inertia::render('ClinicPortal/Settings/Physio', [
+            'catalogue' => $catalogue->resolve($clinic),
+            'exercise_options' => [
+                'categories' => collect(PhysioCatalogue::EXERCISE_CATEGORIES)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
+                'levels' => collect(PhysioCatalogue::LEVELS)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
+            ],
+            'links' => ['update' => route('admin.settings.physio.update'), 'self' => route('admin.settings.physio'), 'patient_form' => route('admin.settings.patient-form'), 'automation' => route('admin.settings.automation')],
+        ]);
+    }
+
+    /** The Physio settings tab, for a clinic that practises physiotherapy. */
+    private function physioLink(Clinic $clinic): ?string
+    {
+        return app(ClinicSpecialties::class)->active($clinic, PhysioCareSummary::SPECIALTY) !== null ? route('admin.settings.physio') : null;
+    }
+
+    public function updatePhysio(Request $request, ClinicContext $context, PhysioCatalogue $catalogue, ClinicSpecialties $specialties): RedirectResponse
+    {
+        $clinic = $context->clinic();
+        abort_if($specialties->active($clinic, PhysioCareSummary::SPECIALTY) === null, 404);
+        $data = $request->validate([
+            'treatments' => ['present', 'array', 'max:40'],
+            'treatments.*.key' => ['nullable', 'string', 'max:64'],
+            'treatments.*.label' => ['required', 'string', 'max:60'],
+            'treatments.*.minutes' => ['required', 'integer', 'min:1', 'max:180'],
+            'treatments.*.price' => ['nullable', 'numeric', 'min:0', 'max:100000'],
+            'treatments.*.active' => ['boolean'],
+            'addons' => ['present', 'array', 'max:40'],
+            'addons.*.key' => ['nullable', 'string', 'max:64'],
+            'addons.*.label' => ['required', 'string', 'max:60'],
+            'addons.*.minutes' => ['required', 'integer', 'min:1', 'max:180'],
+            'addons.*.price' => ['required', 'numeric', 'min:0', 'max:100000'],
+            'addons.*.active' => ['boolean'],
+            'problems' => ['present', 'array', 'max:40'],
+            'problems.*.key' => ['nullable', 'string', 'max:64'],
+            'problems.*.label' => ['required', 'string', 'max:60'],
+            'problems.*.sided' => ['boolean'],
+            'problems.*.active' => ['boolean'],
+            'problems.*.types' => ['required', 'array', 'min:1', 'max:12'],
+            'problems.*.types.*.key' => ['nullable', 'string', 'max:64'],
+            'problems.*.types.*.label' => ['required', 'string', 'max:60'],
+            'problems.*.types.*.treatments' => ['present', 'array', 'max:20'],
+            'problems.*.types.*.treatments.*' => ['string', 'max:64'],
+            // Empty: the visit costs the treatments given; set: the type's fixed (bundle) price.
+            'problems.*.types.*.price' => ['nullable', 'numeric', 'min:0', 'max:100000'],
+            'problems.*.packages' => ['present', 'array', 'max:12'],
+            'problems.*.packages.*.id' => ['nullable', 'string', 'max:20'],
+            'problems.*.packages.*.name' => ['required', 'string', 'max:60'],
+            'problems.*.packages.*.sessions' => ['required', 'integer', 'min:1', 'max:200'],
+            'problems.*.packages.*.price' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'problems.*.packages.*.valid_days' => ['required', 'integer', 'min:1', 'max:730'],
+            'problems.*.packages.*.types' => ['present', 'array', 'max:12'],
+            'problems.*.packages.*.types.*' => ['string', 'max:64'],
+            'problems.*.diagnoses' => ['nullable', 'array', 'max:30'],
+            'problems.*.diagnoses.*' => ['string', 'max:120'],
+            'problems.*.exercises' => ['nullable', 'array', 'max:30'],
+            'problems.*.exercises.*' => ['string', 'max:64'],
+            // The clinic's exercise library (no pictures or videos).
+            'exercises' => ['sometimes', 'array', 'max:200'],
+            'exercises.*.key' => ['nullable', 'string', 'max:64'],
+            'exercises.*.label' => ['required', 'string', 'max:150'],
+            'exercises.*.category' => ['nullable', 'in:'.implode(',', array_keys(PhysioCatalogue::EXERCISE_CATEGORIES))],
+            'exercises.*.description' => ['nullable', 'string', 'max:500'],
+            'exercises.*.instructions' => ['nullable', 'string', 'max:500'],
+            'exercises.*.precautions' => ['nullable', 'string', 'max:500'],
+            'exercises.*.level' => ['nullable', 'in:'.implode(',', array_keys(PhysioCatalogue::LEVELS))],
+            'exercises.*.equipment' => ['nullable', 'string', 'max:120'],
+            'exercises.*.sets' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'exercises.*.reps' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'exercises.*.hold' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'exercises.*.active' => ['boolean'],
+        ]);
+
+        try {
+            $catalogue->save($clinic, $data, $request->user());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['physio' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Physio price list saved.');
+    }
+
+    public function updateAutomation(Request $request, ClinicContext $context, AppointmentSettingsService $appointments, ClinicWhatsApp $whatsApp): RedirectResponse
+    {
+        $clinic = $context->clinic();
+        $data = $request->validate([
+            'auto_no_show' => ['required', 'boolean'],
+            'no_show_after_minutes' => ['required', 'integer', 'min:5', 'max:240'],
+            'recall_months' => ['required', 'integer', Rule::in(self::RECALL_MONTHS)],
+            'staff_alerts' => ['sometimes', 'boolean'],
+            'morning_digest' => ['sometimes', 'boolean'],
+            'auto_assign_doctor' => ['sometimes', 'boolean'],
+            'whatsapp_enabled' => ['required', 'boolean'],
+            'require_opt_in' => ['required', 'boolean'],
+            'automations' => ['present', 'array', 'max:60'],
+            'automations.*' => ['string', Rule::in(array_keys(ClinicWhatsApp::catalog()))],
+        ]);
+
+        // Only the two booking settings change; the rest of the appointment settings stay as they are.
+        $appointments->update($clinic, [...$appointments->resolve($clinic), 'auto_no_show' => $data['auto_no_show'], 'no_show_after_minutes' => $data['no_show_after_minutes']], $request->user());
+
+        $before = (array) ($clinic->communication_config ?? []);
+        $changed = array_filter([
+            'recall_months' => $data['recall_months'],
+            'staff_alerts' => array_key_exists('staff_alerts', $data) ? (bool) $data['staff_alerts'] : null,
+            'morning_digest' => array_key_exists('morning_digest', $data) ? (bool) $data['morning_digest'] : null,
+            'auto_assign_doctor' => array_key_exists('auto_assign_doctor', $data) ? (bool) $data['auto_assign_doctor'] : null,
+        ], fn ($value, string $key) => $value !== null && ($before[$key] ?? null) !== $value, ARRAY_FILTER_USE_BOTH);
+        if ($changed !== []) {
+            $clinic->update(['communication_config' => [...$before, ...$changed]]);
+            ClinicSettingAudit::create([
+                'clinic_id' => $clinic->id, 'user_id' => $request->user()->id, 'section' => 'automation',
+                'old_values' => array_intersect_key($before, $changed), 'new_values' => $changed,
+            ]);
+        }
+
+        $whatsApp->configure($clinic, [
+            'enabled' => $data['whatsapp_enabled'],
+            'mode' => $whatsApp->settings($clinic)->mode ?? ClinicWhatsAppSettings::COMMON,
+            'require_opt_in' => $data['require_opt_in'],
+            'automations' => $data['automations'],
+        ], $request->user());
+
+        return back()->with('success', 'Automation settings saved.');
+    }
+
     public function updateCaseNumber(UpdateCaseNumberConfigRequest $request, ClinicContext $context): RedirectResponse
     {
         $this->caseNumberConfigService->update($context->clinic(), $request->validated(), $request->user());

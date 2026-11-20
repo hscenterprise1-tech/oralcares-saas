@@ -26,6 +26,7 @@ class PatientSessionPackage extends Model
     protected $fillable = [
         'patient_treatment_id',
         'renews_package_id',
+        'includes',
         'clinic_id',
         'branch_id',
         'patient_id',
@@ -45,6 +46,7 @@ class PatientSessionPackage extends Model
             'sessions_used' => 'integer',
             'sessions_adjusted' => 'integer',
             'valid_until' => 'date',
+            'includes' => 'array',
         ];
     }
 

@@ -31,6 +31,7 @@ use App\Http\Controllers\Clinic\ClinicSupportController;
 use App\Http\Controllers\Clinic\ConsultationController;
 use App\Http\Controllers\Clinic\ConsultationTreatmentController;
 use App\Http\Controllers\Clinic\DeletionRequestController;
+use App\Http\Controllers\Clinic\DayClosingController;
 use App\Http\Controllers\Clinic\DentalController;
 use App\Http\Controllers\Clinic\DentalSpecialtyController;
 use App\Http\Controllers\Clinic\ExpenseController;
@@ -1267,7 +1268,8 @@ $clinicRoutes = function () {
         });
 
         // Reports: the owner's and administrator's (the Command Center workspace), each report gated again by specialty and permission.
-        Route::prefix('reports')->name('clinic.reports.')->middleware(['clinic_permission:reports.view', 'clinic_workspace:command_center'])->group(function () {
+        // The clinic's reports (`reports.view` in the Command Center), or a practitioner's own: `ClinicReports::available` decides, per report.
+        Route::prefix('reports')->name('clinic.reports.')->group(function () {
             Route::get('/', [ClinicReportController::class, 'index'])->name('index');
             Route::post('/exports', [ClinicReportController::class, 'export'])->middleware('throttle:10,1')->name('exports.store');
             Route::get('/exports/{export}', [ClinicReportController::class, 'download'])->whereNumber('export')->name('exports.download');
@@ -1304,10 +1306,20 @@ $clinicRoutes = function () {
                 Route::patch('/queue/{item}/visit', [ReceptionController::class, 'correctVisit'])->name('queue.visit');
                 // Physiotherapy at the desk: the patient's care at a glance, and confirming a session took place.
                 Route::get('/patients/{patient}/physio-summary', [ReceptionController::class, 'physioSummary'])->whereNumber('patient')->name('physio-summary');
+                Route::post('/patients/{patient}/physio-programme', [ReceptionController::class, 'startPhysioProgramme'])
+                    ->whereNumber('patient')->middleware(['clinic_permission:physio.session.confirm', 'throttle:30,1'])->name('physio-programme');
                 Route::post('/queue/{item}/physio-session', [ReceptionController::class, 'confirmPhysioSession'])
                     ->whereNumber('item')->middleware('clinic_permission:physio.session.confirm')->name('queue.physio-session');
+                // The desk runs a physiotherapy visit for a therapist without a login (`DeskPhysio`): the same
+                // workspace and actions as the therapist's, in the therapist's name.
+                Route::middleware('clinic_permission:physio.session.confirm')->prefix('physio')->name('physio-desk.')->group(function () {
+                    Route::post('/queue/{item}/open', [ConsultationController::class, 'deskStartPhysio'])->whereNumber('item')->name('open');
+                });
                 // A Front Desk list in full ("View all"): today, this branch, cursor pages.
                 Route::get('/list/{list}', [ReceptionController::class, 'list'])->whereIn('list', ['waiting', 'with_doctor', 'done', 'not_present'])->name('list');
+                // Close the business day: the ledger's figures by method, and the cash the desk counted against them.
+                Route::get('/day-closing', [DayClosingController::class, 'show'])->middleware('clinic_permission:payment.collect')->name('day-closing');
+                Route::post('/day-closing', [DayClosingController::class, 'store'])->middleware(['clinic_permission:payment.collect', 'throttle:20,1'])->name('day-closing.store');
                 // Bill a signed consultation and take the payment at the desk.
                 Route::post('/billing/{encounter}/collect', [ReceptionController::class, 'collect'])
                     ->whereNumber('encounter')->middleware('clinic_permission:payment.collect')->name('billing.collect');
@@ -1318,6 +1330,23 @@ $clinicRoutes = function () {
             // Calling the next patient in queue order is the Queue module.
             Route::post('/queue/call-next', [ReceptionController::class, 'callNext'])->middleware('clinic_module:queue')->name('clinic.queue.call-next');
         });
+
+        // ==========================================
+        // PHYSIOTHERAPY RUN AT THE DESK
+        // ==========================================
+        // For a therapist who has no login: the desk works the visit with the therapist's workspace and actions,
+        // each one checked again by `DeskPhysio` (physiotherapy only, a therapist without a login, this branch).
+        Route::prefix('front-desk/physio/{encounter}')->name('clinic.desk-physio.')->whereNumber('encounter')
+            ->middleware(['clinic_workspace:front_desk', 'clinic_permission:physio.session.confirm'])->group(function () {
+                Route::get('/', [ConsultationController::class, 'deskPhysio'])->name('show');
+                Route::post('/finish', [ConsultationController::class, 'finishPhysio'])->middleware('throttle:30,1')->name('finish');
+                Route::post('/plan', [ConsultationController::class, 'physioPlan'])->middleware('throttle:60,1')->name('plan');
+                Route::post('/courses/{course}/package', [ConsultationController::class, 'physioPackage'])->whereNumber('course')->middleware('throttle:30,1')->name('courses.package');
+                Route::post('/courses/{course}/progress', [ConsultationController::class, 'physioProgress'])->whereNumber('course')->middleware('throttle:60,1')->name('courses.progress');
+                Route::get('/courses/{course}/exercise-sheet', [ConsultationController::class, 'physioExerciseSheet'])->whereNumber('course')->name('courses.sheet');
+                Route::get('/courses/{course}/reports/{kind}', [ConsultationController::class, 'physioReport'])->whereNumber('course')
+                    ->where('kind', 'assessment|plan|session|progress|package')->name('courses.report');
+            });
 
         // ==========================================
         // CONSULTATIONS (clinical core)
@@ -1338,6 +1367,19 @@ $clinicRoutes = function () {
                 Route::delete('/{encounter}/procedures/{procedure}', [ConsultationController::class, 'destroyProcedure'])->scopeBindings()->name('procedures.destroy');
                 Route::post('/{encounter}/notes', [ConsultationController::class, 'storeNote'])->name('notes.store');
                 Route::post('/{encounter}/finalize', [ConsultationController::class, 'finalize'])->name('finalize');
+                // A physiotherapy visit finished in one step: sessions, payment, signature, next visit.
+                Route::post('/{encounter}/dental/finish', [ConsultationController::class, 'finishDental'])->middleware('throttle:30,1')->name('dental.finish');
+                Route::post('/{encounter}/physio/finish', [ConsultationController::class, 'finishPhysio'])->middleware('throttle:30,1')->name('physio.finish');
+                Route::post('/{encounter}/physio/problems', [ConsultationController::class, 'suggestPhysio'])->middleware('throttle:60,1')->name('physio.problems');
+                Route::post('/{encounter}/physio/plan', [ConsultationController::class, 'physioPlan'])->middleware('throttle:60,1')->name('physio.plan');
+                Route::get('/{encounter}/physio/courses/{course}/exercise-sheet', [ConsultationController::class, 'physioExerciseSheet'])->whereNumber('course')->name('physio.courses.sheet');
+                Route::get('/{encounter}/physio/courses/{course}/reports/{kind}', [ConsultationController::class, 'physioReport'])->whereNumber('course')
+                    ->where('kind', 'assessment|plan|session|progress|package')->name('physio.courses.report');
+                Route::post('/{encounter}/physio/courses/{course}/progress', [ConsultationController::class, 'physioProgress'])->whereNumber('course')->middleware('throttle:60,1')->name('physio.courses.progress');
+                Route::post('/{encounter}/physio/courses/{course}/start', [ConsultationController::class, 'startPhysio'])->whereNumber('course')->middleware('throttle:60,1')->name('physio.courses.start');
+                Route::post('/{encounter}/physio/courses/{course}/type', [ConsultationController::class, 'physioType'])->whereNumber('course')->middleware('throttle:60,1')->name('physio.courses.type');
+                Route::post('/{encounter}/physio/courses/{course}/package', [ConsultationController::class, 'physioPackage'])->whereNumber('course')->middleware('throttle:30,1')->name('physio.courses.package');
+                Route::post('/{encounter}/physio/courses/{course}/details', [ConsultationController::class, 'physioDetails'])->whereNumber('course')->middleware('throttle:60,1')->name('physio.courses.details');
                 Route::post('/{encounter}/addenda', [ConsultationController::class, 'storeAddendum'])->name('addenda.store');
                 // Start a treatment (with its plan, package and today's session) without leaving the visit.
                 Route::post('/{encounter}/treatments', [ConsultationTreatmentController::class, 'store'])
@@ -1425,19 +1467,30 @@ $clinicRoutes = function () {
             Route::get('/summary', [BillingRegisterController::class, 'summary'])->middleware(['clinic_permission:reports.view', 'clinic_workspace:command_center'])->name('summary');
             // One bill in full, for the Billing pages' detail (JSON); each action it offers is authorized again by its own route.
             Route::get('/bills/{bill}', [CheckoutController::class, 'bill'])->whereNumber('bill')->name('bills.show');
-            Route::get('/checkout/{encounter}', [CheckoutController::class, 'show'])->whereNumber('encounter')->name('checkout');
-            Route::post('/checkout/{encounter}', [CheckoutController::class, 'store'])
+            Route::post('/bills/{bill}/refunds', [CheckoutController::class, 'refund'])
+                ->middleware('clinic_permission:refund.process')->name('refunds.store');
+            Route::post('/bills/{bill}/adjustments', [CheckoutController::class, 'adjust'])
+                ->middleware('clinic_permission:discount.apply')->name('adjustments.store');
+        });
+        // Billing one patient's consultation, and paying or printing one bill: the desk's work, not the
+        // clinic's ledger, so each needs its own right at the record's branch (checked again in the
+        // controller) rather than `billing.view`. A practitioner holds none of them.
+        Route::prefix('billing')->name('clinic.billing.')->group(function () {
+            Route::get('/checkout/{encounter}', [CheckoutController::class, 'show'])->whereNumber('encounter')
+                ->middleware('clinic_permission:billing.create')->name('checkout');
+            Route::post('/checkout/{encounter}', [CheckoutController::class, 'store'])->whereNumber('encounter')
                 ->middleware('clinic_permission:billing.create')->name('checkout.store');
             Route::post('/bills/{bill}/payments', [CheckoutController::class, 'pay'])
                 ->middleware('clinic_permission:payment.collect')->name('payments.store');
-            Route::post('/bills/{bill}/refunds', [CheckoutController::class, 'refund'])
-                ->middleware('clinic_permission:refund.process')->name('refunds.store');
+            Route::post('/bills/{bill}/instalments', [CheckoutController::class, 'planInstalments'])
+                ->middleware('clinic_permission:payment.collect')->name('instalments.store');
+            Route::delete('/bills/{bill}/instalments', [CheckoutController::class, 'clearInstalments'])
+                ->middleware('clinic_permission:payment.collect')->name('instalments.destroy');
             Route::get('/bills/{bill}/print', [CheckoutController::class, 'printBill'])->name('bills.print');
-            Route::get('/payments/{payment}/messages', [CheckoutController::class, 'paymentMessages'])->whereNumber('payment')->name('payments.messages');
+            Route::get('/payments/{payment}/messages', [CheckoutController::class, 'paymentMessages'])->whereNumber('payment')
+                ->middleware('clinic_permission:payment.collect')->name('payments.messages');
             Route::post('/payments/{payment}/messages/retry', [CheckoutController::class, 'retryPaymentMessages'])->whereNumber('payment')
                 ->middleware(['clinic_permission:payment.collect', 'throttle:10,1'])->name('payments.messages.retry');
-            Route::post('/bills/{bill}/adjustments', [CheckoutController::class, 'adjust'])
-                ->middleware('clinic_permission:discount.apply')->name('adjustments.store');
         });
 
         Route::get('/medicines/search', [PrescriptionController::class, 'medicines'])
@@ -1484,12 +1537,17 @@ $clinicRoutes = function () {
             Route::get('/{patient}/360/bills/{bill}', [Patient360SectionController::class, 'bill'])->whereNumber('bill')->name('360.bill');
             Route::get('/{patient}/360/dental/teeth/{tooth}', [Patient360SectionController::class, 'tooth'])->whereNumber('tooth')->name('360.dental.tooth');
             Route::get('/{patient}/360/{section}', [Patient360SectionController::class, 'show'])
-                ->where('section', 'timeline|visits|encounters|appointments|treatment|prescriptions|investigations|billing|documents|follow-ups|communications|requests|audit|dental|physio')
+                ->where('section', 'timeline|visits|encounters|appointments|treatment|prescriptions|investigations|billing|documents|follow-ups|communications|requests|audit|dental|physio|cases')
                 ->middleware('throttle:240,1')
                 ->name('360.section');
+            // A case's lifecycle: recommend completion, close, reopen (`PatientCaseLifecycle` authorises each).
+            Route::post('/{patient}/cases/{case}/{transition}', [Patient360SectionController::class, 'transitionCase'])
+                ->whereNumber('case')->where('transition', 'recommend|close|reopen')
+                ->middleware('throttle:60,1')->name('cases.transition');
             Route::post('/{patient}/dental/lab/{labOrder}/{step}', [DentalSpecialtyController::class, 'labStep'])
                 ->whereNumber('labOrder')->where('step', 'send|start|receive|remake|fit|complete|cancel')
                 ->name('dental.lab.step');
+            Route::get('/{patient}/dental/plans/{plan}/estimate', [DentalController::class, 'estimate'])->whereNumber('plan')->name('dental.plans.estimate');
             Route::post('/{patient}/dental/plans/{plan}/{transition}', [DentalController::class, 'transitionPlan'])
                 ->whereNumber('plan')->where('transition', 'accept|pause|resume|decline|cancel')
                 ->middleware('clinic_permission:clinical.edit')
@@ -1518,8 +1576,9 @@ $clinicRoutes = function () {
             Route::post('/{patient}/treatments/adhoc', [TreatmentCareController::class, 'startAdHoc'])
                 ->middleware('clinic_permission:treatment.start')->name('treatments.adhoc');
 
-            // Treatment charges outside a consultation.
-            Route::middleware('clinic_permission:billing.view')->group(function () {
+            // Treatment charges outside a consultation: this patient's due charges, billed at the desk.
+            // Billing work, not the ledger (OD-9), so `billing.create` rather than `billing.view`.
+            Route::middleware('clinic_permission:billing.create')->group(function () {
                 Route::get('/{patient}/treatment-charges', [TreatmentChargeController::class, 'index'])->name('treatment-charges.index');
                 Route::post('/{patient}/treatment-charges', [TreatmentChargeController::class, 'store'])
                     ->middleware('clinic_permission:billing.create')->name('treatment-charges.store');
@@ -1771,6 +1830,11 @@ $clinicRoutes = function () {
                 Route::post('settings/catalogue/{kind}', [ClinicAdminSettingsController::class, 'addCatalogueItem'])->name('settings.catalogue.store');
                 Route::put('settings/catalogue/{kind}/{key}', [ClinicAdminSettingsController::class, 'configureCatalogueItem'])->name('settings.catalogue.update');
                 Route::put('settings/case-number', [ClinicAdminSettingsController::class, 'updateCaseNumber'])->name('settings.case-number');
+                // The owner's automation: missed appointments, dental recall and the WhatsApp messages patients get.
+                Route::get('settings/automation', [ClinicAdminSettingsController::class, 'automation'])->name('settings.automation');
+                Route::put('settings/automation', [ClinicAdminSettingsController::class, 'updateAutomation'])->name('settings.automation.update');
+                Route::get('settings/physio', [ClinicAdminSettingsController::class, 'physio'])->name('settings.physio');
+                Route::put('settings/physio', [ClinicAdminSettingsController::class, 'updatePhysio'])->name('settings.physio.update');
             });
         });
     });

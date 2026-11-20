@@ -8,20 +8,15 @@ use App\PatientStatus;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The one rule for new care and new charges after a death is recorded.
+ * The one rule for new care and new charges after a record is deleted
+ * (`DeletePatient`).
  *
- * A patient recorded as deceased gets no new check-in or visit, booking,
- * consultation, prescription, clinical order, treatment, package, follow-up
- * or bill. Called inside each service that creates one, so every controller,
- * job and screen is covered.
- *
- * Kept, on purpose:
- * - every existing record stays readable;
- * - existing bills can still be paid and refunded;
- * - a bill for care given on or before the date of death (a consultation
- *   that started then) can still be issued — the work was done;
- * - an open consultation can still be written up and signed.
- * Messages are stopped separately (`PatientMessageEligibility`).
+ * A deleted patient gets no new check-in or visit, booking, consultation,
+ * prescription, clinical order, treatment, package, follow-up or bill.
+ * Called inside each service that creates one, so every controller, job and
+ * screen is covered. Existing records stay as they are, and existing bills
+ * can still be paid and refunded. Messages are stopped separately
+ * (`PatientMessageEligibility`).
  */
 class PatientCareGuard
 {
@@ -30,7 +25,7 @@ class PatientCareGuard
      */
     public function assertCanReceiveCare(Patient $patient, string $field = 'patient_id'): void
     {
-        if ($patient->status === PatientStatus::Deceased) {
+        if ($patient->status === PatientStatus::Deleted) {
             throw ValidationException::withMessages([$field => $this->message($patient)]);
         }
     }
@@ -51,29 +46,17 @@ class PatientCareGuard
     }
 
     /**
-     * A bill may still be issued for care given on or before the date of
-     * death; anything else for a deceased patient is refused.
+     * A new bill for a deleted patient is refused.
      *
      * @throws ValidationException
      */
     public function assertCanBeCharged(Patient $patient, ?ClinicalEncounter $encounter): void
     {
-        if ($patient->status !== PatientStatus::Deceased) {
-            return;
-        }
-        $died = $patient->date_of_death?->toDateString();
-        $given = $encounter?->started_at?->toDateString();
-        if ($died !== null && $given !== null && $given <= $died) {
-            return;
-        }
-
-        throw ValidationException::withMessages(['patient_id' => $this->message($patient)]);
+        $this->assertCanReceiveCare($patient);
     }
 
     public function message(Patient $patient): string
     {
-        $on = $patient->date_of_death ? ' on '.$patient->date_of_death->format('d M Y') : '';
-
-        return "{$patient->full_name} is recorded as deceased{$on}. New visits, bookings, consultations, prescriptions, orders and charges are not allowed.";
+        return "{$patient->full_name}'s record was deleted. New visits, bookings, consultations and charges are not allowed.";
     }
 }

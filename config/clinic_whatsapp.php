@@ -84,6 +84,16 @@ return [
             'variables' => ['clinic', 'patient'],
             'body' => '{{1}}: Hello {{2}}, this step of your treatment is complete. Please book your next visit with us.',
         ],
+        'procedure_aftercare' => [
+            'group' => 'dental', 'label' => 'Care after a procedure', 'event' => 'procedure.recorded', 'requires_extension' => 'odontogram',
+            'variables' => ['clinic', 'patient', 'procedure', 'care'],
+            'body' => '{{1}}: Hello {{2}}, after your {{3}}: {{4}} Call us if you have any concerns.',
+        ],
+        'dental_plan_waiting' => [
+            'group' => 'dental', 'label' => 'Treatment waiting for a visit', 'event' => 'treatment.plan_stalled', 'requires_extension' => 'odontogram',
+            'variables' => ['clinic', 'patient'],
+            'body' => '{{1}}: Hello {{2}}, your treatment with us is waiting for your next visit. Please book a time that suits you.',
+        ],
         'dental_procedure_followup' => [
             'group' => 'dental', 'label' => 'After-visit check', 'event' => 'visit.completed', 'requires_extension' => 'odontogram',
             'variables' => ['clinic', 'patient'],

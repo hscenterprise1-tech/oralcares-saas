@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doctor Dashboard — OralCares design review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  DESIGN REVIEW MOCKUP — NOT PRODUCTION CODE.
+  OralCares Clinic Portal v2, Doctor Dashboard. Every patient, time and figure
+  on this page is ILLUSTRATIVE. Values follow design-system.md in this folder.
+-->
+<style>
+  :root {
+    /* Canvas */
+    --canvas-aqua: #D3F1EE; --canvas-lavender: #E5E1FA; --canvas-mist: #F1F4FB;
+    /* Surfaces */
+    --workspace: #F6F7FB; --card: #FFFFFF; --line: #E9EBF3; --line-strong: #DADDEA;
+    /* Ink */
+    --ink: #1B1D3A; --ink-2: #474C66; --ink-3: #636984;
+    /* Brand accents */
+    --violet: #7357E6; --violet-strong: #5F43D6; --violet-soft: #EFEBFF; --violet-ink: #5232C9;
+    --teal: #13B3A3; --teal-soft: #E0F6F3; --teal-ink: #0B7A6F;
+    --cyan: #2BB8DE; --cyan-soft: #E0F4FB; --cyan-ink: #0A6F8C;
+    --lavender: #B7A6F4; --lavender-soft: #F3F0FE;
+    --amber-soft: #FFF2D9; --amber-ink: #8F5200;
+    --rose: #EE5470; --rose-soft: #FFE7EC; --rose-ink: #AE2140;
+    --green-soft: #E3F7EA; --green-ink: #13703A;
+    /* Approved navigation (unchanged values from the current shell) */
+    --nav-bg: #EEF5FB; --nav-active: #DDF2F2; --nav-teal: #00A8A8; --nav-teal-strong: #007A7B; --nav-ink: #0B1F33; --nav-muted: #4A5D73; --nav-line: #D6E3EF;
+    /* Shape and depth */
+    --r-workspace: 32px; --r-card: 20px; --r-control: 12px; --r-pill: 999px;
+    --shadow-card: 0 1px 2px rgba(27,29,58,.04), 0 10px 28px -18px rgba(27,29,58,.22);
+    --shadow-raised: 0 2px 6px rgba(27,29,58,.06), 0 22px 48px -24px rgba(56,40,140,.35);
+    --shadow-workspace: 0 40px 90px -50px rgba(60,48,140,.45);
+    --grad-schedule: linear-gradient(165deg, #0EA394 0%, #2B86D6 52%, #6B48DE 100%);
+    --grad-violet: linear-gradient(135deg, #7F63EE 0%, #5F43D6 100%);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--ink); font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased;
+    background: radial-gradient(1100px 700px at 8% 0%, var(--canvas-aqua) 0%, transparent 60%),
+                radial-gradient(900px 700px at 100% 100%, var(--canvas-lavender) 0%, transparent 62%),
+                var(--canvas-mist);
+    min-height: 100vh;
+  }
+  /* Ambient line field, as in the reference: faint, static, behind everything. */
+  .ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .55; }
+  .review-ribbon {
+    position: relative; z-index: 3; margin: 12px auto 0; width: max-content; max-width: calc(100% - 32px);
+    background: #1B1D3A; color: #fff; font-size: 12.5px; font-weight: 600; letter-spacing: .01em;
+    padding: 7px 14px; border-radius: var(--r-pill); display: flex; gap: 8px; align-items: center;
+  }
+  .review-ribbon span { color: #C9C1FF; font-weight: 500; }
+  .frame { position: relative; z-index: 1; display: flex; gap: 18px; padding: 18px; max-width: 1560px; margin: 0 auto; }
+
+  /* ---------- Approved sidebar (structure and colours unchanged) ---------- */
+  .sidebar {
+    width: 236px; flex-shrink: 0; background: var(--nav-bg); border: 1px solid var(--nav-line); border-radius: 24px;
+    padding: 18px 12px; display: flex; flex-direction: column; min-height: calc(100vh - 80px); position: sticky; top: 18px; align-self: flex-start;
+  }
+  .wordmark { padding: 4px 10px 18px; }
+  .wordmark b { display: block; font-size: 19px; color: var(--nav-ink); letter-spacing: -.01em; }
+  .wordmark small { color: var(--nav-muted); font-size: 11.5px; }
+  .nav-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--nav-muted); padding: 10px 12px 6px; }
+  .nav a { display: flex; align-items: center; gap: 11px; min-height: 42px; padding: 0 12px; border-radius: 12px; color: var(--nav-ink); font-weight: 500; text-decoration: none; position: relative; }
+  .nav a svg { width: 18px; height: 18px; stroke: var(--nav-muted); }
+  .nav a:hover { background: #E1ECF6; }
+  .nav a.active { background: var(--nav-active); font-weight: 600; }
+  .nav a.active::before { content: ''; position: absolute; left: -12px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--nav-teal); }
+  .nav a.active svg { stroke: var(--nav-teal-strong); }
+  .nav .soon { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--nav-muted); letter-spacing: .06em; }
+  .clinic-card { margin-top: auto; border-top: 1px solid var(--nav-line); padding: 14px 10px 2px; display: flex; gap: 10px; align-items: center; }
+  .clinic-card i { width: 36px; height: 36px; border-radius: 12px; background: #fff; display: grid; place-items: center; border: 1px solid var(--nav-line); }
+  .clinic-card small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--nav-muted); }
+  .clinic-card b { font-size: 12.5px; color: var(--nav-ink); }
+
+  /* ---------- Workspace ---------- */
+  .workspace {
+    flex: 1; min-width: 0; background: rgba(246,247,251,.88); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.8); border-radius: var(--r-workspace); box-shadow: var(--shadow-workspace); padding: 18px 22px 24px;
+  }
+  /* Approved top bar (same controls, same order) */
+  .topbar { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; }
+  .icon-btn.menu-btn { display: none; }
+  .search {
+    flex: 1; max-width: 520px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px;
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-pill); color: var(--ink-3);
+  }
+  .search kbd { margin-left: auto; font: 600 11px/1 inherit; color: var(--ink-3); border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 6px; }
+  .topbar .spacer { flex: 1; }
+  .clock { text-align: right; line-height: 1.2; }
+  .clock small { font-size: 11.5px; color: var(--ink-3); display: block; }
+  .clock b { font-size: 15px; }
+  .icon-btn { width: 44px; height: 44px; border-radius: var(--r-pill); background: var(--card); border: 1px solid var(--line); display: grid; place-items: center; position: relative; cursor: pointer; transition: transform .18s var(--ease), box-shadow .18s var(--ease); }
+  .icon-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-card); }
+  .icon-btn svg { width: 19px; height: 19px; stroke: var(--ink-2); }
+  .icon-btn .dot { position: absolute; top: 7px; right: 7px; min-width: 17px; height: 17px; border-radius: 9px; background: var(--rose); color: #fff; font-size: 10.5px; font-weight: 700; display: grid; place-items: center; border: 2px solid #fff; }
+  .account { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: var(--r-pill); }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--grad-violet); flex-shrink: 0; }
+  .account b { display: block; font-size: 14px; white-space: nowrap; }
+  .account small { color: var(--ink-3); font-size: 12.5px; }
+
+  /* Heading */
+  .heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 6px 0 18px; }
+  .heading .hello { color: var(--ink-2); font-size: 14px; margin: 0 0 2px; }
+  .heading h1 { margin: 0; font-size: 28px; line-height: 1.15; font-weight: 600; letter-spacing: -.02em; }
+  .heading .context { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: var(--r-pill); font-size: 12.5px; font-weight: 600; }
+  .chip.teal { background: var(--teal-soft); color: var(--teal-ink); }
+  .chip.violet { background: var(--violet-soft); color: var(--violet-ink); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { height: 44px; padding: 0 18px; border-radius: var(--r-pill); font: 600 14px/1 inherit; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; border: 1px solid transparent; transition: transform .18s var(--ease), box-shadow .18s var(--ease), background .18s; }
+  .btn svg { width: 17px; height: 17px; }
+  .btn.primary { background: var(--grad-violet); color: #fff; box-shadow: 0 10px 22px -12px rgba(95,67,214,.9); }
+  .btn.primary svg { stroke: #fff; }
+  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -12px rgba(95,67,214,.95); }
+  .btn.secondary { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
+  .btn.secondary svg { stroke: var(--ink-2); }
+  .btn.secondary:hover { border-color: var(--violet); color: var(--violet-ink); }
+  .btn:focus-visible, .icon-btn:focus-visible, .nav a:focus-visible, .row-action:focus-visible { outline: 3px solid rgba(115,87,230,.45); outline-offset: 2px; }
+
+  /* Layout grid: main column + schedule panel, as in the reference */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 18px; align-items: start; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+  .grid > *, .main > * { min-width: 0; }
+  .search span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search kbd { white-space: nowrap; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 10px; }
+  .card-head h2 { margin: 0; font-size: 15.5px; font-weight: 600; }
+  .card-head p { margin: 2px 0 0; color: var(--ink-3); font-size: 12.5px; }
+  .expand { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--line); display: grid; place-items: center; background: #fff; }
+  .expand svg { width: 15px; height: 15px; stroke: var(--ink-3); }
+
+  /* KPI row */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .kpi { padding: 14px 16px 15px; position: relative; overflow: hidden; transition: transform .2s var(--ease), box-shadow .2s var(--ease); }
+  .kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-raised); }
+  .kpi .top { display: flex; justify-content: space-between; align-items: center; }
+  .kpi .label { font-weight: 600; font-size: 14px; }
+  .kpi .glyph { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; }
+  .kpi .glyph svg { width: 18px; height: 18px; }
+  .kpi .value { margin-top: 14px; display: flex; align-items: baseline; gap: 8px; }
+  .kpi .value b { font-size: 30px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .kpi .value span { color: var(--ink-3); font-size: 12.5px; }
+  .kpi .meter { margin-top: 10px; height: 6px; border-radius: 6px; background: #EEF0F6; overflow: hidden; }
+  .kpi .meter i { display: block; height: 100%; border-radius: 6px; }
+  .kpi .note { margin-top: 8px; font-size: 12px; color: var(--ink-3); display: flex; gap: 6px; align-items: center; }
+  .k-amber .glyph { background: var(--amber-soft); } .k-amber .glyph svg { stroke: var(--amber-ink); } .k-amber .meter i { background: linear-gradient(90deg, #FFC56B, #F59E0B); }
+  .k-violet .glyph { background: var(--violet-soft); } .k-violet .glyph svg { stroke: var(--violet-ink); } .k-violet .meter i { background: linear-gradient(90deg, #B7A6F4, #7357E6); }
+  .k-teal .glyph { background: var(--teal-soft); } .k-teal .glyph svg { stroke: var(--teal-ink); } .k-teal .meter i { background: linear-gradient(90deg, #6FE0D2, #13B3A3); }
+  .k-rose .glyph { background: var(--rose-soft); } .k-rose .glyph svg { stroke: var(--rose-ink); } .k-rose .meter i { background: linear-gradient(90deg, #F8A3B3, #EE5470); }
+  .kpi::after { content: ''; position: absolute; right: -40px; bottom: -40px; width: 120px; height: 120px; border-radius: 50%; opacity: .5; pointer-events: none; }
+  .k-amber::after { background: radial-gradient(circle, #FFF2D9, transparent 70%); }
+  .k-violet::after { background: radial-gradient(circle, #EFEBFF, transparent 70%); }
+  .k-teal::after { background: radial-gradient(circle, #E0F6F3, transparent 70%); }
+  .k-rose::after { background: radial-gradient(circle, #FFE7EC, transparent 70%); }
+
+  /* Queue table */
+  .tabs { display: inline-flex; padding: 4px; background: #F1F2F8; border-radius: var(--r-pill); gap: 2px; }
+  .tabs button { border: 0; background: transparent; height: 32px; padding: 0 12px; border-radius: var(--r-pill); font: 600 12.5px/1 inherit; color: var(--ink-2); cursor: pointer; }
+  .tabs button.on { background: #fff; color: var(--violet-ink); box-shadow: 0 1px 3px rgba(27,29,58,.1); }
+  .tabs button em { font-style: normal; margin-left: 4px; color: var(--ink-3); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-size: 12px; font-weight: 600; color: var(--ink-3); padding: 8px 18px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tbody td { padding: 11px 18px; border-bottom: 1px solid #F0F1F6; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover { background: #FAFAFE; }
+  .who { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .who .avatar { width: 38px; height: 38px; font-size: 13px; }
+  .who b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .who small { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: var(--r-pill); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .b-waiting { background: var(--amber-soft); color: var(--amber-ink); }
+  .b-called { background: var(--cyan-soft); color: var(--cyan-ink); }
+  .b-room { background: var(--violet-soft); color: var(--violet-ink); }
+  .b-urgent { background: var(--rose-soft); color: var(--rose-ink); }
+  .b-new { background: var(--teal-soft); color: var(--teal-ink); }
+  .b-repeat { background: var(--lavender-soft); color: var(--violet-ink); }
+  .flag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--rose-ink); }
+  .flag svg { width: 14px; height: 14px; stroke: var(--rose-ink); }
+  .wait { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .wait.long { color: var(--rose-ink); }
+  .reason { color: var(--ink-2); font-size: 13px; max-width: 220px; }
+  .row-action { height: 34px; padding: 0 14px; border-radius: var(--r-pill); font: 600 12.5px/1 inherit; border: 1px solid var(--line-strong); background: #fff; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all .18s var(--ease); }
+  .row-action.go { background: var(--violet); border-color: var(--violet); color: #fff; }
+  .row-action.go:hover { background: var(--violet-strong); }
+  .row-action:hover { border-color: var(--violet); }
+  .row-action svg { width: 14px; height: 14px; }
+  .table-wrap { overflow-x: auto; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* Schedule panel (the reference's gradient timeline) */
+  .schedule { background: var(--grad-schedule); border-radius: 24px; color: #fff; padding: 18px 16px 20px; box-shadow: 0 24px 50px -28px rgba(70,50,190,.7); position: sticky; top: 18px; overflow: hidden; }
+  .schedule::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0 2px, transparent 2px 14px); pointer-events: none; }
+  .schedule > * { position: relative; }
+  .s-head { display: flex; align-items: center; justify-content: space-between; }
+  .s-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .s-head .ghost { height: 36px; padding: 0 14px; border-radius: var(--r-pill); background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; font: 600 12.5px/1 inherit; cursor: pointer; }
+  .month { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 10px; font-weight: 600; font-size: 15px; }
+  .month button { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); display: grid; place-items: center; cursor: pointer; }
+  .month svg { width: 15px; height: 15px; stroke: #fff; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 14px; }
+  .day { border-radius: 14px; text-align: center; padding: 7px 0 8px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.22); }
+  .day small { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; opacity: .9; }
+  .day b { font-size: 15px; }
+  .day.on { background: #fff; color: var(--violet-ink); box-shadow: 0 8px 18px -10px rgba(0,0,0,.4); }
+  .timeline { display: grid; grid-template-columns: 46px 1fr; row-gap: 10px; }
+  .t-time { font-size: 12px; font-weight: 600; opacity: .92; padding-top: 12px; }
+  .slot { background: rgba(255,255,255,.94); color: var(--ink); border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 16px -12px rgba(0,0,0,.45); transition: transform .18s var(--ease); }
+  .slot:hover { transform: translateX(2px); }
+  .slot .avatar { width: 34px; height: 34px; font-size: 12px; }
+  .slot b { display: block; font-size: 13.5px; }
+  .slot small { color: var(--ink-3); font-size: 12px; }
+  .slot .when { margin-left: auto; text-align: right; font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .slot.done { background: rgba(255,255,255,.55); }
+  .slot.done b, .slot.done small, .slot.done .when { color: var(--ink-2); }
+  .now-line { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; }
+  .now-line::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.3); }
+  .now-line::after { content: ''; flex: 1; height: 2px; background: rgba(255,255,255,.85); border-radius: 2px; }
+  .s-foot { margin-top: 14px; font-size: 12.5px; opacity: .95; }
+
+  /* Bottom cards */
+  .lower { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .list { list-style: none; margin: 0; padding: 4px 18px 16px; display: grid; gap: 10px; }
+  .list li { display: flex; gap: 10px; align-items: center; }
+  .list .tag { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; }
+  .list .tag svg { width: 16px; height: 16px; }
+  .list b { display: block; font-size: 13.5px; font-weight: 600; }
+  .list small { color: var(--ink-3); font-size: 12px; }
+  .list .right { margin-left: auto; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .progress { height: 6px; border-radius: 6px; background: #EEF0F6; overflow: hidden; margin-top: 6px; }
+  .progress i { display: block; height: 100%; background: linear-gradient(90deg, #6FE0D2, #13B3A3); border-radius: 6px; }
+  .chart-box { padding: 6px 18px 18px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+
+  /* Entrance: one soft rise per block, staggered; nothing loops. */
+  .rise { animation: rise .52s var(--ease) both; }
+  .d1 { animation-delay: .04s; } .d2 { animation-delay: .09s; } .d3 { animation-delay: .14s; } .d4 { animation-delay: .19s; } .d5 { animation-delay: .24s; } .d6 { animation-delay: .3s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .meter i, .progress i { transform-origin: left; animation: grow .9s var(--ease) .25s both; }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1279px) {
+    .grid { grid-template-columns: 1fr; }
+    .schedule { position: static; }
+    .timeline { grid-template-columns: 46px 1fr; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lower { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 768px) and (max-width: 1279px) {
+    .lower > :last-child { grid-column: 1 / -1; }
+  }
+  @media (max-width: 1023px) {
+    .sidebar { display: none; }
+    .icon-btn.menu-btn { display: grid; }
+    .frame { padding: 12px; }
+    .clock { display: none; }
+    .account b, .account small { display: none; }
+    /* Queue rows become cards: every field kept, nothing scrolls sideways. */
+    thead { display: none; }
+    tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px 12px; padding: 12px 16px; border-bottom: 1px solid #F0F1F6; }
+    tbody td { padding: 0; border: 0; }
+    tbody td.c-who { grid-column: 1; }
+    tbody td.c-reason { grid-column: 1 / -1; grid-row: 2; max-width: none; }
+    tbody td.c-action { grid-column: 4; grid-row: 1; }
+  }
+  @media (max-width: 767px) {
+    .frame { padding: 8px; }
+    .workspace { padding: 14px 12px 18px; border-radius: 24px; }
+    .topbar { flex-wrap: wrap; }
+    .search { order: 5; flex-basis: 100%; max-width: none; }
+    .account b, .account small { display: none; }
+    .heading h1 { font-size: 24px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .kpi .value b { font-size: 26px; }
+    .lower { grid-template-columns: 1fr; }
+    /* Phone: identity and action on top, the reason, then visit, status and wait on one line. */
+    tbody tr { grid-template-columns: auto auto minmax(0, 1fr); padding: 12px 14px; }
+    tbody td.c-who { grid-column: 1 / 3; grid-row: 1; }
+    tbody td.c-action { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; }
+    tbody td.c-reason { grid-column: 1 / -1; grid-row: 2; }
+    tbody td:nth-child(2) { grid-column: 1; grid-row: 3; }
+    tbody td:nth-child(4) { grid-column: 2; grid-row: 3; }
+    tbody td:nth-child(5) { grid-column: 3; grid-row: 3; justify-self: end; }
+    .card-head { flex-wrap: wrap; }
+    .card-head .tabs { width: 100%; }
+    .card-head .tabs button { flex: 1; }
+    .search kbd { display: none; }
+    .review-ribbon { border-radius: 14px; }
+    .actions .btn.secondary { display: none; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-hour" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+    <symbol id="i-steth" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></symbol>
+  </defs>
+</svg>
+
+<!-- Ambient lines, as in the reference: static, faint, decorative only. -->
+<svg class="ambient" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
+  <g fill="none" stroke="#FFFFFF" stroke-width="1.2" opacity=".7">
+    <path d="M-50 720 C 300 560, 520 860, 900 640 S 1400 520, 1520 700"/>
+    <path d="M-50 760 C 320 600, 540 900, 920 680 S 1400 560, 1520 740"/>
+    <path d="M-50 800 C 340 640, 560 940, 940 720 S 1400 600, 1520 780"/>
+    <path d="M-50 120 C 260 260, 600 -20, 980 160 S 1380 300, 1520 120"/>
+    <path d="M-50 160 C 280 300, 620 20, 1000 200 S 1380 340, 1520 160"/>
+  </g>
+</svg>
+
+<div class="review-ribbon" role="note">Design review mockup <span>· Doctor Dashboard · all patients, times and figures are illustrative</span></div>
+
+<div class="frame">
+  <!-- APPROVED SIDEBAR: same items, sections, order, labels and colours as today (Doctor role). -->
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="wordmark"><b>OralCares</b><small>Smarter Healthcare. Better Care.</small></div>
+    <nav class="nav">
+      <div class="nav-label">Main</div>
+      <a class="active" href="#" aria-current="page"><svg><use href="#i-dash"/></svg>Dashboard</a>
+      <a href="#"><svg><use href="#i-cal"/></svg>Appointments</a>
+      <a href="#"><svg><use href="#i-users"/></svg>Patients</a>
+      <div class="nav-label">Additional</div>
+      <a href="#"><svg><use href="#i-repeat"/></svg>Follow-ups<span class="soon">SOON</span></a>
+      <a href="#"><svg><use href="#i-bell"/></svg>Notifications</a>
+      <a href="#"><svg><use href="#i-help"/></svg>Support</a>
+    </nav>
+    <div class="clinic-card"><i><svg width="18" height="18" stroke="#4A5D73"><use href="#i-building"/></svg></i><div><small>CLINIC</small><b>Example Dental Clinic</b></div></div>
+  </aside>
+
+  <main class="workspace">
+    <!-- APPROVED TOP BAR: search, date and time, support, notifications, account (unchanged controls). -->
+    <header class="topbar">
+      <button class="icon-btn menu-btn" aria-label="Open navigation"><svg><use href="#i-menu"/></svg></button>
+      <label class="search"><svg width="18" height="18" stroke="#636984"><use href="#i-search"/></svg><span>Search patients, pages and appointments…</span><kbd>Ctrl K</kbd></label>
+      <div class="spacer"></div>
+      <div class="clock"><small>Fri, 23 Oct 2026</small><b>10:48 AM</b></div>
+      <button class="icon-btn" aria-label="Support"><svg><use href="#i-help"/></svg></button>
+      <button class="icon-btn" aria-label="Notifications, 3 unread"><svg><use href="#i-bell"/></svg><span class="dot">3</span></button>
+      <div class="account"><span class="avatar" aria-hidden="true">AM</span><div><b>Dr. Asha Mehta</b><small>Dentist</small></div></div>
+    </header>
+
+    <section class="heading rise d1">
+      <div>
+        <p class="hello">Good morning, Dr. Mehta</p>
+        <h1>Your consultations today</h1>
+        <div class="context"><span class="chip teal">Main Branch</span><span class="chip violet">Dental · General dentistry</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn secondary"><svg><use href="#i-cal"/></svg>My appointments</button>
+        <button class="btn primary"><svg><use href="#i-play"/></svg>Call next patient</button>
+      </div>
+    </section>
+
+    <div class="grid">
+      <div class="main">
+        <!-- KPI row: the doctor's own day, from the queue and consultations (no invented trends). -->
+        <section class="kpis" aria-label="Today at a glance">
+          <article class="card kpi k-amber rise d1">
+            <div class="top"><span class="label">Waiting for you</span><span class="glyph"><svg><use href="#i-hour"/></svg></span></div>
+            <div class="value"><b>4</b><span>patients</span></div>
+            <div class="meter" aria-hidden="true"><i style="width:57%"></i></div>
+            <div class="note">Longest wait 26 min</div>
+          </article>
+          <article class="card kpi k-violet rise d2">
+            <div class="top"><span class="label">In consultation</span><span class="glyph"><svg><use href="#i-steth"/></svg></span></div>
+            <div class="value"><b>1</b><span>now</span></div>
+            <div class="meter" aria-hidden="true"><i style="width:100%"></i></div>
+            <div class="note">Rahul Iyer · since 10:31</div>
+          </article>
+          <article class="card kpi k-teal rise d3">
+            <div class="top"><span class="label">Seen today</span><span class="glyph"><svg><use href="#i-check"/></svg></span></div>
+            <div class="value"><b>7</b><span>of 12 booked</span></div>
+            <div class="meter" aria-hidden="true"><i style="width:58%"></i></div>
+            <div class="note">5 still to arrive</div>
+          </article>
+          <article class="card kpi k-rose rise d4">
+            <div class="top"><span class="label">Notes to finish</span><span class="glyph"><svg><use href="#i-note"/></svg></span></div>
+            <div class="value"><b>2</b><span>unsigned</span></div>
+            <div class="meter" aria-hidden="true"><i style="width:28%"></i></div>
+            <div class="note">Oldest from 9:15 today</div>
+          </article>
+        </section>
+
+        <!-- The queue: the main working card. -->
+        <section class="card rise d3" aria-labelledby="queue-title">
+          <div class="card-head">
+            <div><h2 id="queue-title">Your queue</h2><p>Checked in for you or for any doctor, in calling order</p></div>
+            <div class="tabs" role="tablist" aria-label="Queue view">
+              <button class="on" role="tab" aria-selected="true">Waiting<em>4</em></button>
+              <button role="tab" aria-selected="false">With you<em>1</em></button>
+              <button role="tab" aria-selected="false">Seen<em>7</em></button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Patient</th><th>Visit</th><th>Reason</th><th>Status</th><th>Waiting</th><th><span class="sr">Action</span></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="c-who"><div class="who"><span class="avatar" style="background:linear-gradient(135deg,#F8A3B3,#EE5470)">PN</span><div><b>Priya Nair</b><small>C-0418 · 34 F · OC-00000231</small></div></div></td>
+                  <td><span class="badge b-urgent">Emergency</span></td>
+                  <td class="c-reason reason">Severe pain, lower left molar<br><span class="flag"><svg><use href="#i-alert"/></svg>Penicillin allergy</span></td>
+                  <td><span class="badge b-called">Called</span></td>
+                  <td><span class="wait long">26 min</span></td>
+                  <td class="c-action"><button class="row-action go">Start <svg stroke="#fff"><use href="#i-arrow"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td class="c-who"><div class="who"><span class="avatar" style="background:linear-gradient(135deg,#6FE0D2,#13B3A3)">VS</span><div><b>Vikram Shetty</b><small>C-0421 · 52 M · OC-00000187</small></div></div></td>
+                  <td><span class="badge b-repeat">Repeat case</span></td>
+                  <td class="c-reason reason">Root canal — stage 2 of 3<br><small style="color:var(--ink-3)">Booked 10:30</small></td>
+                  <td><span class="badge b-waiting">Waiting</span></td>
+                  <td><span class="wait">18 min</span></td>
+                  <td class="c-action"><button class="row-action">Start <svg stroke="#1B1D3A"><use href="#i-arrow"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td class="c-who"><div class="who"><span class="avatar" style="background:linear-gradient(135deg,#B7A6F4,#7357E6)">MI</span><div><b>Meera Iyer</b><small>C-0422 · 27 F · New patient</small></div></div></td>
+                  <td><span class="badge b-new">New case</span></td>
+                  <td class="c-reason reason">Bleeding gums, first visit</td>
+                  <td><span class="badge b-waiting">Waiting</span></td>
+                  <td><span class="wait">9 min</span></td>
+                  <td class="c-action"><button class="row-action">Start <svg stroke="#1B1D3A"><use href="#i-arrow"/></svg></button></td>
+                </tr>
+                <tr>
+                  <td class="c-who"><div class="who"><span class="avatar" style="background:linear-gradient(135deg,#7FD6F0,#2BB8DE)">AK</span><div><b>Arjun Kulkarni</b><small>C-0424 · 41 M · OC-00000098</small></div></div></td>
+                  <td><span class="badge b-repeat">Repeat case</span></td>
+                  <td class="c-reason reason">Crown fitting, upper right<br><small style="color:var(--ink-3)">Any doctor</small></td>
+                  <td><span class="badge b-waiting">Waiting</span></td>
+                  <td><span class="wait">4 min</span></td>
+                  <td class="c-action"><button class="row-action">Start <svg stroke="#1B1D3A"><use href="#i-arrow"/></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Supporting cards: work still owed, care in progress, and the day's shape. -->
+        <section class="lower" aria-label="Your clinical follow-through">
+          <article class="card rise d4">
+            <div class="card-head"><div><h2>Notes to finish</h2><p>Consultations not yet signed</p></div><span class="expand"><svg><use href="#i-expand"/></svg></span></div>
+            <ul class="list">
+              <li><span class="tag" style="background:var(--rose-soft)"><svg stroke="#AE2140"><use href="#i-note"/></svg></span><div><b>Sanjay Rao</b><small>Extraction · 9:15 AM</small></div><span class="right" style="color:var(--rose-ink)">Draft</span></li>
+              <li><span class="tag" style="background:var(--rose-soft)"><svg stroke="#AE2140"><use href="#i-note"/></svg></span><div><b>Fatima Sheikh</b><small>Scaling · 10:02 AM</small></div><span class="right" style="color:var(--rose-ink)">Draft</span></li>
+              <li><span class="tag" style="background:var(--teal-soft)"><svg stroke="#0B7A6F"><use href="#i-check"/></svg></span><div><b>5 signed today</b><small>Last at 10:20 AM</small></div></li>
+            </ul>
+          </article>
+          <article class="card rise d5">
+            <div class="card-head"><div><h2>Treatment in progress</h2><p>Your patients' active plans</p></div><span class="expand"><svg><use href="#i-expand"/></svg></span></div>
+            <ul class="list">
+              <li style="display:block"><div style="display:flex;justify-content:space-between"><b>Vikram Shetty · RCT #36</b><small>2 of 3</small></div><div class="progress"><i style="width:66%"></i></div></li>
+              <li style="display:block"><div style="display:flex;justify-content:space-between"><b>Kavya Menon · Aligners</b><small>4 of 12</small></div><div class="progress"><i style="width:33%"></i></div></li>
+              <li style="display:block"><div style="display:flex;justify-content:space-between"><b>Anil Joshi · Implant #46</b><small>1 of 4</small></div><div class="progress"><i style="width:25%"></i></div></li>
+            </ul>
+          </article>
+          <article class="card rise d6">
+            <div class="card-head"><div><h2>Today's visits</h2><p>New and repeat cases, checked in</p></div><span class="expand"><svg><use href="#i-expand"/></svg></span></div>
+            <div class="chart-box" style="display:flex;align-items:center;gap:16px">
+              <svg width="128" height="128" viewBox="0 0 42 42" role="img" aria-label="Today's visits: 8 repeat cases, 4 new cases">
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#EEF0F6" stroke-width="6"/>
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#7357E6" stroke-width="6" stroke-dasharray="66.7 33.3" stroke-dashoffset="25" stroke-linecap="round"/>
+                <circle cx="21" cy="21" r="15.9" fill="none" stroke="#13B3A3" stroke-width="6" stroke-dasharray="29.3 70.7" stroke-dashoffset="-44.7" stroke-linecap="round"/>
+                <text x="21" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#1B1D3A">12</text>
+                <text x="21" y="27.5" text-anchor="middle" font-size="3.2" fill="#636984">visits</text>
+              </svg>
+              <div>
+                <div class="legend" style="flex-direction:column;gap:8px">
+                  <span><i style="background:#7357E6"></i>Repeat cases <b>8</b></span>
+                  <span><i style="background:#13B3A3"></i>New cases <b>4</b></span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <!-- The schedule: the reference's gradient timeline, holding the doctor's own bookings. -->
+      <aside class="schedule rise d2" aria-labelledby="sched-title">
+        <div class="s-head"><h2 id="sched-title">Your appointments</h2><button class="ghost">Open calendar</button></div>
+        <div class="month"><button aria-label="Previous week"><svg><use href="#i-left"/></svg></button><span>October 2026</span><button aria-label="Next week"><svg><use href="#i-right"/></svg></button></div>
+        <div class="days" role="list" aria-label="This week">
+          <div class="day" role="listitem"><small>MON</small><b>19</b></div>
+          <div class="day" role="listitem"><small>TUE</small><b>20</b></div>
+          <div class="day" role="listitem"><small>WED</small><b>21</b></div>
+          <div class="day" role="listitem"><small>THU</small><b>22</b></div>
+          <div class="day on" role="listitem" aria-current="date"><small>FRI</small><b>23</b></div>
+          <div class="day" role="listitem"><small>SAT</small><b>24</b></div>
+          <div class="day" role="listitem"><small>SUN</small><b>25</b></div>
+        </div>
+        <div class="timeline">
+          <div class="t-time">9:30</div>
+          <div class="slot done"><span class="avatar" style="background:linear-gradient(135deg,#9AA0B8,#636984)">FS</span><div><b>Fatima Sheikh</b><small>Scaling · seen</small></div><span class="when">9:30–10:00</span></div>
+          <div class="t-time">10:00</div>
+          <div class="slot done"><span class="avatar" style="background:linear-gradient(135deg,#9AA0B8,#636984)">RI</span><div><b>Rahul Iyer</b><small>Filling #26 · with you</small></div><span class="when">10:15–10:45</span></div>
+          <div class="now-line">Now · 10:48</div>
+          <div class="t-time">11:00</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#6FE0D2,#13B3A3)">KM</span><div><b>Kavya Menon</b><small>Aligner review · arrived</small></div><span class="when">11:00–11:20</span></div>
+          <div class="t-time">11:30</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#B7A6F4,#7357E6)">DP</span><div><b>Deepak Pillai</b><small>Consultation · to arrive</small></div><span class="when">11:30–11:50</span></div>
+          <div class="t-time">12:00</div>
+          <div class="slot"><span class="avatar" style="background:linear-gradient(135deg,#FFC56B,#F59E0B)">AJ</span><div><b>Anil Joshi</b><small>Implant review · to arrive</small></div><span class="when">12:00–12:30</span></div>
+        </div>
+        <p class="s-foot">5 bookings still to arrive today</p>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>

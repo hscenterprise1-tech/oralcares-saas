@@ -189,6 +189,39 @@ function grantMarketingPermissions(User $user, array $permissions = []): User
 }
 
 /**
+ * The Doctor role as a clinic that keeps billing at the desk has it: without
+ * `billing.create`, `payment.collect` and `package.sell`, which the default
+ * Doctor role holds since 2026-11-05. For tests of what those rights guard.
+ */
+function withoutDoctorBillingRights(): void
+{
+    setPermissionsTeamId(null);
+    $role = Role::query()->where('name', 'Doctor')->where('guard_name', 'web')->whereNull('branch_id')->first();
+    $role?->revokePermissionTo(array_values(array_filter(
+        ['billing.create', 'payment.collect', 'package.sell'],
+        fn (string $name) => $role->hasPermissionTo($name),
+    )));
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+}
+
+/**
+ * The Receptionist role as a clinic that keeps the ledger and discounts away
+ * from the desk: without `billing.view` and `discount.apply`, which the
+ * default role holds since 2026-11-05. For tests of what those rights guard.
+ * Call it after the receptionist is made: making one re-syncs the role.
+ */
+function withoutDeskLedger(): void
+{
+    setPermissionsTeamId(null);
+    $role = Role::query()->where('name', 'Receptionist')->where('guard_name', 'web')->whereNull('branch_id')->first();
+    $role?->revokePermissionTo(array_values(array_filter(
+        ['billing.view', 'discount.apply'],
+        fn (string $name) => $role->hasPermissionTo($name),
+    )));
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+}
+
+/**
  * Grant CRM permissions to a role, so any user assigned that role inherits them.
  */
 function grantCrmPermissionsToRole(Role $role, array $permissions = []): Role

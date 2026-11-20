@@ -19,7 +19,6 @@ use App\Models\User;
 use App\Services\ClinicContext;
 use App\Services\ClinicRoleAssignmentService;
 use App\Services\OwnerMode\OwnerMode;
-use App\Services\Reception\ReceptionCheckIn;
 use App\Support\ClinicAccess\ClinicAccess;
 use App\Support\ClinicActions;
 use App\Support\ClinicClock;
@@ -159,6 +158,7 @@ it('builds navigation from permissions: an admin gets the clinic section, a rece
     $receptionist = dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]));
 
     expect($admin['navigation'])->toContain('staff', 'settings')
+        // Billing too: the desk runs billing in full since 2026-11-05.
         ->and($receptionist['navigation'])->toBe(['dashboard', 'appointments', 'patients', 'billing', 'follow_ups', 'notifications', 'support']);
 });
 
@@ -287,7 +287,7 @@ it('offers the command palette exactly the actions the resolver allows', functio
     $receptionist = dynamicDashboard(dynamicMember(roles: [ClinicRole::Receptionist]));
     $nobody = dynamicDashboard(dynamicMember());
 
-    // A receptionist takes payments, so Billing is one of their workspaces and Collect Payment one of their actions.
+    // A receptionist takes payments at the desk and runs billing in full (2026-11-05).
     expect($receptionist['actions'])->toBe(['new_case', 'repeat_case', 'new_appointment', 'collect_payment', 'request_leave'])
         ->and($nobody['actions'])->toBe([]);
 });
@@ -365,8 +365,9 @@ it('gives a multi-role user the union of their widgets, each once', function () 
     });
     $navigation = dynamicDashboard($member)['navigation'];
 
+    // The desk runs billing in full (2026-11-05), so the Billing work center is the union's too.
     expect($workspaces)->toBe(['front_desk', 'today', 'billing'])
-        ->and($navigation)->toContain('dashboard', 'billing', 'follow_ups')->not->toContain('front_desk', 'new_case', 'repeat_case', 'consultations')
+        ->and($navigation)->toContain('dashboard', 'follow_ups', 'billing')->not->toContain('front_desk', 'new_case', 'repeat_case', 'consultations')
         ->and($navigation)->toBe(array_values(array_unique($navigation)));
 });
 
@@ -374,9 +375,9 @@ it('gives an owner who does not treat patients the owner blocks from sign-in, an
     $plain = dynamicSections(dynamicMember(owner: true));
     expect($plain['money']['state'])->toBe('ready')->and($plain['security']['state'])->toBe('ready');
 
-    // A doctor-owner: Doctor Mode first, so the doctor's home (the Calendar) and no owner blocks.
+    // A doctor-owner: Doctor Mode first, so the doctor's home (the Doctor Dashboard) and no owner blocks.
     $owner = dynamicMember(owner: true, practitioner: true);
-    actAsDynamic($owner)->get('/clinic/dashboard')->assertRedirect(route('clinic.appointments.index'));
+    actAsDynamic($owner)->get('/clinic/dashboard')->assertRedirect(route('clinic.consultations.index'));
 
     actAsDynamic($owner)->post('/clinic/owner-mode', ['password' => 'dynamic-pass'])->assertRedirect();
     $sections = [];

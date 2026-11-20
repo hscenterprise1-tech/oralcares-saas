@@ -45,14 +45,12 @@ export function IntakeProvider({ clinic, children }: { clinic: ClinicContextProp
   );
   const api = useMemo(() => ({ available, canRegister, open }), [available, canRegister, open]);
 
-  // Read New Case / Repeat Case's settings once the page has settled, so the first opening shows its form at once.
+  // Prefetch New Case / Repeat Case settings immediately on mount so opening shows its form at once.
   useEffect(() => {
     if (!available || branchId === null) {
       return;
     }
-    const timer = window.setTimeout(() => prefetchIntakeConfig(String(branchId)), 1200);
-
-    return () => window.clearTimeout(timer);
+    prefetchIntakeConfig(String(branchId));
   }, [available, branchId]);
 
   return (

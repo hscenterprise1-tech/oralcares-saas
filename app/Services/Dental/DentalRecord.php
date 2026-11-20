@@ -14,6 +14,7 @@ use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Services\Clinical\EncounterWorkspace;
 use App\Services\DentalChartService;
+use App\Services\Patient\PatientAutomation;
 use App\Services\Patient\PatientCareGuard;
 use App\Services\ProcedureCatalogService;
 use App\Services\Treatment\LegacyTreatmentMirror;
@@ -433,6 +434,8 @@ class DentalRecord
         if (! $open) {
             $plan->update(['status' => TreatmentPlan::COMPLETED, 'completed_at' => now()]);
             $this->timeline($plan, 'treatment_plan_completed', []);
+            // The routine check-up after the work is done (`PatientAutomation`), once this is saved.
+            DB::afterCommit(fn () => app(PatientAutomation::class)->scheduleRecall($plan));
         }
     }
 

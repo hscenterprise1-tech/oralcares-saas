@@ -59,20 +59,21 @@ beforeEach(function () {
     };
 });
 
-test('reception opens on today\'s patients and can switch to everyone it may see', function () {
+test('reception opens on everyone it may see and can switch to today\'s patients', function () {
     [$reception, $session] = $this->f->memberWithRole(ClinicRole::Receptionist);
     ($this->visit)($this->f->patient('Asha', 'Today'), '2026-10-17');
     ($this->registeredAt)('2026-10-16 18:00', 'Bina', 'Earlier');
 
-    $today = ($this->props)(($this->as)($reception, $session));
-    expect($today['audience'])->toBe('reception')
-        ->and($today['filters']['view'])->toBe('today')
-        ->and($today['options']['views'])->toBe(['today', 'all'])
+    $all = ($this->props)(($this->as)($reception, $session));
+    expect($all['audience'])->toBe('reception')
+        ->and($all['filters']['view'])->toBe('all')
+        ->and($all['options']['views'])->toBe(['all', 'today'])
+        ->and(($this->names)($all))->toBe(['Asha Today', 'Bina Earlier']);
+
+    $today = ($this->props)(($this->as)($reception, $session), '?view=today');
+    expect($today['filters']['view'])->toBe('today')
         ->and(($this->names)($today))->toBe(['Asha Today'])
         ->and($today['patients']['data'][0]['today_visit'])->toBe(['branch' => 'Main Branch', 'status' => 'checked_in']);
-
-    $all = ($this->props)(($this->as)($reception, $session), '?view=all');
-    expect($all['filters']['view'])->toBe('all')->and(($this->names)($all))->toBe(['Asha Today', 'Bina Earlier']);
 });
 
 test('today is everyone who attended on the clinic\'s own date, new or returning: not a bare registration, a cancelled visit or yesterday', function () {
@@ -111,6 +112,8 @@ test('the owner opens on everyone at the clinic, with today one tap away and no 
         ->and($props['filters']['view'])->toBe('all')
         ->and($props['options']['views'])->toBe(['all', 'today'])
         ->and(($this->names)($props))->toBe(['Asha Assigned', 'Bina Unassigned'])
+        // Today is one tap away.
+        ->and(($this->names)(($this->props)(($this->asOwner)(), '?view=today')))->toBe(['Asha Assigned'])
         // Asking for a doctor's own list falls back to the owner's default.
         ->and(($this->props)(($this->asOwner)(), '?view=mine')['filters']['view'])->toBe('all');
 });
@@ -132,6 +135,7 @@ test('a doctor opens on the patients assigned to them; today is their own visits
         ->and(($this->names)(($this->props)(($this->as)($user, $session), "?view=mine&practitioner_id={$this->f->doctorA->id}")))->toBe(['Mine Assigned'])
         // Today: the visits to this doctor, whoever the patient is assigned to.
         ->and(($this->names)(($this->props)(($this->as)($user, $session), '?view=today')))->toBe(['Their Patient'])
+        // All: everyone they may open.
         ->and(($this->names)(($this->props)(($this->as)($user, $session), '?view=all')))->toBe(['Mine Assigned', 'Their Patient']);
 });
 
@@ -165,14 +169,14 @@ test('each patient carries the assigned doctor, or none, and the doctor filter u
     $this->f->patient('Bina', 'Other', ['current_practitioner_id' => $this->f->doctorB->id]);
     $this->f->patient('Chetan', 'Unassigned');
 
-    $rows = collect(($this->props)(($this->asOwner)())['patients']['data'])->keyBy('name');
+    $rows = collect(($this->props)(($this->asOwner)(), '?view=all')['patients']['data'])->keyBy('name');
     expect($rows['Asha Assigned']['assigned_doctor'])->toBe(['id' => $this->f->doctorA->id, 'name' => 'Dr. Asha Mehta', 'at_clinic' => true])
         ->and($rows['Chetan Unassigned']['assigned_doctor'])->toBeNull()
-        ->and(($this->names)(($this->props)(($this->asOwner)(), "?practitioner_id={$this->f->doctorA->id}")))->toBe(['Asha Assigned'])
-        ->and(($this->names)(($this->props)(($this->asOwner)(), '?practitioner_id=none')))->toBe(['Chetan Unassigned']);
+        ->and(($this->names)(($this->props)(($this->asOwner)(), "?view=all&practitioner_id={$this->f->doctorA->id}")))->toBe(['Asha Assigned'])
+        ->and(($this->names)(($this->props)(($this->asOwner)(), '?view=all&practitioner_id=none')))->toBe(['Chetan Unassigned']);
 
     $this->f->doctorB->update(['status' => 'inactive']);
-    expect(collect(($this->props)(($this->asOwner)())['patients']['data'])->firstWhere('name', 'Bina Other')['assigned_doctor']['at_clinic'])->toBeFalse();
+    expect(collect(($this->props)(($this->asOwner)(), '?view=all')['patients']['data'])->firstWhere('name', 'Bina Other')['assigned_doctor']['at_clinic'])->toBeFalse();
 });
 
 test('the branch shown is where the patient was last seen among the member\'s branches, with how many others', function () {
@@ -184,7 +188,7 @@ test('the branch shown is where the patient was last seen among the member\'s br
     $this->f->patient('Never', 'Seen');
     ($this->visit)($both, '2026-10-17', 'checked_in', null, $north->id);
 
-    $rows = collect(($this->props)(($this->asOwner)())['patients']['data'])->keyBy('name');
+    $rows = collect(($this->props)(($this->asOwner)(), '?view=all')['patients']['data'])->keyBy('name');
     expect($rows['Both Branches']['last_branch'])->toBe('North')
         ->and($rows['Both Branches']['other_branch_count'])->toBe(1)
         ->and($rows['Never Seen']['last_branch'])->toBeNull()
@@ -224,26 +228,23 @@ test('search, filters and pages work inside Today and keep to it', function () {
         ->and(($this->names)(($this->props)(($this->asOwner)(), '?view=all&q=Absent')))->toBe(['Visitor Absent']);
 });
 
-test('there is no active / inactive / archived workflow: every patient record is listed whatever an old row says, and only merged duplicates stay out', function () {
+test('there is no active / inactive / archived workflow: every patient record is listed whatever an old row says, and only merged duplicates and deleted records stay out', function () {
     $this->f->patient('Asha', 'Current');
     $this->f->patient('Legacy', 'Inactive', ['status' => PatientStatus::Inactive]);
-    $this->f->patient('Late', 'Patient', ['status' => PatientStatus::Deceased]);
+    $this->f->patient('Gone', 'Patient', ['status' => PatientStatus::Deleted]);
     $this->f->patient('Old', 'Duplicate', ['status' => PatientStatus::Merged]);
 
-    $props = ($this->props)(($this->asOwner)());
-    expect($props['options']['statuses'])->toBe([])
+    $props = ($this->props)(($this->asOwner)(), '?view=all');
+    expect($props['options']['statuses'])->toHaveCount(2)
         ->and($props['filters']['status'])->toBe('')
-        ->and(($this->names)($props))->toBe(['Asha Current', 'Late Patient', 'Legacy Inactive'])
-        // The recorded death still marks its row; it is a record, not a workflow state.
-        ->and(collect($props['patients']['data'])->firstWhere('name', 'Late Patient')['status'])->toBe('deceased');
+        ->and(($this->names)($props))->toBe(['Asha Current', 'Legacy Inactive']);
 
-    // A status in an old link — any value — is ignored: the same patients, no error.
-    foreach (['active', 'inactive', 'archived', 'merged', 'dormant'] as $status) {
-        expect(($this->names)(($this->props)(($this->asOwner)(), "?status={$status}")))->toBe(['Asha Current', 'Late Patient', 'Legacy Inactive']);
-    }
+    // Status filter filters working records by their specific status
+    expect(($this->names)(($this->props)(($this->asOwner)(), '?view=all&status=inactive')))->toBe(['Legacy Inactive'])
+        ->and(($this->names)(($this->props)(($this->asOwner)(), '?view=all&status=active')))->toBe(['Asha Current']);
     // An old "inactive" record is an ordinary patient: searchable, and opens in Patient 360.
     $legacy = Patient::query()->withoutGlobalScopes()->where('first_name', 'Legacy')->firstOrFail();
-    expect(($this->names)(($this->props)(($this->asOwner)(), '?q=Legacy')))->toBe(['Legacy Inactive']);
+    expect(($this->names)(($this->props)(($this->asOwner)(), '?view=all&q=Legacy')))->toBe(['Legacy Inactive']);
     ($this->asOwner)()->get("/clinic/patients/{$legacy->id}")->assertOk();
 });
 

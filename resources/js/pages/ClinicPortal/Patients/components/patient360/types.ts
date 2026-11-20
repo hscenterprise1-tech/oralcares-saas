@@ -14,11 +14,12 @@ export type Patient360Identity = {
   age: number | null;
   gender: string | null;
   blood_group: string | null;
+  date_of_birth?: string | null;
   /** The full number only for members whose work is contacting patients. */
   phone: string | null;
   phone_last_digits: string | null;
   email: string | null;
-  /** The stored lifecycle value; only deceased and merged are shown. */
+  /** The stored lifecycle value; only merged is shown. */
   status: string;
   registered_on: string | null;
   /** The branch of the last visit, among the member's branches. */
@@ -26,8 +27,6 @@ export type Patient360Identity = {
   last_visit_on: string | null;
   /** Where the patient was registered, when it is one of the member's branches. */
   registered_branch: string | null;
-  /** The death record (governed `patient.record_death`), when one exists. */
-  deceased: { on: string | null; recorded_at: string | null; recorded_by: string | null } | null;
   /** The assigned doctor (`current_practitioner_id`). */
   practitioner: string | null;
 };
@@ -93,6 +92,9 @@ export type SafetyEditor = { alerts: string; resolve: string; notes: string; sev
 /** Address, preferred channel and emergency contact; addresses and full numbers follow the contact rule. */
 export type Patient360Profile = {
   address: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
   preferred_channel: string | null;
   alternate_phone: string | null;
   emergency_contact: { name: string | null; phone: string | null; phone_last_digits: string | null } | null;
@@ -156,6 +158,22 @@ export type Patient360Overview = {
 
 export type Patient360Section = { key: string; label: string; group: string; built: boolean };
 
+export type Patient360Zone = { key: 'overview' | 'clinical' | 'cases' | 'visits' | 'docs' | 'billing' | 'timeline'; label: string; sections: string[] };
+
+export type CaseStatus = 'active' | 'completion_recommended' | 'closed';
+
+/** One open case on the Active Cases bar; never the internal case number. */
+export type ActiveCase = {
+  id: number;
+  module: 'dental' | 'physio' | 'general';
+  specialty: string;
+  title: string;
+  status: CaseStatus;
+  lead: string | null;
+  opened_at: string | null;
+  summary: string[];
+};
+
 /** A visit (`patient_visits`) or a booking the patient never came for. */
 export type HistoryRow =
   | {
@@ -217,6 +235,8 @@ export type Patient360Props = {
   practitioners: { id: number; name: string; specialty: string | null }[];
   /** Deferred: undefined until it arrives. */
   overview?: Patient360Overview;
+  /** Each open section's first page, keyed by endpoint name, exactly as its endpoint answers it. */
+  preloaded?: Record<string, unknown>;
   lens: {
     persona: string;
     default_section: string;
@@ -229,6 +249,10 @@ export type Patient360Props = {
     fields: { clinical: boolean; clinical_write: boolean; financial: boolean; refunds: boolean; investigation_results: boolean; dental: boolean; physio: boolean };
   };
   sections: Patient360Section[];
+  /** The seven zones (`Patient360SectionPolicy::ZONES`) this member gets, each with its open sections. */
+  zones: Patient360Zone[];
+  /** The persistent Active Cases bar: open cases of the modules the clinic offers. */
+  active_cases: ActiveCase[];
   open_section: string;
   actions: Patient360Action[];
   /** Section endpoints, by section key (`visits`, ...), and the governance endpoints. */

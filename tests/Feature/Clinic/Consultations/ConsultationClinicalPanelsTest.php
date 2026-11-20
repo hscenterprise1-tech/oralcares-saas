@@ -28,7 +28,7 @@ beforeEach(function () {
     $this->filling = ClinicalProcedure::create(['clinic_id' => $this->f->clinic->id, 'code' => 'FIL', 'name' => 'Composite filling', 'category' => 'Restorative', 'is_active' => true]);
     $this->dental = function (): array {
         $dental = [];
-        ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}")->assertOk()->assertInertia(function (Assert $page) use (&$dental) {
+        ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}?record=1")->assertOk()->assertInertia(function (Assert $page) use (&$dental) {
             $dental = $page->toArray()['props']['dental'];
         });
 

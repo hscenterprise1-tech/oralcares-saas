@@ -2,18 +2,23 @@
 
 namespace App\Services\Patient;
 
+use App\BillingStatus;
 use App\EmploymentStatus;
 use App\Models\Branch;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
 use App\Models\PatientAlert;
+use App\Models\PatientBilling;
 use App\Models\PatientBranchActivity;
+use App\Models\PatientCase;
 use App\Models\PatientSpecialty;
 use App\Models\PatientTreatment;
 use App\Models\PatientVisit;
 use App\PatientStatus;
 use App\Services\Treatment\TreatmentReadModel;
 use App\Support\ClinicClock;
+use App\VisitRegistrationType;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\CursorPaginator;
@@ -27,7 +32,7 @@ use Illuminate\Pagination\CursorPaginator;
  * - Cursor pagination on (created_at, id): no COUNT(*), constant cost at any
  *   depth.
  * - Each page's extra columns — active care, specialties, last activity,
- *   alerts — are one batched query each, never per row.
+ *   alerts, balances — are one batched query each, never per row.
  */
 class PatientDirectory
 {
@@ -48,9 +53,10 @@ class PatientDirectory
     /**
      * @param  array{q?: ?string, specialty?: ?string, branch_id?: ?int, practitioner_id?: int|string|null, active_care?: ?bool, registered_from?: ?string, registered_to?: ?string, view?: ?string, today_doctor_id?: ?int}  $filters
      * @param  bool  $withContact  whether the member may see the full mobile number and email
+     * @param  bool  $withBilling  whether the member may see the outstanding balance
      * @return array{data: list<array<string, mixed>>, next_cursor: ?string, prev_cursor: ?string, per_page: int}
      */
-    public function page(int $clinicId, array $filters, ?string $cursor = null, int $perPage = self::PER_PAGE, bool $withContact = false): array
+    public function page(int $clinicId, array $filters, ?string $cursor = null, int $perPage = self::PER_PAGE, bool $withContact = false, bool $withBilling = false): array
     {
         $perPage = max(1, min($perPage, 100));
         $branchIds = $this->branchAccess->branchIds();
@@ -101,6 +107,20 @@ class PatientDirectory
         $visitBranchNames = $todaysVisits->isEmpty() ? collect() : Branch::query()->withoutGlobalScopes()->where('clinic_id', $clinicId)
             ->whereIn('id', $todaysVisits->pluck('branch_id')->unique())->pluck('name', 'id');
 
+        // Active case lookup: batched for page
+        $activeCases = $ids === [] ? collect() : PatientCase::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinicId)->whereIn('patient_id', $ids)->whereIn('status', PatientCase::OPEN)
+            ->when($branchIds !== null, fn ($q) => $q->whereIn('branch_id', $branchIds ?: [0]))
+            ->orderByDesc('opened_at')->get(['patient_id', 'case_number', 'title', 'specialty'])->keyBy('patient_id');
+
+        // Balances: batched only when user holds billing.view permission
+        $balances = ! $withBilling || $ids === [] ? collect() : PatientBilling::query()->withoutGlobalScopes()
+            ->where('clinic_id', $clinicId)->whereIn('patient_id', $ids)
+            ->whereIn('status', [BillingStatus::Pending->value, BillingStatus::PartiallyPaid->value])
+            ->groupBy('patient_id')
+            ->selectRaw('patient_id, sum(final_amount - paid_amount - coalesce(adjusted_amount, 0)) as balance')
+            ->pluck('balance', 'patient_id');
+
         return [
             'data' => collect($page->items())->map(fn (Patient $p) => [
                 'id' => $p->id,
@@ -130,8 +150,14 @@ class PatientDirectory
                     'status' => $todaysVisits[$p->id]->visit_status,
                 ] : null,
                 'case_type' => $latestVisits[$p->id]->registration_type?->value ?? null,
+                'active_case' => isset($activeCases[$p->id]) ? [
+                    'case_number' => $activeCases[$p->id]->case_number,
+                    'title' => $activeCases[$p->id]->title,
+                    'specialty' => $activeCases[$p->id]->specialty,
+                ] : null,
                 'treatment_progress' => isset($activeCare[$p->id]) ? 'ongoing' : (isset($completedCare[$p->id]) ? 'complete' : null),
                 'critical_alerts' => (int) ($alerts[$p->id] ?? 0),
+                'balance' => $withBilling ? (float) ($balances[$p->id] ?? 0.0) : null,
                 'registered_on' => $p->created_at?->toDateString(),
             ])->values()->all(),
             'next_cursor' => $page->nextCursor()?->encode(),
@@ -154,6 +180,7 @@ class PatientDirectory
         }
         $practitioner = $filters['practitioner_id'] ?? null;
         $today = ($filters['view'] ?? null) === 'today';
+        $clinicToday = ClinicClock::today();
 
         return $this->branchAccess->restrict(Patient::query()->withoutGlobalScopes()->where('patients.clinic_id', $clinicId))
             // Every patient record, whatever status an old row carries; only a merged duplicate (kept for its survivor) is left out.
@@ -161,8 +188,10 @@ class PatientDirectory
             ->when($q !== '', fn (Builder $b) => $b->matchingSearch($q))
             ->when($practitioner === 'none', fn (Builder $b) => $b->whereNull('current_practitioner_id'))
             ->when(filled($practitioner) && $practitioner !== 'none', fn (Builder $b) => $b->where('current_practitioner_id', (int) $practitioner))
-            ->when(filled($filters['registered_from'] ?? null), fn (Builder $b) => $b->where('created_at', '>=', $filters['registered_from']))
-            ->when(filled($filters['registered_to'] ?? null), fn (Builder $b) => $b->where('created_at', '<', now()->parse($filters['registered_to'])->addDay()))
+            ->when(filled($filters['gender'] ?? null), fn (Builder $b) => $b->where('gender', $filters['gender']))
+            ->when(filled($filters['status'] ?? null), fn (Builder $b) => $b->where('status', $filters['status']))
+            ->when(filled($filters['registered_from'] ?? null), fn (Builder $b) => $b->where('created_at', '>=', Carbon::parse($filters['registered_from'])->startOfDay()))
+            ->when(filled($filters['registered_to'] ?? null), fn (Builder $b) => $b->where('created_at', '<=', Carbon::parse($filters['registered_to'])->endOfDay()))
             // Today: everyone who attended today — new or returning, whenever they registered — by an attended
             // visit on the clinic's own date, at one of the member's branches (and the chosen one), to the doctor
             // when it is a doctor's Today. Several visits today are still one patient.
@@ -177,11 +206,96 @@ class PatientDirectory
             ->when(filled($filters['specialty'] ?? null), fn (Builder $b) => $b->whereExists(fn ($s) => $s->selectRaw('1')->from('patient_specialties as ps')
                 ->join('clinic_specialties as cs', 'cs.id', '=', 'ps.clinic_specialty_id')
                 ->whereColumn('ps.patient_id', 'patients.id')->where('ps.clinic_id', $clinicId)->where('ps.status', PatientSpecialty::ACTIVE)->where('cs.specialty_key', $filters['specialty'])))
-            // Ongoing treatment: the same rule as the Treatment column (`TreatmentReadModel`): an open treatment at
-            // one of the member's branches, or one with no branch.
-            ->when(($filters['active_care'] ?? null) === true, fn (Builder $b) => $b->whereExists(fn ($s) => $s->selectRaw('1')->from('patient_treatments as pt')
+            // Treatment status: ongoing / completed / not_started (plus active_care backwards-compat)
+            ->when(($filters['treatment_status'] ?? null) === 'ongoing' || ($filters['active_care'] ?? null) === true, fn (Builder $b) => $b->whereExists(fn ($s) => $s->selectRaw('1')->from('patient_treatments as pt')
                 ->whereColumn('pt.patient_id', 'patients.id')->where('pt.clinic_id', $clinicId)->whereIn('pt.status', TreatmentReadModel::OPEN)
-                ->when($branchIds !== null, fn ($t) => $t->where(fn ($w) => $w->whereIn('pt.branch_id', $branchIds ?: [0])->orWhereNull('pt.branch_id')))));
+                ->when($branchIds !== null, fn ($t) => $t->where(fn ($w) => $w->whereIn('pt.branch_id', $branchIds ?: [0])->orWhereNull('pt.branch_id')))))
+            ->when(($filters['treatment_status'] ?? null) === 'completed', fn (Builder $b) => $b->whereExists(fn ($s) => $s->selectRaw('1')->from('patient_treatments as pt')
+                ->whereColumn('pt.patient_id', 'patients.id')->where('pt.clinic_id', $clinicId)->where('pt.status', PatientTreatment::COMPLETED)
+                ->when($branchIds !== null, fn ($t) => $t->where(fn ($w) => $w->whereIn('pt.branch_id', $branchIds ?: [0])->orWhereNull('pt.branch_id'))))
+                ->whereNotExists(fn ($s) => $s->selectRaw('1')->from('patient_treatments as pt_open')
+                    ->whereColumn('pt_open.patient_id', 'patients.id')->where('pt_open.clinic_id', $clinicId)->whereIn('pt_open.status', TreatmentReadModel::OPEN)
+                    ->when($branchIds !== null, fn ($t) => $t->where(fn ($w) => $w->whereIn('pt_open.branch_id', $branchIds ?: [0])->orWhereNull('pt_open.branch_id')))))
+            ->when(($filters['treatment_status'] ?? null) === 'not_started', fn (Builder $b) => $b->whereNotExists(fn ($s) => $s->selectRaw('1')->from('patient_treatments as pt')
+                ->whereColumn('pt.patient_id', 'patients.id')->where('pt.clinic_id', $clinicId)
+                ->when($branchIds !== null, fn ($t) => $t->where(fn ($w) => $w->whereIn('pt.branch_id', $branchIds ?: [0])->orWhereNull('pt.branch_id')))))
+            // Patient type: new / repeat
+            ->when(filled($filters['patient_type'] ?? null), function (Builder $b) use ($filters, $clinicId, $branchIds) {
+                $type = $filters['patient_type'];
+                $b->where(function (Builder $q) use ($clinicId, $branchIds, $type) {
+                    $q->whereExists(function ($sub) use ($clinicId, $branchIds, $type) {
+                        $sub->selectRaw('1')
+                            ->from('patient_visits as pv')
+                            ->whereColumn('pv.patient_id', 'patients.id')
+                            ->where('pv.clinic_id', $clinicId)
+                            ->whereIn('pv.visit_status', self::ATTENDED)
+                            ->when($branchIds !== null, fn ($v) => $v->whereIn('pv.branch_id', $branchIds ?: [0]))
+                            ->where('pv.registration_type', $type)
+                            ->whereRaw('pv.id = (
+                                select max(pv_sub.id) from patient_visits as pv_sub
+                                where pv_sub.patient_id = patients.id
+                                and pv_sub.clinic_id = pv.clinic_id
+                                and pv_sub.visit_status in ('.implode(',', array_fill(0, count(self::ATTENDED), '?')).')
+                                '.($branchIds !== null ? 'and pv_sub.branch_id in ('.implode(',', array_map('intval', $branchIds ?: [0])).')' : '').'
+                            )', self::ATTENDED);
+                    });
+                    if ($type === 'new') {
+                        $q->orWhere(function (Builder $noVisits) use ($clinicId, $branchIds) {
+                            $noVisits->where(function ($w) {
+                                $w->where('patients.registration_type', VisitRegistrationType::New)
+                                    ->orWhereNull('patients.registration_type');
+                            })->whereNotExists(function ($sub) use ($clinicId, $branchIds) {
+                                $sub->selectRaw('1')
+                                    ->from('patient_visits as pv')
+                                    ->whereColumn('pv.patient_id', 'patients.id')
+                                    ->where('pv.clinic_id', $clinicId)
+                                    ->whereIn('pv.visit_status', self::ATTENDED)
+                                    ->when($branchIds !== null, fn ($v) => $v->whereIn('pv.branch_id', $branchIds ?: [0]));
+                            });
+                        });
+                    }
+                });
+            })
+            // Age range: age_min / age_max
+            ->when(filled($filters['age_min'] ?? null) || filled($filters['age_max'] ?? null), function (Builder $b) use ($filters, $clinicToday) {
+                $ageMin = filled($filters['age_min'] ?? null) ? (int) $filters['age_min'] : null;
+                $ageMax = filled($filters['age_max'] ?? null) ? (int) $filters['age_max'] : null;
+
+                $b->where(function (Builder $ageQuery) use ($ageMin, $ageMax, $clinicToday) {
+                    $ageQuery->where(function (Builder $dobQuery) use ($ageMin, $ageMax, $clinicToday) {
+                        $dobQuery->whereNotNull('patients.date_of_birth');
+                        if ($ageMin !== null) {
+                            $dobQuery->where('patients.date_of_birth', '<=', $clinicToday->copy()->subYears($ageMin)->toDateString());
+                        }
+                        if ($ageMax !== null) {
+                            $dobQuery->where('patients.date_of_birth', '>=', $clinicToday->copy()->subYears($ageMax + 1)->addDay()->toDateString());
+                        }
+                    })->orWhere(function (Builder $legacyQuery) use ($ageMin, $ageMax) {
+                        $legacyQuery->whereNull('patients.date_of_birth')->whereNotNull('patients.age');
+                        if ($ageMin !== null) {
+                            $legacyQuery->where('patients.age', '>=', $ageMin);
+                        }
+                        if ($ageMax !== null) {
+                            $legacyQuery->where('patients.age', '<=', $ageMax);
+                        }
+                    });
+                });
+            })
+            // Last visit date range: last_visit_from / last_visit_to
+            ->when(filled($filters['last_visit_from'] ?? null) || filled($filters['last_visit_to'] ?? null), function (Builder $b) use ($filters, $clinicId, $branchIds, $branchId) {
+                $from = filled($filters['last_visit_from'] ?? null) ? Carbon::parse($filters['last_visit_from'])->startOfDay() : null;
+                $to = filled($filters['last_visit_to'] ?? null) ? Carbon::parse($filters['last_visit_to'])->endOfDay() : null;
+
+                $b->whereExists(function ($sub) use ($clinicId, $branchIds, $branchId, $from, $to) {
+                    $sub->selectRaw('1')->from('patient_branch_activity as pba')
+                        ->whereColumn('pba.patient_id', 'patients.id')
+                        ->where('pba.clinic_id', $clinicId)
+                        ->when($branchIds !== null, fn ($q) => $q->whereIn('pba.branch_id', $branchIds ?: [0]))
+                        ->when($branchId !== null, fn ($q) => $q->where('pba.branch_id', $branchId))
+                        ->when($from !== null, fn ($q) => $q->where('pba.last_seen_at', '>=', $from))
+                        ->when($to !== null, fn ($q) => $q->where('pba.last_seen_at', '<=', $to));
+                });
+            });
     }
 
     /**

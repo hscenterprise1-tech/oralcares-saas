@@ -480,6 +480,8 @@ class Patient360DentalWorkspace
                 'priced' => $live->every(fn (TreatmentRecord $item) => $item->price !== null),
             ],
             'actions' => [
+                // The estimate the patient takes home: for whoever reads the plan (the server decides again).
+                'estimate_url' => route('clinic.patients.dental.plans.estimate', [$patient->id, $plan->id]),
                 'accept_url' => $transition('accept', [TreatmentPlan::PROPOSED]),
                 'pause_url' => $transition('pause', TreatmentPlan::WORKABLE),
                 'resume_url' => $transition('resume', [TreatmentPlan::PAUSED]),

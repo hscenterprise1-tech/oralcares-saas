@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/clinic/ui/Button';
 import { Card } from '@/clinic/ui/Card';
@@ -26,7 +26,7 @@ import { shortDate } from '../format';
  */
 
 type StateStyle = { label: string; fill: string; stroke: string };
-type PlanItem = {
+export type PlanItem = {
   id: number;
   description: string;
   tooth: string | number | null;
@@ -48,6 +48,7 @@ type Plan = {
   total: number;
   estimate?: { total: number; done: number; priced: boolean } | null;
   actions?: {
+    estimate_url?: string | null;
     accept_url: string | null;
     pause_url: string | null;
     resume_url: string | null;
@@ -56,7 +57,7 @@ type Plan = {
   };
   items: PlanItem[];
 };
-type DentalPayload = {
+export type DentalPayload = {
   view: 'clinical' | 'operational' | 'financial';
   states: Record<string, string>;
   state_styles: Record<string, StateStyle>;
@@ -157,7 +158,7 @@ type DentalPayload = {
  * The billing view's plans carry less (each item's `procedure`, no surfaces,
  * no counts or actions): fill the same shape so one screen draws all views.
  */
-function normalize(payload: DentalPayload): DentalPayload {
+export function normalize(payload: DentalPayload): DentalPayload {
   const raw = payload.plans as unknown as (Omit<Partial<Plan>, 'items'> & { items: (Partial<PlanItem> & { procedure?: string })[] })[] | undefined;
 
   return {
@@ -325,30 +326,30 @@ export function DentalSection({ endpoint }: { endpoint: string }) {
 
 type Tone = 'green' | 'slate' | 'rose' | 'blue' | 'amber';
 const PILL: Record<Tone, string> = {
-  green: 'bg-cx-green-bg text-cx-green-ink',
-  slate: 'bg-cx-slate-bg text-cx-slate-ink',
-  rose: 'bg-cx-rose-bg text-cx-rose-ink',
-  blue: 'bg-cx-m-blue-bg text-cx-blue-ink',
-  amber: 'bg-cx-amber-bg text-cx-amber-ink',
+  green: 'bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]',
+  slate: 'bg-slate-100 text-slate-700 border border-slate-200',
+  rose: 'bg-[#FFF1F2] text-[#9F1239] border border-[#FECDD3]',
+  blue: 'bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]',
+  amber: 'bg-[#FEFCE8] text-[#B45309] border border-[#FDE68A]',
 };
 
 function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold', PILL[tone])}>{children}</span>;
+  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-bold border', PILL[tone])}>{children}</span>;
 }
 
 function Panel({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
   const id = `dental-${title.toLowerCase().replace(/\W+/g, '-')}`;
 
   return (
-    <Card as="section" aria-labelledby={id} className="p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 id={id} className="text-[15px] font-semibold text-cx-text">
+    <section aria-labelledby={id} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 id={id} className="text-[16px] font-bold tracking-tight text-slate-900">
           {title}
         </h2>
         {aside}
       </div>
       {children}
-    </Card>
+    </section>
   );
 }
 
@@ -364,12 +365,12 @@ function Summary({ summary }: { summary: NonNullable<DentalPayload['summary']> }
   }
 
   return (
-    <dl className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
+    <dl className="grid grid-cols-2 gap-3 md:grid-cols-5">
       {items.map(([label, value]) => (
-        <Card key={label} as="div" className="p-3">
-          <dt className="text-[12.5px] text-cx-text-2">{label}</dt>
-          <dd className="whitespace-nowrap text-[17px] font-bold tabular-nums text-cx-text">{value}</dd>
-        </Card>
+        <div key={label} className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-3.5 shadow-xs">
+          <dt className="text-[11.5px] font-bold uppercase tracking-wider text-slate-500">{label}</dt>
+          <dd className="mt-1 whitespace-nowrap text-[18px] font-black tabular-nums text-slate-900">{value}</dd>
+        </div>
       ))}
     </dl>
   );
@@ -554,6 +555,11 @@ function Plans({
                   <Pill tone={PLAN_STATUS[plan.status] ?? 'slate'}>{humanize(plan.status)}</Pill>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
+                  {plan.actions?.estimate_url && (
+                    <a href={plan.actions.estimate_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#DCE6F3] bg-white px-3 text-[12.5px] font-semibold text-cx-nav-ink hover:bg-[#F8FAFC]">
+                      <Printer className="h-3.5 w-3.5" aria-hidden="true" /> Estimate
+                    </a>
+                  )}
                   {plan.actions?.accept_url && (
                     <Button size="sm" onClick={() => act(plan.actions!.accept_url!)}>
                       Accept
@@ -658,7 +664,7 @@ function Plans({
   );
 }
 
-function ReasonDialog({ title, onClose, onConfirm }: { title: string; onClose: () => void; onConfirm: (reason: string) => void }) {
+export function ReasonDialog({ title, onClose, onConfirm }: { title: string; onClose: () => void; onConfirm: (reason: string) => void }) {
   const [reason, setReason] = useState('');
 
   return (
@@ -687,7 +693,7 @@ function ReasonDialog({ title, onClose, onConfirm }: { title: string; onClose: (
 }
 
 /** Record a planned item as done in the open consultation, with the tooth's resulting condition (required for surface work). */
-function CompleteDialog({
+export function CompleteDialog({
   item,
   conditions,
   onClose,

@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
  */
 
 const CONTROL =
-  'w-full rounded-xl border border-clinic-border bg-clinic-surface px-3 text-[13px] text-clinic-ink placeholder:text-clinic-muted focus:border-clinic-brand-strong focus:outline-none focus:ring-2 focus:ring-clinic-brand/25 disabled:bg-clinic-inset disabled:text-clinic-secondary aria-[invalid=true]:border-clinic-danger aria-[invalid=true]:ring-clinic-danger/20';
+  'w-full rounded-xl border border-[#DCE6F3] bg-white px-3 text-[13.5px] text-[#173B60] placeholder:text-[#64748B] hover:border-[#B9C6D8] focus:border-[#1769AA] focus:outline-none focus:ring-2 focus:ring-[#1769AA]/20 disabled:bg-[#F1F5F9] disabled:text-[#94A3B8] aria-[invalid=true]:border-[#B42318] aria-[invalid=true]:ring-[#B42318]/20 motion-safe:transition-[border-color,box-shadow]';
 
 export const inputClass = cn(CONTROL, 'h-11');
 export const selectClass = cn(CONTROL, 'h-11 pr-8');
@@ -42,21 +42,21 @@ export function Field({
 }) {
   return (
     <div className={cn('min-w-0', className)}>
-      <label htmlFor={htmlFor} className="mb-1.5 block text-[12px] font-semibold text-clinic-ink">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-[12px] font-semibold text-[#173B60]">
         {label}
         {required && (
-          <span className="ml-0.5 text-clinic-danger" aria-hidden="true">
+          <span className="ml-0.5 text-[#B42318]" aria-hidden="true">
             *
           </span>
         )}
       </label>
       {children}
       {error ? (
-        <p role="alert" id={htmlFor ? `${htmlFor}-error` : undefined} className="mt-1.5 text-[12px] font-medium text-clinic-danger">
+        <p role="alert" id={htmlFor ? `${htmlFor}-error` : undefined} className="mt-1.5 text-[12px] font-medium text-[#B42318]">
           {error}
         </p>
       ) : hint ? (
-        <p id={htmlFor ? `${htmlFor}-hint` : undefined} className="mt-1.5 text-[11.5px] text-clinic-secondary">
+        <p id={htmlFor ? `${htmlFor}-hint` : undefined} className="mt-1.5 text-[11.5px] text-[#64748B]">
           {hint}
         </p>
       ) : null}
@@ -107,14 +107,14 @@ export const Select = forwardRef<
         ))}
       </select>
       <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clinic-secondary"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748B]"
         aria-hidden="true"
       />
     </div>
   );
 });
 
-const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clinic-brand-strong focus-visible:ring-offset-2';
+const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1769AA] focus-visible:ring-offset-2';
 
 /** A checkbox with its label; the whole row is the target. */
 export function Checkbox({
@@ -145,7 +145,7 @@ export function Checkbox({
         onCheckedChange={(value) => onCheckedChange(value === true)}
         disabled={disabled}
         className={cn(
-          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-clinic-border-strong bg-clinic-surface',
+          'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#D5DDE7] bg-white',
           'data-[state=checked]:border-[#0F7C6E] data-[state=checked]:bg-[#0F7C6E] disabled:opacity-50',
           FOCUS,
         )}
@@ -154,9 +154,9 @@ export function Checkbox({
           <Check className="h-3.5 w-3.5 text-white" aria-hidden="true" />
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
-      <label htmlFor={controlId} className="min-w-0 cursor-pointer select-none text-[13px] text-clinic-ink">
+      <label htmlFor={controlId} className="min-w-0 cursor-pointer select-none text-[13px] text-[#173B60]">
         <span className="font-medium">{label}</span>
-        {description && <span className="mt-0.5 block text-[12px] text-clinic-secondary">{description}</span>}
+        {description && <span className="mt-0.5 block text-[12px] text-[#64748B]">{description}</span>}
       </label>
     </div>
   );
@@ -209,16 +209,16 @@ export function RadioGroup({
               value={option.value}
               disabled={option.disabled}
               className={cn(
-                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-clinic-border-strong bg-clinic-surface',
-                'data-[state=checked]:border-clinic-ink disabled:opacity-50',
+                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#D5DDE7] bg-white',
+                'data-[state=checked]:border-[#1769AA] disabled:opacity-50',
                 FOCUS,
               )}
             >
-              <RadioPrimitive.Indicator className="h-2.5 w-2.5 rounded-full bg-[#0F7C6E]" />
+              <RadioPrimitive.Indicator className="h-2.5 w-2.5 rounded-full bg-[#1769AA]" />
             </RadioPrimitive.Item>
-            <label htmlFor={optionId} className="min-w-0 cursor-pointer select-none text-[13px] text-clinic-ink">
+            <label htmlFor={optionId} className="min-w-0 cursor-pointer select-none text-[13px] text-[#173B60]">
               <span className="font-medium">{option.label}</span>
-              {option.description && <span className="mt-0.5 block text-[12px] text-clinic-secondary">{option.description}</span>}
+              {option.description && <span className="mt-0.5 block text-[12px] text-[#64748B]">{option.description}</span>}
             </label>
           </div>
         );
@@ -258,8 +258,8 @@ export function Switch({
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
       className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-clinic-border-strong motion-safe:transition-colors',
-        'data-[state=checked]:bg-clinic-brand-strong disabled:opacity-50',
+        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-[#CBD5E1] motion-safe:transition-colors',
+        'data-[state=checked]:bg-[#14917F] disabled:opacity-50',
         FOCUS,
       )}
     >
@@ -273,9 +273,9 @@ export function Switch({
 
   return (
     <div className="flex items-start justify-between gap-4">
-      <label htmlFor={controlId} className="min-w-0 cursor-pointer select-none text-[13px] text-clinic-ink">
+      <label htmlFor={controlId} className="min-w-0 cursor-pointer select-none text-[13px] text-[#173B60]">
         <span className="font-medium">{label}</span>
-        {description && <span className="mt-0.5 block text-[12px] text-clinic-secondary">{description}</span>}
+        {description && <span className="mt-0.5 block text-[12px] text-[#64748B]">{description}</span>}
       </label>
       {control}
     </div>

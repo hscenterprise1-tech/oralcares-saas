@@ -39,6 +39,23 @@ class Patient360Access
         return $user->hasClinicPermission(ClinicPermission::BillingView);
     }
 
+    /**
+     * A practitioner who may see their own fees but not the ledger
+     * (`billing.view_own_fees` without `billing.view`).
+     */
+    public function canViewOwnFeesOnly(User $user): bool
+    {
+        return ! $this->canViewBilling($user)
+            && $user->hasClinicPermission(ClinicPermission::BillingViewOwnFees)
+            && $this->clinicContext->currentEmployee()?->practitionerProfile !== null;
+    }
+
+    /** The practitioner whose own agreed estimates this own-fees member may see, or null. */
+    public function ownFeesPractitionerId(User $user): ?int
+    {
+        return $this->canViewOwnFeesOnly($user) ? $this->clinicContext->currentEmployee()?->id : null;
+    }
+
     public function canViewAppointments(User $user): bool
     {
         return $user->hasClinicPermission(ClinicPermission::AppointmentView);

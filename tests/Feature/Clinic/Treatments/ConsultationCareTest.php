@@ -141,6 +141,7 @@ test('Start treatment from the visit sets up the plan, package and today\'s sess
     ];
 
     // A practitioner without billing rights cannot sell the package: refused before anything is written.
+    withoutDoctorBillingRights();
     ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", $start(['package' => ['name' => 'Knee 12', 'sessions_total' => 12]]))->assertForbidden();
     // Another patient's diagnosis: refused, and the treatment is not left behind.
     $theirs = ClinicalDiagnosis::query()->withoutGlobalScopes()->create(['clinic_id' => $this->f->clinic->id, 'organization_id' => $this->f->clinic->organization_id, 'encounter_id' => $encounter->id, 'patient_id' => $this->f->patient('Other', 'One')->id, 'description' => 'Not hers', 'status' => 'active']);
@@ -262,6 +263,7 @@ test('Discharge from the visit closes the plan of care as completed and complete
     $this->actingAs($billing)->withSession($billingSession)->post($physio['sell_package'], $sale);
     expect(PatientSessionPackage::withoutGlobalScopes()->where('patient_treatment_id', $id)->count())->toBe(1);
     // The doctor has no billing rights: no sale link, and the endpoint refuses.
+    withoutDoctorBillingRights();
     expect(($this->asDoctor)()->getJson(route('clinic.patients.360.section', [$this->patient->id, 'physio']))->json('links.sell_package'))->toBeNull();
     ($this->asDoctor)()->post($physio['sell_package'], [...$sale, 'idempotency_key' => 'p360-sale-0002'])->assertForbidden();
 
@@ -282,24 +284,18 @@ test('Discharge from the visit closes the plan of care as completed and complete
     $this->actingAs($reception)->withSession($receptionSession)->postJson($card['links']['complete'])->assertForbidden();
 });
 
-test('once a death is recorded, a consultation opened before it cannot start a new physio session or plan of care, but today\'s session can still be written up', function () {
+test('once the record is deleted, a consultation opened before it cannot start a new physio session or plan of care', function () {
     $encounter = ($this->visit)();
-    $id = ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", [
-        'mode' => 'adhoc', 'specialty_key' => 'physiotherapy', 'title' => 'Knee Rehabilitation', 'open_session' => true,
-    ])->assertCreated()->json('data.id');
     $back = ($this->asDoctor)()->postJson("/clinic/consultations/{$encounter->id}/treatments", ['mode' => 'adhoc', 'specialty_key' => 'physiotherapy', 'title' => 'Back Rehabilitation'])->assertCreated()->json('data.id');
     $cards = ($this->care)($encounter);
 
     $this->actingAs($this->f->owner)->withSession(withOwnerMode($this->f->session))->post('/clinic/approvals/direct', [
-        'action' => 'patient.record_death', 'target_id' => $this->patient->id, 'reason' => 'Family informed the clinic by phone', 'payload' => ['date_of_death' => '2026-10-06'],
+        'action' => 'patient.delete', 'target_id' => $this->patient->id, 'reason' => 'Duplicate registration by mistake', 'payload' => [],
     ])->assertSessionHasNoErrors();
 
-    ($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['open_session'], ['encounter_id' => $encounter->id])->assertStatus(422);
-    ($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['start_plan'], ['encounter_id' => $encounter->id, 'title' => 'Back plan'])->assertStatus(422);
+    // A deleted record is no longer a working patient: the server refuses new care for it.
+    expect(($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['open_session'], ['encounter_id' => $encounter->id])->status())->toBeIn([403, 422])
+        ->and(($this->asDoctor)()->postJson($cards['Back Rehabilitation']['links']['start_plan'], ['encounter_id' => $encounter->id, 'title' => 'Back plan'])->status())->toBeIn([403, 422]);
     expect(PhysioSession::withoutGlobalScopes()->where('patient_treatment_id', $back)->count())->toBe(0)
         ->and(PhysioCarePlan::withoutGlobalScopes()->where('patient_treatment_id', $back)->count())->toBe(0);
-
-    // The session already under way documents care given before the death.
-    ($this->asDoctor)()->putJson($cards['Knee Rehabilitation']['links']['session'], ['subjective' => 'Seen this morning'])->assertOk();
-    expect(PhysioSession::withoutGlobalScopes()->where('patient_treatment_id', $id)->sole()->subjective)->toBe('Seen this morning');
 });

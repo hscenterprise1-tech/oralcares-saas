@@ -17,6 +17,8 @@ use App\PatientStatus;
 use App\Services\ClinicContext;
 use App\Services\Patient\ClinicSpecialties;
 use App\Services\Patient\PatientBranchAccess;
+use App\Services\Physio\DeskPhysio;
+use App\Services\Physio\PhysioCareSummary;
 use Illuminate\Auth\Access\AuthorizationException;
 
 /**
@@ -62,7 +64,24 @@ class TreatmentAccess
     /** Starting a treatment without a catalogue entry: the same rules, against the specialty named. */
     public function assertCanStartAdHoc(User $user, Patient $patient, string $specialtyKey, ClinicEmployee $practitioner, Branch $branch): void
     {
-        $this->require($user->hasClinicPermission(ClinicPermission::TreatmentStart), 'You cannot start treatment.');
+        // The desk may start physiotherapy for a therapist who has no login (`DeskPhysio`).
+        $desk = $specialtyKey === PhysioCareSummary::SPECIALTY && app(DeskPhysio::class)->mayRunFor($user, $practitioner);
+        $this->require($desk || $user->hasClinicPermission(ClinicPermission::TreatmentStart), 'You cannot start treatment.');
+        $this->assertCommon($user, $patient, $branch);
+        $this->assertWorkingRecord($patient);
+        $this->assertSameClinic($patient->clinic_id, $practitioner->clinic_id);
+        $this->assertSpecialty($patient->clinic_id, $specialtyKey, $practitioner);
+    }
+
+    /**
+     * The front desk starting a physiotherapy programme for the therapist
+     * (who need not sign in): the desk's own session permission, limited to
+     * physiotherapy, so it grants no other specialty's treatments.
+     */
+    public function assertCanStartAtDesk(User $user, Patient $patient, string $specialtyKey, ClinicEmployee $practitioner, Branch $branch): void
+    {
+        $this->require($user->hasClinicPermission(ClinicPermission::PhysioSessionConfirm), 'You cannot start treatment.');
+        $this->require($specialtyKey === PhysioCareSummary::SPECIALTY, 'The desk starts physiotherapy programmes only.');
         $this->assertCommon($user, $patient, $branch);
         $this->assertWorkingRecord($patient);
         $this->assertSameClinic($patient->clinic_id, $practitioner->clinic_id);
@@ -77,7 +96,9 @@ class TreatmentAccess
 
     public function assertCanExecute(User $user, PatientTreatment $treatment, ClinicEmployee $performer): void
     {
-        $this->require($user->hasClinicPermission(ClinicPermission::TreatmentExecute), 'You cannot record treatment.');
+        // The desk may record physiotherapy given by a therapist who has no login (`DeskPhysio`).
+        $desk = $treatment->specialty_key === PhysioCareSummary::SPECIALTY && app(DeskPhysio::class)->mayRunFor($user, $performer);
+        $this->require($desk || $user->hasClinicPermission(ClinicPermission::TreatmentExecute), 'You cannot record treatment.');
         $patient = Patient::query()->withoutGlobalScopes()->findOrFail($treatment->patient_id);
         $branch = Branch::query()->withoutGlobalScopes()->find($treatment->branch_id);
         $this->assertCommon($user, $patient, $branch);

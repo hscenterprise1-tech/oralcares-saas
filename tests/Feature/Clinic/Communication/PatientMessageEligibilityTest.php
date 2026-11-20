@@ -26,7 +26,7 @@ use Tests\Support\ReceptionFixture;
 
 /**
  * A patient who may not be contacted — merged into another record or
- * recorded as deceased — is never messaged: nothing is queued for them, a
+ * deleted — is never messaged: nothing is queued for them, a
  * message queued earlier is skipped (with its reason, not failed) when it
  * falls due or just before WhatsApp would send it, and merging stops what is
  * still waiting. Everyone else is messaged as before.
@@ -94,13 +94,13 @@ test('nothing is queued for a patient who may not be contacted, and their timeli
         ->and(PatientTimelineEvent::query()->where('patient_id', $patient->id)->where('event_type', 'message_queued')->exists())->toBeFalse();
 })->with([
     'merged' => [PatientStatus::Merged],
-    'deceased' => [PatientStatus::Deceased],
+    'deleted' => [PatientStatus::Deleted],
 ]);
 
-test('messages queued before the patient was recorded as deceased are skipped when due, with the reason, and stay skipped on later runs', function () {
+test('messages queued before the patient was deleted are skipped when due, with the reason, and stay skipped on later runs', function () {
     $patient = $this->f->patient('Ravi', 'Menon');
     $appointment = ($this->book)($patient);
-    ($this->mark)($patient, PatientStatus::Deceased);
+    ($this->mark)($patient, PatientStatus::Deleted);
 
     ($this->dispatch)();
     // The day-before reminder falls due later; it is checked again then.
@@ -111,32 +111,32 @@ test('messages queued before the patient was recorded as deceased are skipped wh
     $byKey = ($this->messagesFor)($patient)->keyBy('event_key');
     expect($byKey["appointment_confirmed:{$appointment->id}"])
         ->status->toBe(NotificationService::SKIPPED)
-        ->failed_reason->toBe(PatientMessageEligibility::DECEASED_REASON)
+        ->failed_reason->toBe(PatientMessageEligibility::DELETED_REASON)
         ->sent_at->toBeNull()
         ->retry_count->toBe(0);
     expect($byKey["appointment_reminder:{$appointment->id}:202610091730"])
         ->status->toBe(NotificationService::SKIPPED)
-        ->failed_reason->toBe(PatientMessageEligibility::DECEASED_REASON);
+        ->failed_reason->toBe(PatientMessageEligibility::DELETED_REASON);
     Http::assertNothingSent();
 });
 
-test('a WhatsApp message waiting for its send job is not handed to the provider once the patient is recorded as deceased', function () {
+test('a WhatsApp message waiting for its send job is not handed to the provider once the patient is deleted', function () {
     Queue::fake([SendClinicWhatsAppMessage::class]);
     ($this->whatsApp)(['appointment_confirmed']);
     $patient = ($this->patientWhoAgreed)('Asha');
     ($this->book)($patient);
     ($this->dispatch)();
     $delivery = ClinicWhatsAppMessage::query()->withoutGlobalScopes()->sole();
-    ($this->mark)($patient, PatientStatus::Deceased);
+    ($this->mark)($patient, PatientStatus::Deleted);
 
     (new SendClinicWhatsAppMessage($delivery->id))->handle(app(WhatsAppManager::class));
 
     expect($delivery->fresh())
         ->status->toBe(ClinicWhatsAppMessage::SKIPPED)
-        ->failure_reason->toBe(PatientMessageEligibility::DECEASED_REASON);
+        ->failure_reason->toBe(PatientMessageEligibility::DELETED_REASON);
     expect(Notification::query()->find($delivery->notification_id))
         ->status->toBe(NotificationService::SKIPPED)
-        ->failed_reason->toBe(PatientMessageEligibility::DECEASED_REASON);
+        ->failed_reason->toBe(PatientMessageEligibility::DELETED_REASON);
     Http::assertNothingSent();
 });
 
@@ -198,11 +198,11 @@ test('merging a duplicate stops its waiting WhatsApp delivery before the history
     Http::assertNothingSent();
 });
 
-test('the scheduled follow-up sweep queues a reminder for a current patient but not for a deceased one', function () {
+test('the scheduled follow-up sweep queues a reminder for a current patient but not for a deleted one', function () {
     ($this->whatsApp)(['follow_up_due']);
     $current = $this->f->patient('Asha', 'Rao');
     $deceased = $this->f->patient('Ravi', 'Menon');
-    ($this->mark)($deceased, PatientStatus::Deceased);
+    ($this->mark)($deceased, PatientStatus::Deleted);
     $due = fn (Patient $patient) => PatientFollowUp::query()->withoutGlobalScopes()->create([
         'clinic_id' => $this->f->clinic->id, 'branch_id' => $this->f->branch->id, 'patient_id' => $patient->id, 'practitioner_id' => $this->f->doctorA->id,
         'due_on' => '2026-10-07', 'reason' => 'Review', 'status' => PatientFollowUp::DUE,

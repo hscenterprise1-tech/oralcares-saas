@@ -169,6 +169,7 @@ test('a WhatsApp failure leaves the payment intact; retry sends the same message
 
     // A doctor may see billing but not take payments: no retry.
     [$doctor, $doctorSession] = $this->f->memberWithRole(ClinicRole::Doctor);
+    withoutDoctorBillingRights();
     $this->actingAs($doctor)->withSession($doctorSession)->postJson(route('clinic.billing.payments.messages.retry', $payment->id))->assertForbidden();
 
     $this->metaStatus = 200;

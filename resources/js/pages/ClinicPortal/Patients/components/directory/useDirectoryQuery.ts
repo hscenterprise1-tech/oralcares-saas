@@ -5,9 +5,41 @@ import type { DirectoryFilters } from '../types';
 /** The props a directory visit reloads; the rest of the page stays as it is. */
 const RELOADED = ['patients', 'filters'];
 const SEARCH_DELAY_MS = 300;
-const QUERY_KEYS = ['q', 'specialty', 'branch_id', 'practitioner_id', 'active_care'] as const;
+const QUERY_KEYS = [
+  'q',
+  'specialty',
+  'branch_id',
+  'practitioner_id',
+  'gender',
+  'status',
+  'treatment_status',
+  'active_care',
+  'patient_type',
+  'age_min',
+  'age_max',
+  'registered_from',
+  'registered_to',
+  'last_visit_from',
+  'last_visit_to',
+] as const;
 
-export const NO_FILTERS = { q: '', status: '', specialty: '', branch_id: '', practitioner_id: '', active_care: '' } as const;
+export const NO_FILTERS = {
+  q: '',
+  status: '',
+  specialty: '',
+  branch_id: '',
+  practitioner_id: '',
+  gender: '',
+  treatment_status: '',
+  active_care: '',
+  patient_type: '',
+  age_min: '',
+  age_max: '',
+  registered_from: '',
+  registered_to: '',
+  last_visit_from: '',
+  last_visit_to: '',
+} as const;
 
 /**
  * Search, filters, views and pages for the directory, all run on the server

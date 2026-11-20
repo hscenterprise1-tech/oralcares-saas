@@ -22,7 +22,7 @@ export type DirectoryPatient = {
   email: string | null;
   gender: string | null;
   age: number | null;
-  /** The stored lifecycle value. Only deceased and merged are shown. */
+  /** The stored lifecycle value. Only merged is shown. */
   status: string;
   /** The assigned doctor (`current_practitioner_id`); null when nobody is assigned. */
   assigned_doctor: { id: number; name: string; at_clinic: boolean } | null;
@@ -37,6 +37,10 @@ export type DirectoryPatient = {
   today_visit: { branch: string | null; status: string } | null;
   /** The latest attended visit's case (`patient_visits.registration_type`): new on the first visit, repeat after; null before any visit. */
   case_type: 'new' | 'repeat' | null;
+  /** Active clinical case from patient_cases */
+  active_case: { case_number: string; title: string; specialty: string } | null;
+  /** Outstanding balance; only sent when user holds billing.view permission, null otherwise */
+  balance: number | null;
   /** From `patient_treatments`: ongoing while any treatment is open, complete once one is done and none open; null otherwise. */
   treatment_progress: 'ongoing' | 'complete' | null;
   critical_alerts: number;
@@ -61,7 +65,16 @@ export type DirectoryFilters = {
   branch_id: string;
   /** A doctor's id, or `none` for patients nobody is assigned to. */
   practitioner_id: string;
+  gender: string;
+  treatment_status: string;
   active_care: string;
+  patient_type: string;
+  age_min: string;
+  age_max: string;
+  registered_from: string;
+  registered_to: string;
+  last_visit_from: string;
+  last_visit_to: string;
   view: DirectoryView;
 };
 
@@ -80,7 +93,7 @@ export type DirectoryProps = {
   /** The clinic's local date (YYYY-MM-DD), what "Today" means. */
   today: string;
   isPractitioner: boolean;
-  can: { create: boolean };
+  can: { create: boolean; billing?: boolean };
   links: {
     index: string;
     /** Contains `__ID__`; null until the profile page is built. */

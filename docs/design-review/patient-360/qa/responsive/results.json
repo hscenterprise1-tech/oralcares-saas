@@ -1,0 +1,1372 @@
+[
+ {
+  "id": "consult-dental",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-plan-tab",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-plan-tab",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-plan-tab",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-plan-tab",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-plan-tab",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-gums-tab",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-gums-tab",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-gums-tab",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-gums-tab",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_h_ \"\" 20x20",
+   "button#field-_r_i_ \"\" 20x20",
+   "button#field-_r_j_ \"\" 20x20",
+   "button#field-_r_k_ \"\" 20x20",
+   "button#field-_r_l_ \"\" 20x20",
+   "button#field-_r_m_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-dental-gums-tab",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_h_ \"\" 20x20",
+   "button#field-_r_i_ \"\" 20x20",
+   "button#field-_r_j_ \"\" 20x20",
+   "button#field-_r_k_ \"\" 20x20",
+   "button#field-_r_l_ \"\" 20x20",
+   "button#field-_r_m_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-dentist",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-dentist",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-dentist",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-dentist",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-dentist",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-dental",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-dental",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-dental",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-dental",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-dental",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-investigations",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-investigations",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-investigations",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-investigations",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-investigations",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-documents",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-documents",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-documents",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-documents",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-documents",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-show",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-show",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-show",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-show",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "input \"\" 1x1"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-show",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "input \"\" 1x1"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-result-dialog",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [
+   "button \"Mark images taken\" x input#v-name-0 \"Test\"",
+   "button \"Enter result\" x input#v-name-0 \"Test\"",
+   "button \"Cancel investigation\" x input#v-unit-0 \"Unit\"",
+   "button \"Cancel investigation\" x button \"Cancel\""
+  ],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-result-dialog",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [
+   "button \"Mark images taken\" x input#v-name-0 \"Test\"",
+   "button \"Enter result\" x input#v-unit-0 \"Unit\"",
+   "button \"Cancel investigation\" x select#v-flag-0 \"Flag\"",
+   "button \"Cancel investigation\" x button \"Save result\""
+  ],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-result-dialog",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [
+   "button \"Mark images taken\" x input#v-name-0 \"Test\"",
+   "button \"Enter result\" x input#v-value-0 \"Value\"",
+   "button \"Cancel investigation\" x input#v-range-0 \"Reference range\"",
+   "button \"Cancel investigation\" x button \"Cancel\""
+  ],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-result-dialog",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [
+   "a \"All investigations\" x input#v-name-0 \"Test\"",
+   "a \"Consultation\" x input#v-value-0 \"Value\"",
+   "button \"Mark images taken\" x select#v-flag-0 \"Flag\"",
+   "button \"Enter result\" x select#v-flag-0 \"Flag\"",
+   "button \"Cancel investigation\" x select#v-flag-0 \"Flag\"",
+   "textarea#result-summary \"\" x button \"Cancel\""
+  ],
+  "small": [
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "button#field-_r_d_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "order-result-dialog",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [
+   "a \"Consultation\" x input#v-value-0 \"Value\"",
+   "button \"Mark images taken\" x input#v-range-0 \"Reference range\"",
+   "button \"Enter result\" x input#v-range-0 \"Reference range\"",
+   "button \"Cancel investigation\" x button \"Remove this value\"",
+   "textarea#result-summary \"\" x button \"Cancel\""
+  ],
+  "small": [
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "input \"\" 1x1",
+   "button#field-_r_d_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "orders-index",
+  "role": "dentist",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "orders-index",
+  "role": "dentist",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "orders-index",
+  "role": "dentist",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "orders-index",
+  "role": "dentist",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "orders-index",
+  "role": "dentist",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-owner",
+  "role": "owner62",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-owner",
+  "role": "owner62",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-owner",
+  "role": "owner62",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-owner",
+  "role": "owner62",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-owner",
+  "role": "owner62",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 5 medical conditions\" 48x28",
+   "button \"View all\" 47x28",
+   "button \"Manage\" 49x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-billing",
+  "role": "billing62",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-billing",
+  "role": "billing62",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-billing",
+  "role": "billing62",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-billing",
+  "role": "billing62",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-billing-billing",
+  "role": "billing62",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-reception",
+  "role": "reception62",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-reception",
+  "role": "reception62",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-reception",
+  "role": "reception62",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-reception",
+  "role": "reception62",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-overview-reception",
+  "role": "reception62",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"View all\" 47x28",
+   "button \"Show all 4 safety alerts\" 50x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\"",
+   "span \"High:\"",
+   "span \"High:\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-physio",
+  "role": "physio68",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-physio",
+  "role": "physio68",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-physio",
+  "role": "physio68",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-physio",
+  "role": "physio68",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "consult-physio",
+  "role": "physio68",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button#field-_r_a_ \"\" 20x20"
+  ],
+  "clipped": [],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 23x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio",
+  "role": "physio68",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 23x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": null,
+  "errors": []
+ },
+ {
+  "id": "p360-physio-sell-dialog",
+  "role": "owner68",
+  "w": 1440,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": "Error: no sell button (no active plan)",
+  "errors": []
+ },
+ {
+  "id": "p360-physio-sell-dialog",
+  "role": "owner68",
+  "w": 1024,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": "Error: no sell button (no active plan)",
+  "errors": []
+ },
+ {
+  "id": "p360-physio-sell-dialog",
+  "role": "owner68",
+  "w": 768,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": "Error: no sell button (no active plan)",
+  "errors": []
+ },
+ {
+  "id": "p360-physio-sell-dialog",
+  "role": "owner68",
+  "w": 390,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 23x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": "Error: no sell button (no active plan)",
+  "errors": []
+ },
+ {
+  "id": "p360-physio-sell-dialog",
+  "role": "owner68",
+  "w": 360,
+  "status": 200,
+  "pageOverflow": 0,
+  "past": [],
+  "overlaps": [],
+  "small": [
+   "button \"Manage\" 49x28",
+   "button \"Manage\" 49x28",
+   "button \"Edit\" 23x28"
+  ],
+  "clipped": [
+   "span \"Mobile ending\""
+  ],
+  "actionError": "Error: no sell button (no active plan)",
+  "errors": []
+ }
+]

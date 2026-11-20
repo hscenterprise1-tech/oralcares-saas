@@ -88,10 +88,11 @@ test('a physiotherapy clinic cannot register a dental patient or chart a tooth, 
         ->assertForbidden();
     expect(PatientToothStatusHistory::withoutGlobalScopes()->where('encounter_id', $encounter->id)->exists())->toBeFalse();
 
-    // The consultation offers no dental services, and a dental one sent anyway is refused.
+    // The consultation is the physio one, with no dental chart or services, and a dental one sent anyway is refused.
     $asDoctor()->get("/clinic/consultations/{$encounter->id}")->assertInertia(fn (Assert $page) => $page
-        ->where('dental', null)
-        ->where('services', fn ($services) => collect($services)->pluck('code')->intersect(['ACC', 'CLN', 'OBT', 'FIL'])->isEmpty()));
+        ->component('ClinicPortal/Consultations/Physio', false)
+        ->missing('dental')
+        ->missing('services'));
     $asDoctor()->post("/clinic/consultations/{$encounter->id}/procedures", ['clinical_procedure_id' => $this->t->procedures['FIL']->id]);
     expect(PatientProcedure::withoutGlobalScopes()->where('encounter_id', $encounter->id)->exists())->toBeFalse();
 });

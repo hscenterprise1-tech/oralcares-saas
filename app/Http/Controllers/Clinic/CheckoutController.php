@@ -9,8 +9,10 @@ use App\Models\Branch;
 use App\Models\ClinicalEncounter;
 use App\Models\PatientBilling;
 use App\Models\PatientBillingPayment;
+use App\Models\User;
 use App\PaymentMethod;
 use App\Services\Billing\BillingRegister;
+use App\Services\Billing\BillInstalments;
 use App\Services\Billing\CheckInCharges;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Billing\PaymentMessages;
@@ -18,6 +20,7 @@ use App\Services\ClinicContext;
 use App\Services\OwnerMode\OwnerMode;
 use App\Services\Patient\Patient360\Patient360Sections;
 use App\Services\PaymentService;
+use App\Services\Physio\SessionPackages;
 use App\Services\Reception\IntakeSubmissions;
 use App\Services\Security\SecurityAudit;
 use App\Support\BillingTabs;
@@ -30,6 +33,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -219,6 +223,8 @@ class CheckoutController extends Controller
                 return back()->withErrors(['billing' => $e->getMessage()]);
             }
             $adjusted = true;
+            // The balance changed, so the plan made for the old one no longer fits: it is made again.
+            app(BillInstalments::class)->clear($bill);
 
             return back()->with('success', 'Balance adjusted.');
         };
@@ -234,15 +240,72 @@ class CheckoutController extends Controller
         }, 'This adjustment was already recorded; it was not recorded twice.', atomic: true);
     }
 
+    /**
+     * A payment plan for what a bill still owes: dated instalments the patient agreed to, adding up to the balance. The payments
+     * themselves go through the bill as ever and fill the instalments in order.
+     */
+    public function planInstalments(Request $request, PatientBilling $bill, BillInstalments $instalments): RedirectResponse
+    {
+        abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
+        $this->assertBranchId($bill->branch_id, ClinicPermission::PaymentCollect);
+        $data = $request->validate([
+            'instalments' => ['required', 'array', 'min:1', 'max:'.BillInstalments::MAX],
+            'instalments.*.due_on' => ['required', 'date_format:Y-m-d'],
+            'instalments.*.amount' => ['required', 'numeric', 'gt:0', 'max:99999999'],
+        ]);
+        try {
+            $instalments->plan($bill, $data['instalments'], $request->user(), $this->clinicContext->currentEmployee()?->id);
+        } catch (DomainException|InvalidArgumentException $e) {
+            return back()->withErrors(['instalments' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Payment plan saved.');
+    }
+
+    /** Take the payment plan away; the bill and what was paid stay as they are. */
+    public function clearInstalments(PatientBilling $bill, BillInstalments $instalments): RedirectResponse
+    {
+        abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
+        $this->assertBranchId($bill->branch_id, ClinicPermission::PaymentCollect);
+        $instalments->clear($bill);
+
+        return back()->with('success', 'Payment plan removed.');
+    }
+
+    /**
+     * One signed consultation's checkout: what is left to bill for it (from
+     * `EncounterCheckout`, which never offers a line already billed — the
+     * check-in charge, a procedure, a treatment or stage — nor a session a
+     * package paid for), its bills so far, and the patient's other open
+     * bills at this branch. Billing work, so it needs `billing.create` at
+     * the consultation's branch, never `billing.view`: the clinic's ledger is
+     * not shown here.
+     */
     public function show(Request $request, ClinicalEncounter $encounter): Response
     {
-        $this->assertBranch($encounter);
+        $this->assertBranch($encounter, ClinicPermission::BillingCreate);
         $encounter->load(['patient' => fn ($query) => $query->withoutGlobalScopes(), 'doctor:id,name']);
         $user = $request->user();
         $clinic = $this->clinicContext->clinic();
+        $branch = Branch::query()->withoutGlobalScopes()->findOrFail($encounter->branch_id);
+        $collect = $user->hasClinicPermissionAt(ClinicPermission::PaymentCollect, $branch);
 
         $bills = PatientBilling::query()->where('clinic_id', $encounter->clinic_id)->where('encounter_id', $encounter->id)
             ->with(['items', 'payments'])->latest('id')->get();
+        $openElsewhere = PatientBilling::query()->where('clinic_id', $encounter->clinic_id)->where('branch_id', $branch->id)
+            ->where('patient_id', $encounter->patient_id)->where(fn ($query) => $query->whereNull('encounter_id')->orWhere('encounter_id', '!=', $encounter->id))
+            ->whereIn('status', [BillingStatus::Pending->value, BillingStatus::PartiallyPaid->value])->where('outstanding_balance', '>', 0)
+            ->latest('id')->limit(20)->get();
+        $billRow = fn (PatientBilling $bill) => [
+            'id' => $bill->id,
+            'number' => $bill->billing_number,
+            'status' => $bill->status->value,
+            'issued_at' => $bill->issued_at?->toIso8601String(),
+            'total' => (float) $bill->final_amount,
+            'outstanding' => (float) $bill->outstanding_balance,
+            'pay_url' => $collect && (float) $bill->outstanding_balance > 0 && $bill->status !== BillingStatus::Cancelled ? route('clinic.billing.payments.store', $bill) : null,
+            'print_url' => route('clinic.billing.bills.print', $bill),
+        ];
 
         return Inertia::render('ClinicPortal/Billing/Checkout', [
             'encounter' => [
@@ -254,47 +317,115 @@ class CheckoutController extends Controller
                 'follow_up_note' => $encounter->follow_up_note,
             ],
             'patient' => ['id' => $encounter->patient->id, 'name' => $encounter->patient->full_name, 'uhid' => $encounter->patient->uhid, 'url' => route('clinic.patients.show', $encounter->patient->id)],
-            'lines' => $encounter->isFinalized() ? $this->checkout->lines($encounter) : [],
+            'lines' => $encounter->isFinalized() ? collect($this->checkout->lines($encounter))->map(fn (array $line) => [
+                'key' => $line['key'],
+                'description' => $line['description'],
+                'quantity' => $line['quantity'],
+                'unit_price' => $line['unit_price'],
+                // What the amount is: the consultation fee, a procedure done, or a treatment / stage charge at the amount agreed when it started.
+                'kind' => match (true) {
+                    $line['key'] === 'consultation' => 'consultation',
+                    str_starts_with($line['key'], 'treatment:'), str_starts_with($line['key'], 'stage:') => 'agreed',
+                    default => 'procedure',
+                },
+            ])->values()->all() : [],
+            // A session a package paid for is not charged again (`SessionPackages::paidFor`).
+            'package_covered' => app(SessionPackages::class)->paidFor($encounter),
             'bills' => $bills->map(fn (PatientBilling $bill) => [
-                'id' => $bill->id,
-                'number' => $bill->billing_number,
-                'status' => $bill->status->value,
-                'total' => (float) $bill->final_amount,
+                ...$billRow($bill),
                 'paid' => (float) $bill->paid_amount - (float) $bill->refunded_amount,
-                'outstanding' => (float) $bill->outstanding_balance,
                 'items' => $bill->items->map(fn ($item) => ['description' => $item->description, 'quantity' => $item->quantity, 'amount' => (float) $item->final_amount])->values(),
-                'payments' => $bill->payments->map(fn ($payment) => ['receipt' => $payment->receipt_number, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method?->label()])->values(),
-                'pay_url' => route('clinic.billing.payments.store', $bill),
+                'payments' => $bill->payments->map(fn ($payment) => [
+                    'receipt' => $payment->receipt_number, 'amount' => (float) $payment->amount, 'method' => $payment->payment_method?->label(),
+                    'print_url' => route('clinic.billing.bills.print', ['bill' => $bill, 'layout' => 'receipt', 'payment' => $payment->id]),
+                ])->values(),
             ])->values(),
-            'payment_methods' => app(PaymentService::class)->methodOptions($clinic),
+            'open_bills' => $openElsewhere->map($billRow)->values(),
+            // Only what the desk may take: no hand-typed gateway or insurance payments.
+            'payment_methods' => app(PaymentService::class)->methodOptions($clinic, atDesk: true),
             'links' => [
-                'index' => route('clinic.billing.index'),
+                'index' => $user->hasClinicPermission(ClinicPermission::BillingView) ? route('clinic.billing.index') : null,
                 'bill' => route('clinic.billing.checkout.store', $encounter),
                 'book_follow_up' => $user->hasClinicPermission(ClinicPermission::AppointmentCreate) ? route('clinic.appointments.index') : null,
             ],
             'can' => [
-                'bill' => $user->hasClinicPermission(ClinicPermission::BillingCreate),
-                'discount' => $user->hasClinicPermission(ClinicPermission::DiscountApply),
-                'collect' => $user->hasClinicPermission(ClinicPermission::PaymentCollect),
+                'bill' => $this->clinicContext->currentEmployee() !== null,
+                'discount' => $user->hasClinicPermissionAt(ClinicPermission::DiscountApply, $branch),
+                'collect' => $collect,
             ],
         ]);
     }
 
-    public function store(Request $request, ClinicalEncounter $encounter): RedirectResponse
+    /**
+     * Bill a signed consultation's chosen lines and, when a payment is sent,
+     * take it in the same transaction: a refused payment leaves no bill
+     * behind. Without a payment the bill is raised to be paid later. A request
+     * key made when the page opened bills once however often it is sent; a
+     * refused attempt frees the key for the corrected retry. The amounts are
+     * `EncounterCheckout`'s; a discount needs `discount.apply` at the branch.
+     */
+    public function store(Request $request, ClinicalEncounter $encounter, PaymentService $payments, IntakeSubmissions $submissions): RedirectResponse
     {
-        $this->assertBranch($encounter);
+        $this->assertBranch($encounter, ClinicPermission::BillingCreate);
+        $branch = Branch::query()->withoutGlobalScopes()->findOrFail($encounter->branch_id);
         $validated = $request->validate([
             'prices' => ['required', 'array', 'min:1'],
             'prices.*' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
             'discount' => ['nullable', 'numeric', 'min:0'],
+            'payment' => ['nullable', 'array'],
+            'payment.method' => ['required_with:payment', 'string', 'max:30'],
+            'payment.amount' => ['required_with:payment', 'numeric', 'gt:0'],
+            'payment.reference' => ['nullable', 'string', 'max:100'],
+            'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
         ], ['prices.required' => 'Choose at least one line to bill.']);
-        abort_if(($validated['discount'] ?? 0) > 0 && ! $request->user()->hasClinicPermission(ClinicPermission::DiscountApply), 403, 'You cannot give a discount.');
+        $user = $request->user();
+        abort_if(($validated['discount'] ?? 0) > 0 && ! $user->hasClinicPermissionAt(ClinicPermission::DiscountApply, $branch), 403, 'You cannot give a discount.');
+        $payment = $validated['payment'] ?? null;
+        $method = null;
+        if ($payment !== null) {
+            abort_unless($user->hasClinicPermissionAt(ClinicPermission::PaymentCollect, $branch), 403, 'You cannot take payments.');
+            $method = PaymentMethod::tryFrom((string) $payment['method']);
+            if ($method === null || ! in_array($method, $payments->acceptedMethods($this->clinicContext->clinic(), atDesk: true), true)) {
+                return back()->withErrors(['payment' => 'Choose how the patient is paying.']);
+            }
+        }
+        $employee = $this->clinicContext->currentEmployee();
+        if (! $employee) {
+            return back()->withErrors(['checkout' => 'Your login has no staff record at this clinic, so it cannot raise bills. Ask the administrator to add you under Staff.']);
+        }
 
-        return $this->attempt(function () use ($encounter, $validated) {
-            $bill = $this->checkout->bill($encounter, $validated['prices'], $this->clinicContext->currentEmployee() ?? abort(403), (float) ($validated['discount'] ?? 0));
+        // By reference: the key is kept only when the bill was raised.
+        $billed = false;
+        $take = function () use ($encounter, $validated, $payment, $method, $payments, $employee, &$billed): RedirectResponse {
+            try {
+                [$bill, $receipt] = DB::transaction(function () use ($encounter, $validated, $payment, $method, $payments, $employee) {
+                    $bill = $this->checkout->bill($encounter, $validated['prices'], $employee, (float) ($validated['discount'] ?? 0));
+                    $receipt = $payment !== null
+                        ? $payments->recordPayment($bill->fresh(), $method, (float) $payment['amount'], $payment['reference'] ?? null, $employee)
+                        : null;
 
-            return back()->with('success', "Bill {$bill->billing_number} raised.");
-        });
+                    return [$bill->fresh(), $receipt];
+                });
+            } catch (DomainException|InvalidArgumentException $e) {
+                return back()->withErrors(['checkout' => $e->getMessage()]);
+            }
+            $billed = true;
+
+            return back()->with('success', $receipt
+                ? "Bill {$bill->billing_number} raised and paid (receipt {$receipt->receipt_number})."
+                : ((float) $bill->outstanding_balance > 0 ? "Bill {$bill->billing_number} raised, to be paid later." : "Bill {$bill->billing_number} raised."));
+        };
+
+        $key = $validated['idempotency_key'] ?? null;
+        if ($key === null) {
+            $submissions->withoutKey($this->clinicContext->clinic(), 'checkout.bill');
+
+            return $take();
+        }
+
+        return $submissions->onceRedirect($this->clinicContext->clinic(), $user, $key, "checkout:{$encounter->id}", $take, function () use (&$billed): bool {
+            return $billed;
+        }, 'This consultation was already billed; it was not billed twice.', atomic: true);
     }
 
     /**
@@ -317,6 +448,14 @@ class CheckoutController extends Controller
             'idempotency_key' => ['nullable', 'string', 'min:8', 'max:80'],
         ]);
         $clinic = $this->clinicContext->clinic();
+        // The server decides who may type which method in: the desk never records a gateway or insurance settlement.
+        if (! $payments->mayRecord($clinic, $request->user(), $bill->branch_id, PaymentMethod::from($validated['method']))) {
+            $message = 'Choose how the patient is paying: that method is not recorded at the desk.';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $message, 'errors' => ['method' => [$message]]], 422)
+                : back()->withErrors(['method' => $message]);
+        }
         $key = $validated['idempotency_key'] ?? null;
         if ($key === null) {
             $submissions->withoutKey($clinic, $request->expectsJson() ? 'checkout.pay.json' : 'checkout.pay.form');
@@ -360,7 +499,7 @@ class CheckoutController extends Controller
     /** Where this payment's patient messages stand (`PaymentMessages`). */
     public function paymentMessages(Request $request, int $payment, PaymentMessages $messages): JsonResponse
     {
-        return response()->json($messages->status($this->paymentHere($payment), $request->user()));
+        return response()->json($messages->status($this->paymentHere($payment, ClinicPermission::PaymentCollect), $request->user()));
     }
 
     /** Send this payment's failed WhatsApp messages again; anything else is left alone. */
@@ -446,6 +585,8 @@ class CheckoutController extends Controller
     {
         abort_unless($bill->clinic_id === $this->clinicContext->clinic()?->id, 404);
         $this->assertBranchId($bill->branch_id);
+        // One bill, for whoever works with money at its branch: the ledger's readers, or the desk that billed or took the payment.
+        abort_unless($this->mayHandleBill($request->user(), $bill->branch_id), 403);
         $bill->load(['items', 'payments', 'refunds', 'clinic', 'doctor:id,name', 'patient' => fn ($query) => $query->withoutGlobalScopes()]);
         $receipt = $request->query('layout') === 'receipt';
         $payment = $receipt && $request->filled('payment')
@@ -477,10 +618,19 @@ class CheckoutController extends Controller
         ]);
     }
 
-    private function assertBranch(ClinicalEncounter $encounter): void
+    private function assertBranch(ClinicalEncounter $encounter, ?ClinicPermission $permission = null): void
     {
         abort_unless($encounter->clinic_id === $this->clinicContext->clinic()?->id, 404);
-        $this->assertBranchId($encounter->branch_id);
+        $this->assertBranchId($encounter->branch_id, $permission);
+    }
+
+    /** Whether this member works with money at that branch: reads the ledger, raises bills or takes payments there. */
+    private function mayHandleBill(?User $user, ?int $branchId): bool
+    {
+        $branch = $branchId ? Branch::query()->withoutGlobalScopes()->find($branchId) : null;
+
+        return $user !== null && $branch !== null && collect([ClinicPermission::BillingView, ClinicPermission::BillingCreate, ClinicPermission::PaymentCollect])
+            ->contains(fn (ClinicPermission $permission) => $user->hasClinicPermissionAt($permission, $branch));
     }
 
     private function assertBranchId(?int $branchId, ?ClinicPermission $permission = null): void

@@ -76,6 +76,18 @@ export interface SafetyFlag {
   severity: 'low' | 'moderate' | 'high' | 'critical';
 }
 
+export interface PatientCaseSummary {
+  id: number;
+  case_number: string;
+  specialty: string;
+  title: string;
+  chief_complaint?: string | null;
+  status: string;
+  doctor?: { id: number; name: string } | null;
+  branch?: { id: number; name: string } | null;
+  opened_at?: string | null;
+}
+
 /** One Repeat Case result (`ReceptionPatientLookup::present()`). */
 export interface LookupPatient {
   id: number;
@@ -87,6 +99,7 @@ export interface LookupPatient {
   gender: string | null;
   status: string;
   specialties: string[];
+  cases?: PatientCaseSummary[];
   last_seen: { at: string; branch: string } | null;
   safety_flags: SafetyFlag[];
   /** The address on file, one line, read-only; null when there is none or this member does not see addresses. */
@@ -112,6 +125,8 @@ export interface VisitForm {
   reason_key: string;
   visit_reason: string;
   priority: string;
+  case_id?: number | null;
+  new_case?: boolean;
 }
 
 /** What the desk shows after registering or checking in (`IntakeOutcome::present()`). */
@@ -241,6 +256,73 @@ export function formatDay(value: string | null | undefined): string | null {
   const date = new Date(`${value.slice(0, 10)}T00:00:00`);
 
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+export interface CalculatedAgeInfo {
+  years: number;
+  months: number;
+  days: number;
+  formatted: string;
+}
+
+/** Detailed calculated age from a `yyyy-mm-dd` string on a given clinic day. */
+export function calculateDetailedAge(dob: string | null | undefined, now: Date = new Date()): CalculatedAgeInfo | null {
+  if (!dob) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob.trim());
+  if (!match) return null;
+
+  const birthYear = Number(match[1]);
+  const birthMonth = Number(match[2]) - 1;
+  const birthDay = Number(match[3]);
+
+  // Construct local midnight date
+  const birth = new Date(birthYear, birthMonth, birthDay);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (birth.getTime() > today.getTime()) return null; // Reject future dates
+
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+  let days = today.getDate() - birth.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonthLastDay = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  if (years < 0 || years > 120) return null;
+
+  let formatted = '';
+  if (years === 0 && months === 0) {
+    formatted = days === 0 ? 'Newborn (Born today)' : `${days} d (Newborn)`;
+  } else if (years === 0) {
+    formatted = `${months} mo${days > 0 ? ` ${days} d` : ''}`;
+  } else if (years < 2 && months > 0) {
+    formatted = `${years} y ${months} m`;
+  } else {
+    formatted = `${years} yrs`;
+  }
+
+  return { years, months, days, formatted };
+}
+
+/** Readable summary of approximate years and months. */
+export function formatApproximateAge(yearsStr: string, monthsStr: string): string {
+  const y = yearsStr.trim() !== '' ? parseInt(yearsStr, 10) : null;
+  const m = monthsStr.trim() !== '' ? parseInt(monthsStr, 10) : null;
+
+  if (y === null && m === null) return '';
+  if ((y === 0 || y === null) && (m === 0 || m === null)) return 'Newborn';
+  if (y === 0 || y === null) return `${m} month${m === 1 ? '' : 's'}`;
+  if (m === 0 || m === null) return `${y} year${y === 1 ? '' : 's'}`;
+  return `${y} year${y === 1 ? '' : 's'}, ${m} month${m === 1 ? '' : 's'}`;
 }
 
 /** The server's resolved context (`ClinicalContext::present()`). */

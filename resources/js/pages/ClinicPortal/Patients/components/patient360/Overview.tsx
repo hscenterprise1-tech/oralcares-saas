@@ -26,14 +26,61 @@ import type { ActiveCareItem, Patient360Context, Patient360Document, Patient360O
 
 type Tone = 'teal' | 'blue' | 'violet' | 'amber' | 'green' | 'rose';
 
-/** Small tinted tiles and tags: the front desk's colour families (`TONE`), one meaning each. */
+const OVERVIEW_TONES: Record<
+  Tone,
+  {
+    iconBg: string;
+    tagBg: string;
+    tagText: string;
+    tagBorder: string;
+  }
+> = {
+  teal: {
+    iconBg: 'bg-gradient-to-br from-[#179B9B] to-[#0E6C79] text-white shadow-sm',
+    tagBg: 'bg-[#F0FDFA]',
+    tagText: 'text-[#0F766E]',
+    tagBorder: 'border-[#99F6E4]',
+  },
+  blue: {
+    iconBg: 'bg-gradient-to-br from-[#1E78C8] to-[#125898] text-white shadow-sm',
+    tagBg: 'bg-[#EFF6FF]',
+    tagText: 'text-[#1E40AF]',
+    tagBorder: 'border-[#BFDBFE]',
+  },
+  violet: {
+    iconBg: 'bg-gradient-to-br from-[#3B5BDB] to-[#2B44A8] text-white shadow-sm',
+    tagBg: 'bg-[#FAF5FF]',
+    tagText: 'text-[#6D28D9]',
+    tagBorder: 'border-[#DDD6FE]',
+  },
+  amber: {
+    iconBg: 'bg-gradient-to-br from-[#E08A1E] to-[#B4620E] text-white shadow-sm',
+    tagBg: 'bg-[#FEFCE8]',
+    tagText: 'text-[#B45309]',
+    tagBorder: 'border-[#FDE68A]',
+  },
+  green: {
+    iconBg: 'bg-gradient-to-br from-[#16A34A] to-[#15803D] text-white shadow-sm',
+    tagBg: 'bg-[#F0FDF4]',
+    tagText: 'text-[#166534]',
+    tagBorder: 'border-[#BBF7D0]',
+  },
+  rose: {
+    iconBg: 'bg-gradient-to-br from-[#DC3545] to-[#A81F2E] text-white shadow-sm',
+    tagBg: 'bg-[#FFF1F2]',
+    tagText: 'text-[#9F1239]',
+    tagBorder: 'border-[#FECDD3]',
+  },
+};
+
+/** Small tinted tiles and tags matching the pastel palettes. */
 const TILE: Record<Tone, string> = {
-  teal: cn(TONE.teal.soft, TONE.teal.ink),
-  blue: cn(TONE.blue.soft, TONE.blue.ink),
-  violet: cn(TONE.violet.soft, TONE.violet.ink),
-  amber: cn(TONE.amber.soft, TONE.amber.ink),
-  green: cn(TONE.green.soft, TONE.green.ink),
-  rose: cn(TONE.rose.soft, TONE.rose.ink),
+  teal: 'bg-[#F0FDFA] text-[#0F766E] border border-[#99F6E4]',
+  blue: 'bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE]',
+  violet: 'bg-[#FAF5FF] text-[#6D28D9] border border-[#DDD6FE]',
+  amber: 'bg-[#FEFCE8] text-[#B45309] border border-[#FDE68A]',
+  green: 'bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]',
+  rose: 'bg-[#FFF1F2] text-[#9F1239] border border-[#FECDD3]',
 };
 
 /** In a two-column row, an odd card at the end spans the row instead of leaving half of it empty. */
@@ -169,51 +216,62 @@ function PhysioCareCard({ care }: { care: PhysioCare }) {
 /* ------------------------------------------------------------ building blocks */
 
 /**
- * A white card: a header row (tinted tile, title, optional aside), the
- * content, and an optional footer of links pinned to the bottom so links in
- * a row line up. Fills its grid cell, so cards in a row share one height.
+ * An elevated section card matching Edit.tsx SectionCard aesthetic:
+ * rounded-2xl, border-t tone accent, gradient icon box, crisp title,
+ * and optional bottom-pinned actions.
  */
 function WhiteCard({ title, icon: Icon, tone, aside, footer, children }: { title: string; icon: typeof Activity; tone: Tone; aside?: ReactNode; footer?: ReactNode; children: ReactNode }) {
   const id = `overview-${title.toLowerCase().replace(/\W+/g, '-')}`;
+  const styles = OVERVIEW_TONES[tone];
 
   return (
-    // The front desk's panel: white, a faint wash of the card's colour at the top, the title in navy.
     <section
       aria-labelledby={id}
-      className={cn(
-        'flex h-full min-w-0 flex-col rounded-2xl border border-[#E6EBF1] bg-gradient-to-b to-white to-40% p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_-16px_rgba(23,59,96,0.35)] sm:p-5',
-        TONE[tone].wash,
-      )}
+      className="flex h-full min-w-0 flex-col rounded-2xl border border-cx-line/80 bg-white p-5 shadow-cx-card"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="flex min-w-0 items-center gap-2.5 text-[16px] font-semibold leading-6 text-[#173B60]">
-          <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-[11px]', TILE[tone])} aria-hidden="true">
-            <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+          <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-[10px] shadow-sm', styles.iconBg)} aria-hidden="true">
+            <Icon className="h-4 w-4" strokeWidth={1.75} />
           </span>
           {title}
         </h2>
         {aside}
       </div>
-      <div className="mt-3 min-w-0 flex-1">{children}</div>
-      {footer && <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#E6EBF1] pt-2.5">{footer}</div>}
+      <div className="mt-3.5 min-w-0 flex-1">{children}</div>
+      {footer && <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-cx-line/80 pt-3">{footer}</div>}
     </section>
   );
 }
 
 function Nothing({ children }: { children: ReactNode }) {
-  return <p className="text-[13.5px] leading-5 text-cx-text-2">{children}</p>;
+  return <p className="text-[13.5px] leading-5 text-slate-500">{children}</p>;
 }
 
 function Tag({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn('inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold', TILE[tone])}>{children}</span>;
+  const styles = OVERVIEW_TONES[tone];
+
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-[11.5px] font-bold border',
+        styles.tagBg,
+        styles.tagText,
+        styles.tagBorder,
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
 /** A small heading inside a card ("Next appointment", "Follow-up"). */
 function Label({ children }: { children: ReactNode }) {
-  return <p className="text-[12.5px] font-medium leading-[18px] text-cx-text-2">{children}</p>;
+  return <p className="text-[12px] font-bold uppercase tracking-wider text-slate-500">{children}</p>;
 }
 
-const linkClass = 'inline-flex min-h-8 items-center gap-1 rounded-sm text-[13px] font-semibold text-cx-blue-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cx-cyan';
+const linkClass =
+  'inline-flex min-h-8 items-center gap-1.5 rounded-lg text-[13px] font-bold text-blue-600 hover:text-blue-800 hover:underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
 
 function CardLink({ href, children }: { href: string; children: ReactNode }) {
   return (

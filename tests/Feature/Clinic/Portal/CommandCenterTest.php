@@ -89,8 +89,8 @@ test('the decision inbox lists only real exceptions: long waits, no doctor, an o
         // Follow-ups appear once.
         ->and($owner['follow_ups_due']['count'])->toBe(1)
         ->and($sections['decisions']['total'])->toBe($owner->sum('count'))
-        // Queue exceptions open the Front Desk; nothing links to a page that is not built (approvals, follow-ups).
-        ->and($owner->pluck('href')->filter()->unique()->values()->all())->toBe(['/clinic/reception']);
+        // Queue exceptions open the Front Desk, follow-ups their board; nothing links to a page that is not built (approvals).
+        ->and($owner->pluck('href')->filter()->unique()->values()->all())->toBe(['/clinic/reception', '/clinic/follow-ups?tab=overdue&mine=0']);
 
     // An administrator runs the clinic but does not decide the owner's approvals.
     [$adminUser, $adminSession] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);

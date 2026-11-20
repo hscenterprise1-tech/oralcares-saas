@@ -128,7 +128,7 @@ class PhysioRecord
         if ($encounter && ($encounter->patient_id !== $treatment->patient_id || $encounter->clinic_id !== $treatment->clinic_id)) {
             throw new InvalidArgumentException('The consultation is for a different patient.');
         }
-        // A new plan of care is new care: refused once the patient is recorded as deceased.
+        // A new plan of care is new care: refused for a deleted record.
         app(PatientCareGuard::class)->assertCanReceiveCare(Patient::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)->findOrFail($treatment->patient_id));
 
         return DB::transaction(function () use ($treatment, $data, $exercises, $therapist, $encounter) {
@@ -364,16 +364,25 @@ class PhysioRecord
      * as given by them, completed — numbered and, when a package of this
      * treatment is named, paid from it — exactly as `completeSession` would.
      *
-     * What it never does: write a note, a diagnosis or an exercise, or sign
-     * the consultation. The consultation is opened in the practitioner's
+     * `$notes` is the desk's short record of the session, as the therapist
+     * tells it (`treatment_performed`, `pain_before`, `pain_after`,
+     * `patient_response`); nothing else. It never writes a diagnosis or an
+     * exercise, or signs the consultation. The consultation is opened in the practitioner's
      * name only as the container the session belongs to; the desk member is
      * recorded as the one who confirmed it (`completed_by`, audit). When the
      * desk opened that consultation, the queue entry is finished here too (no
      * one else will finish it); a practitioner's own open consultation is
      * left for them to finish. A retry returns the session already confirmed.
      */
-    public function confirmAtDesk(ClinicQueueItem $item, PatientTreatment $treatment, ?int $packageId, ClinicEmployee $confirmer, User $by): PhysioSession
+    /**
+     * @param  array{treatment_performed?: ?string, pain_before?: ?int, pain_after?: ?int, patient_response?: ?string}  $notes
+     */
+    public function confirmAtDesk(ClinicQueueItem $item, PatientTreatment $treatment, ?int $packageId, ClinicEmployee $confirmer, User $by, array $notes = []): PhysioSession
     {
+        $notes = array_filter(
+            array_intersect_key($notes, array_flip(['treatment_performed', 'pain_before', 'pain_after', 'patient_response'])),
+            fn ($value) => $value !== null && $value !== '',
+        );
         $extensions = $this->specialties->get((string) $treatment->specialty_key)['extensions'] ?? [];
         if (! in_array('soap_notes', $extensions, true)) {
             throw new DomainException('This treatment\'s specialty does not use physiotherapy records.');
@@ -388,7 +397,7 @@ class PhysioRecord
             throw new InvalidArgumentException('That treatment is not this patient\'s.');
         }
 
-        return DB::transaction(function () use ($item, $treatment, $packageId, $confirmer, $by, $practitioner) {
+        return DB::transaction(function () use ($item, $treatment, $packageId, $confirmer, $by, $practitioner, $notes) {
             $item = ClinicQueueItem::query()->withoutGlobalScopes()->whereKey($item->id)->lockForUpdate()->firstOrFail();
             $existing = $item->encounter_id ? PhysioSession::query()->withoutGlobalScopes()->where('clinic_id', $treatment->clinic_id)
                 ->where('encounter_id', $item->encounter_id)->where('patient_treatment_id', $treatment->id)->first() : null;
@@ -411,6 +420,9 @@ class PhysioRecord
                 'therapist_id' => $practitioner->id,
                 'status' => PhysioSession::DRAFT,
             ]);
+            if ($notes !== [] && $session->status === PhysioSession::DRAFT) {
+                $session->forceFill($notes)->save();
+            }
             $session = $this->completeLocked($session, $packageId, $practitioner, $confirmer, $by);
 
             $this->audit->record('physio.session.confirmed_at_desk', $session, [
@@ -557,9 +569,9 @@ class PhysioRecord
         return $this->packages->sell($this->findTreatment((int) $data['patient_treatment_id'], $patient->clinic_id, $patient->id), $branch, $data, $seller);
     }
 
-    public function cancelPackage(PatientSessionPackage $package): PatientSessionPackage
+    public function cancelPackage(PatientSessionPackage $package, User $by): PatientSessionPackage
     {
-        return $this->packages->cancel($package);
+        return $this->packages->cancel($package, $by);
     }
 
     /**
@@ -699,7 +711,8 @@ class PhysioRecord
             if ($name === '') {
                 throw new InvalidArgumentException('Name the exercise.');
             }
-            $status = ($row['status'] ?? PhysioSessionExercise::PERFORMED) === PhysioSessionExercise::SKIPPED ? PhysioSessionExercise::SKIPPED : PhysioSessionExercise::PERFORMED;
+            $status = in_array($row['status'] ?? null, [PhysioSessionExercise::SKIPPED, PhysioSessionExercise::PARTIAL], true) ? $row['status'] : PhysioSessionExercise::PERFORMED;
+            $done = $status !== PhysioSessionExercise::SKIPPED;
             $number = fn (string $key, int $max) => isset($row[$key]) && $row[$key] !== '' ? min($max, max(0, (int) $row[$key])) : null;
 
             PhysioSessionExercise::query()->withoutGlobalScopes()->create([
@@ -708,9 +721,9 @@ class PhysioRecord
                 'physio_exercise_id' => $exerciseId,
                 'name' => mb_substr($name, 0, 150),
                 'status' => $status,
-                'sets' => $status === PhysioSessionExercise::PERFORMED ? $number('sets', 50) : null,
-                'reps' => $status === PhysioSessionExercise::PERFORMED ? $number('reps', 500) : null,
-                'duration_seconds' => $status === PhysioSessionExercise::PERFORMED ? $number('duration_seconds', 14400) : null,
+                'sets' => $done ? $number('sets', 50) : null,
+                'reps' => $done ? $number('reps', 500) : null,
+                'duration_seconds' => $done ? $number('duration_seconds', 14400) : null,
                 'intensity' => $this->text($row['intensity'] ?? null, 80),
                 'notes' => $this->text($row['notes'] ?? null),
                 'position' => $index + 1,

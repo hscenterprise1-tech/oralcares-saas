@@ -135,6 +135,17 @@ Schedule::job(new DispatchDuePatientMessages)->everyMinute()->withoutOverlapping
  */
 Schedule::command('clinic:queue-scheduled-messages')->hourly()->withoutOverlapping();
 
+/* The morning summary for each doctor and clinic owner, clinic time. Once a day per person. */
+Schedule::command('clinic:morning-digest')->dailyAt('08:30')->timezone(config('reception.timezone', 'Asia/Kolkata'))->withoutOverlapping();
+
+/*
+ * The clinic's own work that should not slip (unsigned consultations, results
+ * waiting for review, overdue lab cases, stalled plans, quiet cases), told to
+ * the staff who own it each evening, clinic time. Event keys make every alert
+ * once-only.
+ */
+Schedule::command('clinic:staff-alerts')->dailyAt('19:30')->timezone(config('reception.timezone', 'Asia/Kolkata'))->withoutOverlapping();
+
 /*
  * Queue health (config/observability.php). `queue:monitor` raises QueueBusy
  * when a named queue backs up past its threshold, which the performance log

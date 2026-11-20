@@ -96,9 +96,9 @@ test('back the same day after a finished visit: a new Repeat visit and queue ent
 test('charged at check-in: the return visit is charged its own fee instead of being refused as already charged', function () {
     app(PatientFlowConfigService::class)->updateCheckIn($this->f->clinic, ['payment' => 'at_check_in'], $this->f->owner);
 
-    ($this->checkIn)($this->raj, ['expected_charge' => 300])->assertCreated()->assertJsonPath('billing.total', 300);
+    ($this->checkIn)($this->raj, ['expected_charge' => 300, 'pay_later' => true])->assertCreated()->assertJsonPath('billing.total', 300);
     ($this->finish)(($this->latestItem)());
-    ($this->checkIn)($this->priya, ['expected_charge' => 500])->assertCreated()->assertJsonPath('billing.total', 500);
+    ($this->checkIn)($this->priya, ['expected_charge' => 500, 'pay_later' => true])->assertCreated()->assertJsonPath('billing.total', 500);
 
     $visitIds = ($this->visits)()->pluck('id')->all();
     $bills = PatientBilling::query()->withoutGlobalScopes()->with(['items' => fn ($items) => $items->withoutGlobalScopes()])->orderBy('id')->get();
