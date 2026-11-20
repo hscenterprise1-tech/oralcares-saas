@@ -48,11 +48,12 @@ use App\Services\Clinical\EncounterWorkspace;
 use App\Services\Clinical\PrescriptionAllergyCheck;
 use App\Services\Clinical\StaleEncounterException;
 use App\Services\ClinicContext;
+use App\Services\Dental\DentalConsultation;
 use App\Services\Dental\DentalRecord;
+use App\Services\Dental\DeskDental;
 use App\Services\Patient\CrossBranchClinicalAccess;
 use App\Services\Patient\Patient360\Patient360Access;
 use App\Services\Patient\PatientClinicalEntries;
-use App\Services\Dental\DentalConsultation;
 use App\Services\Physio\DeskPhysio;
 use App\Services\Physio\PhysioCareSummary;
 use App\Services\Physio\PhysioConsultation;
@@ -228,13 +229,16 @@ class ConsultationController extends Controller
                 || ($encounter->specialty === null && ! in_array(PhysioCareSummary::SPECIALTY, $branchSpecialties, true)));
     }
 
-    /** The dental workspace: complaint, tooth findings, plan, work done today, next visits (`DentalConsultation::payload`). */
-    private function renderDental(ClinicalEncounter $encounter, ConsultationCare $care): Response
+    /**
+     * The dental workspace: complaint, tooth findings, plan, work done today, next visits (`DentalConsultation::payload`),
+     * for the dentist or (`$desk`) the desk working for a dentist who has no login (`DeskDental`).
+     */
+    private function renderDental(ClinicalEncounter $encounter, ConsultationCare $care, bool $desk = false): Response
     {
         $user = request()->user();
         $patient = $encounter->patient;
-        $me = $this->clinicContext->currentEmployee();
-        $canEdit = $user->can('update', $encounter) && $me?->practitionerProfile !== null && $user->can('writeExtension', [$encounter, 'odontogram']);
+        $me = $desk ? ClinicEmployee::query()->withoutGlobalScopes()->findOrFail($encounter->doctor_id) : $this->clinicContext->currentEmployee();
+        $canEdit = $desk ? $encounter->isEditable() : ($user->can('update', $encounter) && $me?->practitionerProfile !== null && $user->can('writeExtension', [$encounter, 'odontogram']));
         $caseNumber = $encounter->patient_visit_id
             ? PatientVisit::query()->withoutGlobalScopes()->where('clinic_id', $encounter->clinic_id)->with('caseNumber')->find($encounter->patient_visit_id)?->caseNumber?->case_number
             : null;
@@ -252,12 +256,15 @@ class ConsultationController extends Controller
             // The treatments running for the patient (packages, stages, discharge), as in the full record; partial reloads ask for `care` alone.
             'care' => fn () => $care->build($encounter, $patient, $user, $canEdit && ! $encounter->isFinalized()),
             'can_edit' => $canEdit,
+            // The desk working for a dentist without a login: shown so, and the work is in the dentist's name.
+            'desk' => $desk ? ['dentist' => $me->name] : null,
             'links' => [
-                'finish' => route('clinic.consultations.dental.finish', $encounter),
-                'record' => route('clinic.consultations.show', $encounter).'?record=1',
+                'finish' => route($desk ? 'clinic.desk-dental.finish' : 'clinic.consultations.dental.finish', $encounter),
+                // The full record is the clinical team's; the desk has Patient 360 instead.
+                'record' => $desk ? null : route('clinic.consultations.show', $encounter).'?record=1',
                 'patient' => route('clinic.patients.show', $patient->id),
                 'calendar' => route('clinic.appointments.index'),
-                'today' => route('clinic.consultations.index'),
+                'today' => $desk ? route('clinic.reception') : route('clinic.consultations.index'),
                 'checkout' => $user->hasClinicPermission(ClinicPermission::BillingCreate) ? route('clinic.billing.checkout', $encounter) : null,
             ],
         ]);
@@ -266,9 +273,7 @@ class ConsultationController extends Controller
     /** Finish a dental visit in one step: findings, plan, work done, signature, next visits. */
     public function finishDental(Request $request, ClinicalEncounter $encounter, DentalConsultation $consultation): RedirectResponse
     {
-        $this->authorize('update', $encounter);
-        $this->authorize('writeExtension', [$encounter, 'odontogram']);
-        $me = $this->doctor();
+        $me = $this->dentalGate($encounter);
         $surfaces = Rule::in(array_keys(config('clinic_dental.surfaces')));
         $data = $request->validate([
             'consultation' => ['nullable', 'array'],
@@ -310,6 +315,54 @@ class ConsultationController extends Controller
         $response = back()->with('success', $message);
 
         return $result['booking_problem'] ? $response->withErrors(['booking' => $result['booking_problem']]) : $response;
+    }
+
+    /**
+     * Who does the dental work on this visit, after checking they may: the treating dentist, or the desk working for a
+     * dentist who has no login (`DeskDental`), in whose name the work is recorded.
+     */
+    private function dentalGate(ClinicalEncounter $encounter): ClinicEmployee
+    {
+        if (app(DeskDental::class)->runs(request()->user(), $encounter)) {
+            abort_if(! $encounter->isEditable(), 403, 'This visit is finished.');
+
+            return ClinicEmployee::query()->withoutGlobalScopes()->findOrFail($encounter->doctor_id);
+        }
+        $this->authorize('update', $encounter);
+        $this->authorize('writeExtension', [$encounter, 'odontogram']);
+
+        return $this->doctor();
+    }
+
+    /**
+     * The desk opens today's dental visit of a checked-in patient for a dentist who has no login, and works it as the
+     * dentist would (findings, work done, next visits, the bill).
+     */
+    public function deskStartDental(ClinicQueueItem $item): RedirectResponse
+    {
+        $clinic = $this->clinicContext->clinic() ?? abort(403);
+        $branch = $this->clinicContext->requireBranch();
+        $queue = $item->queue()->withoutGlobalScopes()->first();
+        abort_unless($queue && $queue->clinic_id === $clinic->id && $queue->branch_id === $branch->id, 404);
+        $doctor = $item->doctor_id ? ClinicEmployee::query()->withoutGlobalScopes()->find($item->doctor_id) : null;
+        abort_unless(app(DeskDental::class)->mayRunFor(request()->user(), $doctor), 403, 'The desk opens the visit only for a dentist who has no login.');
+
+        return $this->attempt(function () use ($item, $doctor) {
+            $encounter = $this->workspace->startFromQueue($item, $doctor, DentalConsultation::SPECIALTY);
+            if ($encounter->specialty === null) {
+                $encounter->forceFill(['specialty' => DentalConsultation::SPECIALTY])->save();
+            }
+
+            return redirect()->route('clinic.desk-dental.show', $encounter);
+        });
+    }
+
+    /** The dental workspace, run by the desk for a dentist without a login. */
+    public function deskDental(ClinicalEncounter $encounter, ConsultationCare $care): Response
+    {
+        abort_unless(app(DeskDental::class)->runs(request()->user(), $encounter), 403);
+
+        return $this->renderDental($encounter->load(['patient' => fn ($query) => $query->withoutGlobalScopes(), 'doctor:id,name', 'branch:id,name']), $care, true);
     }
 
     /**

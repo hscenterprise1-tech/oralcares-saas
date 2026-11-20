@@ -354,7 +354,7 @@ function QueueRowView({
   const visit: { label: string; icon: LucideIcon; go: () => void } | null = deskWorkspace
     ? { label: row.status === 'completed' ? 'View visit' : 'Continue', icon: row.status === 'completed' ? FolderOpen : Play, go: () => router.visit(deskWorkspace, opens) }
     : deskOpen
-      ? { label: 'Start session', icon: Play, go: () => router.post(deskOpen, {}, opens) }
+      ? { label: row.links.desk_kind === 'dental' ? 'Start visit' : 'Start session', icon: Play, go: () => router.post(deskOpen, {}, opens) }
       : null;
   const deskVisit = collect ? null : visit;
   if (collect && visit) {

@@ -1316,6 +1316,11 @@ $clinicRoutes = function () {
                 Route::middleware('clinic_permission:physio.session.confirm')->prefix('physio')->name('physio-desk.')->group(function () {
                     Route::post('/queue/{item}/open', [ConsultationController::class, 'deskStartPhysio'])->whereNumber('item')->name('open');
                 });
+                // The desk runs a dental visit for a dentist without a login (`DeskDental`): the dentist's own
+                // workspace, in the dentist's name.
+                Route::middleware('clinic_permission:dental.desk.run')->prefix('dental')->name('dental-desk.')->group(function () {
+                    Route::post('/queue/{item}/open', [ConsultationController::class, 'deskStartDental'])->whereNumber('item')->name('open');
+                });
                 // A Front Desk list in full ("View all"): today, this branch, cursor pages.
                 Route::get('/list/{list}', [ReceptionController::class, 'list'])->whereIn('list', ['waiting', 'with_doctor', 'done', 'not_present'])->name('list');
                 // Close the business day: the ledger's figures by method, and the cash the desk counted against them.
@@ -1347,6 +1352,17 @@ $clinicRoutes = function () {
                 Route::get('/courses/{course}/exercise-sheet', [ConsultationController::class, 'physioExerciseSheet'])->whereNumber('course')->name('courses.sheet');
                 Route::get('/courses/{course}/reports/{kind}', [ConsultationController::class, 'physioReport'])->whereNumber('course')
                     ->where('kind', 'assessment|plan|session|progress|package')->name('courses.report');
+            });
+
+        // ==========================================
+        // DENTISTRY RUN AT THE DESK
+        // ==========================================
+        // For a dentist who has no login: the desk works the visit with the dentist's workspace, each action checked
+        // again by `DeskDental` (dentistry only, a dentist without a login, this branch).
+        Route::prefix('front-desk/dental/{encounter}')->name('clinic.desk-dental.')->whereNumber('encounter')
+            ->middleware(['clinic_workspace:front_desk', 'clinic_permission:dental.desk.run'])->group(function () {
+                Route::get('/', [ConsultationController::class, 'deskDental'])->name('show');
+                Route::post('/finish', [ConsultationController::class, 'finishDental'])->middleware('throttle:30,1')->name('finish');
             });
 
         // ==========================================

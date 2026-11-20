@@ -41,6 +41,8 @@ enum ClinicPermission: string
     // Confirming at the desk that a physiotherapy session took place (and which package paid for it).
     // Not clinical: no notes, no diagnosis, no sign-off, no other treatment work.
     case PhysioSessionConfirm = 'physio.session.confirm';
+    // Running a dental visit at the desk for a dentist who has no login: record the findings, the work done and the next visits in that dentist's name.
+    case DentalDeskRun = 'dental.desk.run';
     case CatalogManage = 'catalog.manage';
     case SpecialtyConfigure = 'specialty.configure';
 
@@ -124,6 +126,7 @@ enum ClinicPermission: string
                 self::PackageSell->value,
                 self::DiscountApply->value,
                 self::PhysioSessionConfirm->value,
+                self::DentalDeskRun->value,
                 self::DocumentsManage->value,
                 self::ConsentManage->value,
                 self::PatientMerge->value,

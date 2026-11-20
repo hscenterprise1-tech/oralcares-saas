@@ -23,6 +23,7 @@ use App\Services\Billing\BillInstalments;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Clinical\ClinicalContextResolver;
 use App\Services\ClinicContext;
+use App\Services\Dental\DeskDental;
 use App\Services\LaboratoryWorkflowService;
 use App\Services\Patient\CaseNumberFormatter;
 use App\Services\Patient\PatientClinicalEntries;
@@ -63,7 +64,7 @@ class FrontDesk
         'not_present' => [QueueItemStatus::Skipped],
     ];
 
-    /** @var array<int, bool> whether the desk works for each practitioner, asked once per practitioner, not once per row */
+    /** @var array<string, bool> whether the desk works for each practitioner, by kind and id, asked once per practitioner, not once per row */
     private array $deskRuns = [];
 
     private const PATIENT_COLUMNS = ['id', 'clinic_id', 'uhid', 'first_name', 'middle_name', 'last_name', 'name', 'gender', 'age', 'date_of_birth', 'status'];
@@ -595,24 +596,32 @@ class FrontDesk
                 'doctor' => route('clinic.reception.queue.doctor', $item),
                 'visit' => route('clinic.reception.queue.visit', $item),
                 'patient' => $canOpenPatient && $patient ? route('clinic.patients.show', $patient->id) : null,
-                // A physiotherapist without a login: the desk opens and works the visit for them (`DeskPhysio`).
-                ...$this->deskPhysioLinks($item),
+                // A physiotherapist or dentist without a login: the desk opens and works the visit for them (`DeskPhysio`, `DeskDental`).
+                ...$this->deskLinks($item),
             ],
         ];
     }
 
-    /** @return array{desk_open?: string, desk_workspace?: string} */
-    private function deskPhysioLinks(ClinicQueueItem $item): array
+    /** @return array{desk_kind?: string, desk_open?: string, desk_workspace?: string} */
+    private function deskLinks(ClinicQueueItem $item): array
     {
         $user = auth()->user();
-        if (! $user || ! in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called, QueueItemStatus::InConsultation, QueueItemStatus::Completed], true)
-            || ! $item->doctor_id || ! ($this->deskRuns[$item->doctor_id] ??= app(DeskPhysio::class)->mayRunFor($user, $item->doctor))) {
+        if (! $user || ! in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called, QueueItemStatus::InConsultation, QueueItemStatus::Completed], true) || ! $item->doctor_id) {
             return [];
         }
+        $kind = match (true) {
+            ($this->deskRuns['physio'.$item->doctor_id] ??= app(DeskPhysio::class)->mayRunFor($user, $item->doctor)) => 'physio',
+            ($this->deskRuns['dental'.$item->doctor_id] ??= app(DeskDental::class)->mayRunFor($user, $item->doctor)) => 'dental',
+            default => null,
+        };
+        if ($kind === null) {
+            return [];
+        }
+        $open = in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called], true);
 
-        return $item->encounter_id
-            ? ['desk_workspace' => route('clinic.desk-physio.show', $item->encounter_id)]
-            : (in_array($item->status, [QueueItemStatus::Waiting, QueueItemStatus::Called], true) ? ['desk_open' => route('clinic.reception.physio-desk.open', $item)] : []);
+        return ['desk_kind' => $kind] + ($item->encounter_id
+            ? ['desk_workspace' => route("clinic.desk-{$kind}.show", $item->encounter_id)]
+            : ($open ? ['desk_open' => route($kind === 'physio' ? 'clinic.reception.physio-desk.open' : 'clinic.reception.dental-desk.open', $item)] : []));
     }
 
     /**

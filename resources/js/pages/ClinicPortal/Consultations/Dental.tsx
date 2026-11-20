@@ -37,7 +37,9 @@ type Props = {
   };
   care: Parameters<typeof CarePanel>[0]['care'] | null;
   can_edit: boolean;
-  links: { finish: string; record: string; patient: string; calendar: string; today: string; checkout: string | null };
+  /** Set when the desk runs this visit for a dentist who has no login. */
+  desk: { dentist: string } | null;
+  links: { finish: string; record: string | null; patient: string; calendar: string; today: string; checkout: string | null };
 };
 
 /** One line of the visit's work: an item of an open plan (`id`), or a new one from the clinic's services. */
@@ -84,7 +86,7 @@ type Tab = 'today' | 'specialty' | 'history' | 'treatments';
  * what to do (a plan item from before, or a service of the clinic), what was
  * done today, and the next visits — then Finish signs the visit and books them.
  */
-function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit, links }: Props) {
+function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit, desk, links }: Props) {
   const { errors } = usePage<{ errors: Record<string, string> }>().props;
   const readOnly = !canEdit || dental.finished;
   const [tab, setTab] = useState<Tab>('today');
@@ -207,7 +209,7 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <Link href={links.patient} className={BTN}><UserRound className="h-4 w-4" aria-hidden="true" /> Patient 360</Link>
-              <Link href={links.record} className={BTN}><FileText className="h-4 w-4" aria-hidden="true" /> Full record</Link>
+              {links.record && <Link href={links.record} className={BTN}><FileText className="h-4 w-4" aria-hidden="true" /> Full record</Link>}
             </div>
           </div>
           <dl className="grid grid-cols-1 gap-2 px-4 pb-4 sm:grid-cols-3 sm:gap-2.5 sm:px-7 sm:pb-5">
@@ -218,7 +220,8 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
         </section>
       </header>
 
-      {!canEdit && !dental.finished && <p className="rounded-xl bg-cx-amber-bg px-4 py-3 text-[13px] font-semibold text-cx-amber-ink">You can read this visit but only its doctor can record in it.</p>}
+      {desk && <p className="rounded-xl bg-cx-blue-bg px-4 py-3 text-[13px] font-semibold text-cx-blue-ink">You are recording this visit for {desk.dentist}, who does not sign in. Everything you save is in {desk.dentist}’s name, with you noted as who recorded it. Root canal, implant, braces and lab records stay with the dentist.</p>}
+      {!desk && !canEdit && !dental.finished && <p className="rounded-xl bg-cx-amber-bg px-4 py-3 text-[13px] font-semibold text-cx-amber-ink">You can read this visit but only its doctor can record in it.</p>}
       {(errors?.dental || errors?.booking) && <p role="alert" className="rounded-xl bg-cx-rose-bg px-4 py-3 text-[13px] font-semibold text-cx-rose-ink">{errors.dental ?? errors.booking}</p>}
 
       <nav aria-label="Workspace" className="flex gap-1.5 overflow-x-auto rounded-full bg-white p-1.5 shadow-[0_10px_28px_-18px_rgba(30,50,110,0.28)] [scrollbar-width:none] sm:inline-flex sm:self-start">

@@ -25,6 +25,7 @@ export type ClinicPermission =
   | 'treatment.start'
   | 'treatment.execute'
   | 'physio.session.confirm'
+  | 'dental.desk.run'
   | 'catalog.manage'
   | 'specialty.configure'
   | 'consent.manage'

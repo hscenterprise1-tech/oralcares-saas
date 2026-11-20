@@ -40,7 +40,9 @@ export interface QueueRow {
     doctor: string;
     visit: string;
     patient: string | null;
-    /** The desk opens the physiotherapy visit for a therapist without a login (POST). */
+    /** Whose visit the desk can run for a practitioner without a login. */
+    desk_kind?: 'physio' | 'dental';
+    /** The desk opens the visit for a practitioner without a login (POST). */
     desk_open?: string;
     /** That visit's workspace, once opened. */
     desk_workspace?: string;

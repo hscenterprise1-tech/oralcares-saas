@@ -60,6 +60,7 @@ class ClinicRolePermissions
             'front_office.operate' => ['Run the front desk', 'Registration, check-in and the day\'s patients.'],
             'visit.view' => ['See visits', 'Open the visit log.'],
             'visit.create' => ['Start visits', 'Start a visit for a patient.'],
+            'dental.desk.run' => ['Run dental visits at the desk', 'Record a dental visit for a dentist who has no login: findings, work done and next visits.'],
         ]],
         'clinical' => ['label' => 'Treatment and clinical notes', 'items' => [
             'clinical.view' => ['See clinical notes', 'Read consultations, diagnoses and treatment.'],
