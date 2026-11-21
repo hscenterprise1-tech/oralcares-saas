@@ -133,8 +133,12 @@ class ClinicalContextResolver
      */
     public function practitionerOptions(Clinic $clinic, Branch $branch): array
     {
+        // Off shift is listed, with when they are back (`shift_label`), because a patient can arrive early or late and an empty picker
+        // with no reason looks like a fault; only a doctor on leave is left out. Working now comes first.
+        $order = ['on_shift' => 0, 'not_set' => 1, 'off_shift' => 2];
         $entries = $this->roster->forBranch($clinic, $branch)
-            ->filter(fn (array $entry) => in_array($entry['shift'], ['on_shift', 'not_set'], true))
+            ->filter(fn (array $entry) => isset($order[$entry['shift']]))
+            ->sortBy(fn (array $entry) => $order[$entry['shift']])
             ->values();
         $this->loadProfiles($entries->map(fn (array $entry) => $entry['employee']->practitionerProfile)->filter());
         $practised = $this->practised($clinic, $branch);

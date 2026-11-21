@@ -127,6 +127,7 @@ export function ProfessionalTab({ p }: { p: Profile }) {
     profession: prac?.profession ?? '',
     primary: prac?.primary_specialty?.id ? String(prac.primary_specialty.id) : '',
     experience_years: prac?.experience_years != null ? String(prac.experience_years) : '',
+    consultation_fee: prac?.consultation_fee != null ? String(prac.consultation_fee) : '',
     bio: prac?.bio ?? '',
     registration_number: reg?.number ?? '',
     registration_authority: reg?.authority ?? '',
@@ -150,6 +151,7 @@ export function ProfessionalTab({ p }: { p: Profile }) {
       primary_specialty: specialty ? { id: specialty.id, name: specialty.name, area: specialty.area } : null,
       additional_specialties: prac.additional_specialties,
       experience_years: form.experience_years === '' ? null : Number(form.experience_years),
+      consultation_fee: form.consultation_fee === '' ? null : Number(form.consultation_fee),
       bio: form.bio || null,
       registration_number: form.registration_number || null,
       registration_authority: form.registration_authority || null,
@@ -176,6 +178,7 @@ export function ProfessionalTab({ p }: { p: Profile }) {
             <Select id="pr-spec" disabled={!editable} value={form.primary} onChange={(e) => set('primary', e.target.value)} options={[{ value: '', label: prac.primary_specialty && !prac.primary_specialty.id ? prac.primary_specialty.name : 'Not set' }, ...p.options.specialties.filter((s) => s.id).map((s) => ({ value: String(s.id), label: `${s.group} · ${s.name}` }))]} />
           </Field>
           <Field label="Years of experience" htmlFor="pr-exp"><Input id="pr-exp" type="number" min={0} max={70} disabled={!editable} value={form.experience_years} onChange={(e) => set('experience_years', e.target.value)} /></Field>
+          <Field label="Consultation fee (₹)" htmlFor="pr-fee" hint="Charged when this doctor sees a patient. Empty: no separate fee."><Input id="pr-fee" type="number" min={0} step="any" disabled={!editable} value={form.consultation_fee} onChange={(e) => set('consultation_fee', e.target.value)} /></Field>
           <Field label="Registration number" htmlFor="pr-reg"><Input id="pr-reg" disabled={!editable} value={form.registration_number} onChange={(e) => set('registration_number', e.target.value)} /></Field>
           <Field label="Registered with" htmlFor="pr-auth"><Input id="pr-auth" disabled={!editable} value={form.registration_authority} onChange={(e) => set('registration_authority', e.target.value)} placeholder="e.g. State Dental Council" /></Field>
           <Field label="State" htmlFor="pr-state"><Input id="pr-state" disabled={!editable} value={form.registration_state} onChange={(e) => set('registration_state', e.target.value)} /></Field>

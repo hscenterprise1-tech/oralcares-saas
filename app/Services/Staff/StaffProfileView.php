@@ -258,6 +258,7 @@ class StaffProfileView
             'primary_specialty' => $profile->primarySpecialty ? ['id' => $profile->primarySpecialty->id, 'name' => $profile->primarySpecialty->name, 'area' => $profile->primarySpecialty->practice_area_key] : ($profile->specialty ? ['id' => null, 'name' => $profile->specialty, 'area' => $areas->match($profile->specialty)] : null),
             'additional_specialties' => $profile->specialties->map(fn (ClinicalSpecialty $specialty) => ['id' => $specialty->id, 'name' => $specialty->name, 'area' => $specialty->practice_area_key])->values(),
             'experience_years' => $profile->experience_years,
+            'consultation_fee' => $profile->consultation_fee !== null ? (float) $profile->consultation_fee : null,
             'bio' => $profile->bio,
             'is_active' => (bool) $profile->is_active,
             'registration' => [

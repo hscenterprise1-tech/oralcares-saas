@@ -57,6 +57,7 @@ export interface Practitioner {
   primary_specialty: SpecialtyRef | null;
   additional_specialties: SpecialtyRef[];
   experience_years: number | null;
+  consultation_fee: number | null;
   bio: string | null;
   is_active: boolean;
   registration: {

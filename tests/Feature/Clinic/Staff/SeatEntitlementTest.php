@@ -174,3 +174,26 @@ test('an invitation accepted after the last seat was taken is refused inside the
     expect($invitation->fresh()->accepted_at)->toBeNull()
         ->and(ClinicMembership::query()->withoutGlobalScopes()->where('clinic_id', $this->f->clinic->id)->count())->toBe(3);
 });
+
+test('accepting an invitation puts the invited person on the team, but never revives someone who has left', function () {
+    $invite = function (string $name, string $email, string $status) {
+        $employee = ClinicEmployee::create(['clinic_id' => $this->f->clinic->id, 'name' => $name, 'email' => $email, 'status' => $status]);
+        $invitation = ClinicEmployeeInvitation::create([
+            'clinic_id' => $this->f->clinic->id, 'clinic_employee_id' => $employee->id, 'email' => $email,
+            'token' => hash('sha256', Str::random(60)), 'expires_at' => now()->addDays(3), 'created_by' => $this->f->owner->id,
+        ]);
+
+        return [$employee, $invitation];
+    };
+
+    [$invited, $invitation] = $invite('New Doctor', 'newdoc@clinic.test', 'invited');
+    app(InvitationAcceptance::class)->acceptAsNewUser($invitation->load('clinic', 'employee'), 'Password123!');
+
+    expect($invited->fresh()->status->value)->toBe('active');
+
+    // A record the clinic has since suspended is not revived by a link that was sent earlier.
+    [$suspended, $stale] = $invite('Suspended Person', 'susp@clinic.test', 'invited');
+    $suspended->update(['status' => 'suspended']);
+    expect(fn () => app(InvitationAcceptance::class)->acceptAsNewUser($stale->load('clinic', 'employee'), 'Password123!'))->not->toThrow(Throwable::class)
+        ->and($suspended->fresh()->status->value)->toBe('suspended');
+});

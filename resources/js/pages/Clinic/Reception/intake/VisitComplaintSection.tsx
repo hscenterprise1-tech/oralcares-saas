@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Stethoscope, ClipboardList, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IconChip } from './IconChip';
-import { reasonsFor, type IntakeConfig, type VisitForm } from './types';
+import { contextOf, reasonsFor, type IntakeConfig, type VisitForm } from './types';
 
 interface VisitComplaintSectionProps {
   config?: IntakeConfig | null;
@@ -36,7 +36,9 @@ export function VisitComplaintSection({
   const isPhysio = currentSpecialty.toLowerCase().includes('physio');
   // The clinic's own reasons for this specialty (a physiotherapy visit: the owner's problems, with the side), so the
   // problem chosen here reaches the therapist already suggested. The server checks the choice again.
-  const reasons = config ? reasonsFor(config, currentSpecialty, null) : [];
+  // The chosen doctor's practice area narrows what the server accepts, so it narrows the list too: a reason shown here is never refused later.
+  const doctorArea = config ? (contextOf(config, value)?.area ?? null) : null;
+  const reasons = config ? reasonsFor(config, currentSpecialty, doctorArea) : [];
 
   // Doctors available for this branch and specialty
   const availableDoctors = (config?.doctors || []).filter((doc) => {
@@ -53,6 +55,13 @@ export function VisitComplaintSection({
       }
     }
   }, [availableDoctors, value.doctor_id, hideDoctor, onChange]);
+
+  // However the doctor came to change (chosen, or picked for the desk above), a reason the doctor's area does not offer is dropped.
+  useEffect(() => {
+    if (config && value.reason_key && value.reason_key !== OTHER && !reasons.some((item) => item.key === value.reason_key)) {
+      onChange({ reason_key: '', visit_reason: '' });
+    }
+  }, [reasons, value.reason_key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedDoctor = availableDoctors.find((d) => String(d.id) === value.doctor_id) || null;
 
@@ -169,7 +178,7 @@ export function VisitComplaintSection({
             </label>
             {selectedDoctor && (
               <span className="text-[11px] font-semibold text-teal-700">
-                {selectedDoctor.shift === 'on_shift' ? '● On Shift Now' : 'Scheduled Today'}
+                {selectedDoctor.shift === 'on_shift' ? '● On Shift Now' : selectedDoctor.shift === 'off_shift' ? selectedDoctor.shift_label : 'Scheduled Today'}
               </span>
             )}
           </div>
@@ -178,7 +187,12 @@ export function VisitComplaintSection({
             <select
               disabled={disabled}
               value={value.doctor_id}
-              onChange={(e) => onChange({ doctor_id: e.target.value })}
+              onChange={(e) => {
+                const next = config ? contextOf(config, { ...value, doctor_id: e.target.value, area: '' })?.area ?? null : null;
+                const stillOffered = !value.reason_key || value.reason_key === OTHER || (config ? reasonsFor(config, currentSpecialty, next) : []).some((item) => item.key === value.reason_key);
+                // A reason this doctor's area does not offer is cleared, not carried into a refusal.
+                onChange({ doctor_id: e.target.value, area: '', ...(stillOffered ? {} : { reason_key: '', visit_reason: '' }) });
+              }}
               className={cn(
                 'h-9.5 w-full rounded-xl border bg-white px-3 text-[13px] font-semibold text-cx-nav-ink transition-colors focus:bg-white focus:outline-none focus:ring-2',
                 errors.doctor_id
@@ -194,7 +208,7 @@ export function VisitComplaintSection({
                 const feeText = doc.fee !== null && doc.fee > 0 ? ` · ₹${doc.fee}` : '';
                 return (
                   <option key={doc.id} value={String(doc.id)}>
-                    {doc.name} {specName ? `(${specName})` : ''} {feeText}
+                    {doc.name} {specName ? `(${specName})` : ''} {feeText}{doc.shift === 'off_shift' && doc.shift_label ? ` · ${doc.shift_label}` : ''}
                   </option>
                 );
               })}

@@ -57,6 +57,7 @@ export function MyProfessionalStep(form: StepFormProps) {
           ))}
         </datalist>
         <NumberField form={form} name="experience_years" label="Years of experience" min={0} max={70} step={1} />
+        <NumberField form={form} name="consultation_fee" label="Consultation fee" min={0} step="any" suffix="₹" hint="Charged when a patient is seen by you. Leave empty if you do not charge a separate consultation fee." />
       </div>
       <div>
         <h3 className="text-[13.5px] font-semibold text-cx-nav-ink">Qualification</h3>

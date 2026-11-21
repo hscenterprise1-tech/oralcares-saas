@@ -194,6 +194,12 @@ class InvitationAcceptance
             $employee->update(['user_id' => $user->id]);
         }
 
+        // The clinic invited them on purpose and they now hold a login: they are on the team. Left "invited", they would be missing from
+        // check-in and the doctor lists until someone found the Status field in Edit. Anyone suspended, resigned or inactive stays so.
+        if (in_array($this->plain($employee->status), [EmploymentStatus::Invited->value, EmploymentStatus::PendingInvitation->value], true)) {
+            $employee->update(['status' => EmploymentStatus::Active]);
+        }
+
         $locked->update(['accepted_at' => now()]);
 
         $this->audit->record('invitation.accepted', $locked, ['existing_account' => $existingAccount], [
