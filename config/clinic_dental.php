@@ -106,4 +106,65 @@ return [
         'grades' => ['A', 'B', 'C'],
         'extents' => ['localised' => 'Localised', 'generalised' => 'Generalised', 'molar_incisor' => 'Molar–incisor pattern'],
     ],
+
+    /*
+    | What a doctor usually does about a finding: words matched against the clinic's own service names, so the visit screen
+    | offers them as one-tap chips (a clinic that names a service differently simply gets fewer). `diagnosis` is the
+    | wording a finding adds to the visit's diagnosis.
+    */
+    'suggestions' => [
+        'caries' => ['diagnosis' => 'Dental caries', 'services' => ['filling', 'restoration', 'root canal', 'rct']],
+        'recurrent_caries' => ['diagnosis' => 'Recurrent caries', 'services' => ['filling', 'root canal', 'crown']],
+        'periapical' => ['diagnosis' => 'Periapical lesion', 'services' => ['root canal', 'rct', 'extraction']],
+        'abscess' => ['diagnosis' => 'Dental abscess', 'services' => ['drainage', 'root canal', 'extraction']],
+        'fractured' => ['diagnosis' => 'Fractured tooth', 'services' => ['crown', 'filling', 'extraction']],
+        'mobile' => ['diagnosis' => 'Mobile tooth', 'services' => ['splint', 'extraction']],
+        'missing' => ['diagnosis' => 'Missing tooth', 'services' => ['implant', 'bridge', 'denture']],
+        'impacted' => ['diagnosis' => 'Impacted tooth', 'services' => ['surgical', 'extraction']],
+        'discoloration' => ['diagnosis' => 'Discoloured tooth', 'services' => ['whitening', 'veneer', 'crown']],
+        'wear' => ['diagnosis' => 'Tooth wear', 'services' => ['filling', 'crown']],
+        'abrasion' => ['diagnosis' => 'Abrasion', 'services' => ['filling']],
+        'erosion' => ['diagnosis' => 'Erosion', 'services' => ['filling']],
+    ],
+
+    /*
+    | The visits of a treatment that takes more than one, matched against the service name (first match wins). Each stage is
+    | [what that visit does, days until the next one]; the last stage has no next visit. The visit screen shows them so the
+    | doctor sees "sitting 2 of 3: Cleaning and dressing" without typing it.
+    */
+    'stages' => [
+        'root canal' => [['Access opening and cleaning', 5], ['Cleaning and dressing', 5], ['Obturation', 0]],
+        'rct' => [['Access opening and cleaning', 5], ['Cleaning and dressing', 5], ['Obturation', 0]],
+        'pulpectomy' => [['Pulp removal and dressing', 5], ['Obturation', 0]],
+        'implant' => [['Implant surgery', 14], ['Healing check', 14], ['Abutment', 7], ['Crown fitting', 0]],
+        'crown' => [['Preparation and impression', 7], ['Fitting and cementation', 0]],
+        'bridge' => [['Preparation and impression', 7], ['Fitting and cementation', 0]],
+        'veneer' => [['Preparation and impression', 7], ['Fitting and cementation', 0]],
+        'denture' => [['Impression', 7], ['Try-in', 7], ['Delivery', 0]],
+        'wisdom' => [['Surgery', 7], ['Suture removal', 0]],
+        'surgical' => [['Surgery', 7], ['Suture removal', 0]],
+        'flap' => [['Surgery', 7], ['Review', 0]],
+        'gum' => [['Surgery', 7], ['Review', 0]],
+    ],
+
+    /*
+    | Prescriptions a dentist can add in one tap. The doctor reads and may edit each line before the visit is signed.
+    */
+    'prescription_templates' => [
+        ['key' => 'pain_antibiotic', 'label' => 'Pain and antibiotic', 'lines' => [
+            ['drug_name' => 'Amoxicillin 500 mg', 'dosage' => '1 capsule', 'frequency' => 'Three times a day', 'duration' => '5 days', 'instructions' => 'After food'],
+            ['drug_name' => 'Ibuprofen 400 mg', 'dosage' => '1 tablet', 'frequency' => 'When in pain, max 3 a day', 'duration' => '3 days', 'instructions' => 'After food'],
+        ]],
+        ['key' => 'after_extraction', 'label' => 'After extraction', 'lines' => [
+            ['drug_name' => 'Paracetamol 650 mg', 'dosage' => '1 tablet', 'frequency' => 'When in pain, max 3 a day', 'duration' => '3 days', 'instructions' => 'After food'],
+            ['drug_name' => 'Chlorhexidine 0.2% mouthwash', 'dosage' => '10 ml', 'frequency' => 'Twice a day', 'duration' => '7 days', 'instructions' => 'Start the day after'],
+        ]],
+        ['key' => 'gum_care', 'label' => 'Gum care', 'lines' => [
+            ['drug_name' => 'Metronidazole 400 mg', 'dosage' => '1 tablet', 'frequency' => 'Three times a day', 'duration' => '5 days', 'instructions' => 'After food'],
+            ['drug_name' => 'Chlorhexidine 0.2% mouthwash', 'dosage' => '10 ml', 'frequency' => 'Twice a day', 'duration' => '14 days', 'instructions' => null],
+        ]],
+        ['key' => 'sensitivity', 'label' => 'Sensitivity', 'lines' => [
+            ['drug_name' => 'Desensitising toothpaste', 'dosage' => 'Pea-sized amount', 'frequency' => 'Twice a day', 'duration' => '4 weeks', 'instructions' => 'Do not rinse straight after'],
+        ]],
+    ],
 ];

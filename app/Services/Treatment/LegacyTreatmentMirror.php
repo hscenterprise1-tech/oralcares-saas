@@ -68,6 +68,9 @@ class LegacyTreatmentMirror
 
             $practitionerId = $plan?->created_by && DB::table('clinic_employees')->where('id', $plan->created_by)->where('clinic_id', $record->clinic_id)->exists() ? $plan->created_by : null;
 
+            $visits = max(1, (int) $record->sittings_total);
+            $visitsDone = $visits > 1 ? $record->sittings()->count() : 0;
+
             $treatment = PatientTreatment::query()->withoutGlobalScopes()->firstOrNew(['legacy_treatment_record_id' => $record->id]);
             if (! $treatment->exists) {
                 $treatment->created_at = $record->created_at;
@@ -87,8 +90,9 @@ class LegacyTreatmentMirror
                 'charging_model' => 'per_procedure',
                 'status' => $status,
                 'agreed_amount' => $record->price,
-                'stages_total' => 1,
-                'stages_completed' => in_array($recordStatus, ['completed', 'aborted'], true) ? 1 : 0,
+                // A dental treatment of several visits counts its visits, so "2 of 3" shows wherever treatments are listed.
+                'stages_total' => $visits,
+                'stages_completed' => in_array($recordStatus, ['completed', 'aborted'], true) ? $visits : min($visits, $visitsDone),
                 'started_at' => $plan?->accepted_at,
                 'completed_at' => $recordStatus === 'completed' ? $record->completed_at : null,
                 'cancelled_at' => $status === PatientTreatment::CANCELLED ? ($plan?->cancelled_at ?? $plan?->declined_at) : null,

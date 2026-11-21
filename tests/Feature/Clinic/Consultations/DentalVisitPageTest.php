@@ -3,12 +3,17 @@
 use App\ClinicRole;
 use App\Models\Appointment;
 use App\Models\ClinicalProcedure;
+use App\Models\ClinicalProcedurePrice;
+use App\Models\PatientClinicalEntry;
 use App\Models\PatientDentalChart;
 use App\Models\PatientFollowUp;
 use App\Models\PatientProcedure;
+use App\Models\PatientTreatment;
+use App\Models\Prescription;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
 use App\Services\Clinical\EncounterWorkspace;
+use App\Services\Clinical\PrescriptionAllergyCheck;
 use App\Services\Patient\PatientAutomation;
 use App\TreatmentStatus;
 use Carbon\CarbonImmutable;
@@ -191,4 +196,102 @@ test('the visit summary prints what the patient takes home: complaint, diagnosis
 
     [$billing, $session] = $this->f->memberWithRole(ClinicRole::BillingStaff);
     $this->actingAs($billing)->withSession($session)->get("/clinic/consultations/{$this->encounter->id}/dental/summary")->assertForbidden();
+});
+
+test('the visit screen carries the patient\'s allergy and what is usually done for a finding', function () {
+    PatientClinicalEntry::withoutGlobalScopes()->create(['clinic_id' => $this->f->clinic->id, 'patient_id' => $this->patient->id, 'kind' => 'allergy', 'label' => 'Penicillin', 'severity' => 'high', 'status' => PatientClinicalEntry::ACTIVE, 'source' => 'clinical', 'recorded_at' => now(), 'dedupe_key' => 'allergy:penicillin']);
+
+    ($this->asDoctor)()->get("/clinic/consultations/{$this->encounter->id}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dental.alerts.0', ['kind' => 'allergy', 'label' => 'Penicillin'])
+            ->where('dental.rx.can_prescribe', true)
+            ->where('dental.rx.allergy.status', 'documented')
+            ->where('dental.suggestions.caries.services.0', 'filling'));
+});
+
+test('a prescription written on the visit screen is issued with the visit', function () {
+    $line = ['drug_name' => 'Amoxicillin 500 mg', 'dosage' => '1 capsule', 'frequency' => 'Three times a day', 'duration' => '5 days'];
+
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [
+        'consultation' => ['complaint' => 'Pain'],
+        'prescription' => ['items' => [$line]],
+    ])->assertSessionHasNoErrors();
+
+    $prescription = Prescription::withoutGlobalScopes()->where('encounter_id', $this->encounter->id)->sole();
+    expect($prescription->status)->toBe(Prescription::FINALIZED)
+        ->and($prescription->items()->count())->toBe(1)
+        ->and($this->encounter->fresh()->isFinalized())->toBeTrue();
+});
+
+test('with a documented allergy the prescription is refused until the allergy list is reviewed, and nothing is signed', function () {
+    PatientClinicalEntry::withoutGlobalScopes()->create(['clinic_id' => $this->f->clinic->id, 'patient_id' => $this->patient->id, 'kind' => 'allergy', 'label' => 'Penicillin', 'severity' => 'high', 'status' => PatientClinicalEntry::ACTIVE, 'source' => 'clinical', 'recorded_at' => now(), 'dedupe_key' => 'allergy:penicillin']);
+    $body = ['consultation' => ['complaint' => 'Pain'], 'prescription' => ['items' => [['drug_name' => 'Amoxicillin 500 mg', 'dosage' => '1', 'frequency' => 'Three times a day', 'duration' => '5 days']]]];
+
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", $body)->assertSessionHasErrors('dental');
+    expect($this->encounter->fresh()->isFinalized())->toBeFalse()
+        ->and(Prescription::withoutGlobalScopes()->where('encounter_id', $this->encounter->id)->count())->toBe(0);
+
+    $fingerprint = app(PrescriptionAllergyCheck::class)->stateFor($this->patient)['fingerprint'];
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [...$body, 'prescription' => [...$body['prescription'], 'allergy_fingerprint' => $fingerprint]])->assertSessionHasNoErrors();
+    expect($this->encounter->fresh()->isFinalized())->toBeTrue();
+});
+
+test('every one-tap prescription template fits what a prescription line can hold, and can be issued', function () {
+    foreach (config('clinic_dental.prescription_templates') as $template) {
+        foreach ($template['lines'] as $line) {
+            expect(strlen($line['drug_name']))->toBeLessThanOrEqual(150)
+                ->and(strlen($line['dosage']))->toBeLessThanOrEqual(60)
+                ->and(strlen($line['frequency']))->toBeLessThanOrEqual(30)
+                ->and(strlen($line['duration']))->toBeLessThanOrEqual(40);
+        }
+    }
+
+    // The same lines go through the real finish, which also files each medicine in the clinic's formulary.
+    $lines = collect(config('clinic_dental.prescription_templates'))->flatMap(fn (array $template) => $template['lines'])->unique('drug_name')->values()->all();
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", ['consultation' => ['complaint' => 'Pain'], 'prescription' => ['items' => $lines]])
+        ->assertSessionHasNoErrors();
+    expect(Prescription::withoutGlobalScopes()->where('encounter_id', $this->encounter->id)->sole()->items()->count())->toBe(count($lines));
+});
+
+test('a root canal done over three visits is billed in three shares, resumes at the right stage and closes on the last', function () {
+    ClinicalProcedurePrice::create(['clinic_id' => $this->f->clinic->id, 'branch_id' => null, 'clinical_procedure_id' => $this->rct->id, 'price' => 6500, 'is_available' => true]);
+
+    $visit = function (array $row, $encounter) {
+        ($this->asDoctor)()->post("/clinic/consultations/{$encounter->id}/dental/finish", ['consultation' => ['complaint' => 'Root canal'], 'work' => [$row]])->assertSessionHasNoErrors();
+    };
+
+    $visit(['procedure_id' => $this->rct->id, 'tooth' => 46, 'done' => true, 'visits' => 3, 'sitting_note' => 'Canals located'], $this->encounter);
+    $item = TreatmentRecord::withoutGlobalScopes()->where('patient_id', $this->patient->id)->sole();
+    expect($item->status)->toBe(TreatmentStatus::Started)->and($item->sittings_total)->toBe(3)->and($item->sittings()->count())->toBe(1);
+    $listed = PatientTreatment::withoutGlobalScopes()->where('legacy_treatment_record_id', $item->id)->sole();
+    expect($listed->stages_total)->toBe(3)->and($listed->stages_completed)->toBe(1);
+
+    $second = app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $this->me);
+    ($this->asDoctor)()->get("/clinic/consultations/{$second->id}")->assertInertia(function (Assert $page) {
+        $continuing = $page->toArray()['props']['dental']['continuing'];
+        expect($continuing)->toHaveCount(1)->and($continuing[0]['next_stage'])->toBe('Cleaning and dressing')->and($continuing[0]['sittings_done'])->toBe(1)
+            ->and($continuing[0]['last_note'])->toBe('Canals located')->and(array_column($continuing[0]['stages'], 'state'))->toBe(['done', 'next', 'later']);
+    });
+    $visit(['id' => $item->id, 'done' => true, 'visits' => 3], $second);
+    expect($item->fresh()->status)->toBe(TreatmentStatus::Started);
+
+    $third = app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $this->me);
+    $visit(['id' => $item->id, 'done' => true, 'visits' => 3, 'condition' => 'root_canal'], $third);
+
+    $sittings = $item->fresh()->sittings;
+    expect($item->fresh()->status)->toBe(TreatmentStatus::Completed)
+        ->and($sittings->pluck('stage')->all())->toBe(['Access opening and cleaning', 'Cleaning and dressing', 'Obturation'])
+        ->and(round((float) $sittings->sum('charged'), 2))->toBe(6500.0)
+        ->and(round((float) PatientProcedure::withoutGlobalScopes()->where('patient_id', $this->patient->id)->sum('charged_amount'), 2))->toBe(6500.0)
+        ->and(PatientDentalChart::withoutGlobalScopes()->where('patient_id', $this->patient->id)->where('tooth_number', 46)->value('status'))->toBe('root_canal');
+});
+
+test('a treatment of one visit is still done and billed in one go, even when the screen sends a visit count of one', function () {
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [
+        'consultation' => ['complaint' => 'Filling'],
+        'work' => [['procedure_id' => $this->filling->id, 'tooth' => 37, 'surfaces' => ['O'], 'done' => true, 'visits' => 1]],
+    ])->assertSessionHasNoErrors();
+
+    $item = TreatmentRecord::withoutGlobalScopes()->where('patient_id', $this->patient->id)->sole();
+    expect($item->status)->toBe(TreatmentStatus::Completed)->and($item->sittings()->count())->toBe(0)->and($item->sittings_total)->toBeNull();
 });

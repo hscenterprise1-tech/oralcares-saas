@@ -25,6 +25,7 @@ class TreatmentRecord extends Model
         'surfaces',
         'status',
         'price',
+        'sittings_total',
         'sort_order',
         'completed_at',
         'patient_procedure_id',
@@ -63,6 +64,11 @@ class TreatmentRecord extends Model
     public function procedure(): BelongsTo
     {
         return $this->belongsTo(ClinicalProcedure::class, 'clinical_procedure_id');
+    }
+
+    public function sittings(): HasMany
+    {
+        return $this->hasMany(TreatmentRecordSitting::class)->orderBy('number');
     }
 
     public function progressNotes(): HasMany

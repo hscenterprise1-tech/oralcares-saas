@@ -8,6 +8,7 @@ use App\Models\ClinicalProcedure;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
 use App\Models\PatientDentalChart;
+use App\Models\PatientProcedure;
 use App\Models\PatientTimelineEvent;
 use App\Models\PatientToothStatusHistory;
 use App\Models\TreatmentPlan;
@@ -173,9 +174,9 @@ class DentalRecord
      *
      * @param  list<string>  $surfaces
      */
-    public function completeItem(TreatmentPlan $plan, TreatmentRecord $item, ClinicalEncounter $encounter, ClinicEmployee $doctor, ?string $resultingCondition = null, ?string $note = null): TreatmentRecord
+    public function completeItem(TreatmentPlan $plan, TreatmentRecord $item, ClinicalEncounter $encounter, ClinicEmployee $doctor, ?string $resultingCondition = null, ?string $note = null, ?float $chargedAmount = null): TreatmentRecord
     {
-        return DB::transaction(function () use ($plan, $item, $encounter, $doctor, $resultingCondition, $note) {
+        return DB::transaction(function () use ($plan, $item, $encounter, $doctor, $resultingCondition, $note, $chargedAmount) {
             $plan = $this->lockPlan($plan);
             $encounter = $this->lockOpen($encounter);
 
@@ -198,6 +199,10 @@ class DentalRecord
                 'details' => ['tooth_number' => $item->tooth_number !== null ? (int) $item->tooth_number : null, 'surfaces' => $item->surfaces, 'treatment_record_id' => $item->id],
             ]);
 
+            if ($chargedAmount !== null) {
+                $procedure->forceFill(['charged_amount' => $chargedAmount])->save();
+            }
+
             $item->update([
                 'status' => TreatmentStatus::Completed,
                 'encounter_id' => $encounter->id,
@@ -219,6 +224,45 @@ class DentalRecord
             $this->mirrored($plan);
 
             return $item;
+        });
+    }
+
+    /**
+     * One sitting of a treatment that takes several visits, not yet the last: what was done is recorded in this consultation
+     * (and its share of the price billed from here), the treatment stays open and the tooth shows it is in treatment.
+     */
+    public function recordSitting(TreatmentPlan $plan, TreatmentRecord $item, ClinicalEncounter $encounter, ClinicEmployee $doctor, string $label, ?float $chargedAmount): PatientProcedure
+    {
+        return DB::transaction(function () use ($plan, $item, $encounter, $label, $chargedAmount) {
+            $plan = $this->lockPlan($plan);
+            $encounter = $this->lockOpen($encounter);
+
+            if ($item->treatment_plan_id !== $plan->id || $encounter->patient_id !== $plan->patient_id) {
+                throw new InvalidArgumentException('That treatment belongs to a different plan or patient.');
+            }
+            if (! in_array($plan->status, TreatmentPlan::WORKABLE, true)) {
+                throw new DomainException($plan->status === TreatmentPlan::PAUSED ? 'This plan is paused. Resume it first.' : 'Treatment is done from an accepted plan.');
+            }
+            if (in_array($item->status, [TreatmentStatus::Completed, TreatmentStatus::Aborted], true)) {
+                throw new DomainException('This treatment is already closed.');
+            }
+
+            $procedure = $this->workspace->addProcedure($encounter, [
+                'clinical_procedure_id' => $item->clinical_procedure_id,
+                'notes' => trim(($item->tooth_number ? "Tooth {$item->tooth_number}. " : '').$label),
+                'details' => ['tooth_number' => $item->tooth_number !== null ? (int) $item->tooth_number : null, 'surfaces' => $item->surfaces, 'treatment_record_id' => $item->id],
+            ]);
+            if ($chargedAmount !== null) {
+                $procedure->forceFill(['charged_amount' => $chargedAmount])->save();
+            }
+
+            $item->update(['status' => TreatmentStatus::Started]);
+            if ($plan->status === TreatmentPlan::ACCEPTED) {
+                $plan->update(['status' => TreatmentPlan::ACTIVE]);
+            }
+            $this->mirrored($plan);
+
+            return $procedure;
         });
     }
 

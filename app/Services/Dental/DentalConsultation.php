@@ -4,6 +4,7 @@ namespace App\Services\Dental;
 
 use App\AppointmentSource;
 use App\AppointmentStatus;
+use App\ClinicPermission;
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Clinic;
@@ -11,16 +12,22 @@ use App\Models\ClinicalEncounter;
 use App\Models\ClinicalProcedure;
 use App\Models\ClinicEmployee;
 use App\Models\Patient;
+use App\Models\PatientClinicalEntry;
 use App\Models\PatientDentalChart;
 use App\Models\TreatmentPlan;
 use App\Models\TreatmentRecord;
+use App\Models\TreatmentRecordSitting;
 use App\Models\User;
 use App\Services\Appointments\AppointmentAvailabilityService;
 use App\Services\Appointments\AppointmentBookingService;
 use App\Services\Appointments\AppointmentSettingsService;
 use App\Services\Billing\EncounterCheckout;
 use App\Services\Clinical\EncounterWorkspace;
+use App\Services\Clinical\PrescriptionAllergyCheck;
+use App\Services\ClinicalPrescriptionService;
 use App\Services\ProcedureCatalogService;
+use App\Services\Treatment\LegacyTreatmentMirror;
+use App\Support\Clinical\DefaultClinicalCatalogue;
 use App\Support\ClinicClock;
 use App\TreatmentStatus;
 use Carbon\CarbonImmutable;
@@ -57,9 +64,29 @@ class DentalConsultation
         'veneer' => [2, 7], 'denture' => [3, 7], 'surgical' => [2, 7], 'wisdom' => [2, 7], 'gum' => [2, 7], 'flap' => [2, 7],
     ];
 
+    /**
+     * The visits a treatment is made of, by its service name: what each does and the days until the next.
+     *
+     * @return list<array{name: string, days: int}>
+     */
+    public static function stagesOf(?string $text): array
+    {
+        $text = strtolower((string) $text);
+        foreach ((array) config('clinic_dental.stages') as $needle => $stages) {
+            if (str_contains($text, (string) $needle)) {
+                return array_map(fn (array $stage) => ['name' => $stage[0], 'days' => (int) $stage[1]], $stages);
+            }
+        }
+
+        return [];
+    }
+
     /** @return array{visits: int, step: int} */
     public static function sittingsOf(?string $text): array
     {
+        if (($stages = self::stagesOf($text)) !== []) {
+            return ['visits' => count($stages), 'step' => max(1, $stages[0]['days'])];
+        }
         $text = strtolower((string) $text);
         foreach (self::SITTINGS as $needle => [$visits, $step]) {
             if (str_contains($text, $needle)) {
@@ -91,7 +118,7 @@ class DentalConsultation
 
         $plans = TreatmentPlan::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->where('patient_id', $patient->id)
             ->whereIn('status', [TreatmentPlan::PROPOSED, TreatmentPlan::ACCEPTED, TreatmentPlan::ACTIVE])
-            ->with(['records' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')])->latest('id')->limit(10)->get();
+            ->with(['records' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'), 'records.sittings'])->latest('id')->limit(10)->get();
 
         // Services whose visits the clinic has set itself, by name (a plan item carries the name it was planned under).
         $ownSittings = ClinicalProcedure::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereNotNull('metadata')->get(['id', 'name', 'metadata'])
@@ -105,6 +132,11 @@ class DentalConsultation
                 'advice' => $encounter->follow_up_note,
                 'diagnoses' => $encounter->diagnoses()->withoutGlobalScopes()->orderByDesc('is_primary')->pluck('description')->all(),
             ],
+            // Treatments already started on earlier visits: where each stands, so the doctor resumes without searching.
+            'continuing' => $plans->flatMap(fn (TreatmentPlan $plan) => $plan->records)
+                ->filter(fn (TreatmentRecord $item) => $item->sittings->isNotEmpty() && ! in_array($item->status, [TreatmentStatus::Completed, TreatmentStatus::Aborted], true))
+                ->map(fn (TreatmentRecord $item) => ['id' => $item->id, 'label' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null, ...$this->progress($item)])
+                ->values()->all(),
             'complaints' => collect(self::COMPLAINTS)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
             'teeth' => $this->dental->chart($patient)->map(fn (PatientDentalChart $tooth) => [
                 'tooth' => (int) $tooth->tooth_number, 'status' => $tooth->status, 'surfaces' => $tooth->surfaces ?? [], 'notes' => $tooth->notes,
@@ -121,6 +153,7 @@ class DentalConsultation
                         'id' => $item->id, 'description' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null,
                         'surfaces' => $item->surfaces ?? [], 'price' => $item->price !== null ? (float) $item->price : null,
                         ...($ownSittings[strtolower(trim((string) $item->description))] ?? self::sittingsOf($item->description)),
+                        ...$this->progress($item),
                     ])->values()->all(),
             ])->filter(fn (array $plan) => $plan['items'] !== [])->values()->all(),
             // What this visit has recorded so far (done today), so a reload shows the work.
@@ -130,6 +163,16 @@ class DentalConsultation
             'booking' => $this->slots($clinic, $branch, $me, $patient),
             // Root canal, implant, braces and lab work: the patient's records, written in this visit.
             'specialty' => app(DentalSpecialtyView::class)->forVisit($encounter, $patient, $user->can('writeExtension', [$encounter, 'odontogram'])),
+            // What the doctor must not miss, always on screen: documented allergies and the patient's active conditions.
+            'alerts' => $this->alerts($patient),
+            'suggestions' => config('clinic_dental.suggestions'),
+            'rx' => [
+                'can_prescribe' => $user->hasClinicPermission(ClinicPermission::PrescriptionManage),
+                'templates' => config('clinic_dental.prescription_templates'),
+                'allergy' => app(PrescriptionAllergyCheck::class)->stateFor($patient),
+                'issued' => ($issued = $encounter->prescriptions()->withoutGlobalScopes()->where('status', 'finalized')->latest('id')->first(['id', 'prescription_number']))
+                    ? ['number' => $issued->prescription_number, 'print_url' => route('clinic.prescriptions.print', $issued->id)] : null,
+            ],
             'finished' => $encounter->isFinalized(),
             'to_bill' => $encounter->isFinalized()
                 ? round(collect(app(EncounterCheckout::class)->lines($encounter))->sum(fn (array $line) => $line['quantity'] * $line['unit_price']), 2)
@@ -155,7 +198,8 @@ class DentalConsultation
             throw new InvalidArgumentException('Record why the patient came, a finding, or the work done.');
         }
 
-        $counts = DB::transaction(function () use ($encounter, $consultation, $findings, $work, $me) {
+        $prescription = (array) ($input['prescription'] ?? []);
+        $counts = DB::transaction(function () use ($encounter, $consultation, $findings, $work, $me, $by, $prescription) {
             $fresh = ClinicalEncounter::query()->withoutGlobalScopes()->findOrFail($encounter->id);
             $notes = array_filter(['chief_complaint' => $consultation['complaint'] ?? null, 'examination' => $consultation['findings'] ?? null,
                 'follow_up_note' => $consultation['advice'] ?? null], fn ($value) => $value !== null);
@@ -172,6 +216,8 @@ class DentalConsultation
             }
 
             [$done, $planned] = $this->work($fresh->fresh(), $work, $me);
+            // Written before the visit is signed: signing settles any draft left open.
+            $this->prescribe($fresh->fresh(), $prescription, $me, $by);
 
             $locked = ClinicalEncounter::query()->withoutGlobalScopes()->whereKey($encounter->id)->lockForUpdate()->firstOrFail();
             if (trim((string) $locked->chief_complaint) === '' && ! $locked->diagnoses()->withoutGlobalScopes()->exists()) {
@@ -185,6 +231,75 @@ class DentalConsultation
         [$booked, $problem] = $this->book($encounter, $me, $by, $input['booking'] ?? null);
 
         return ['done' => $counts[0], 'planned' => $counts[1], 'booked' => $booked, 'booking_problem' => $problem];
+    }
+
+    /**
+     * Where a multi-visit treatment stands: its stages with done / next / later, and what the doctor wrote last time.
+     *
+     * @return array{sittings_total: ?int, sittings_done: int, next_stage: ?string, last_note: ?string, last_date: ?string, stages: list<array{name: string, state: string}>}
+     */
+    private function progress(TreatmentRecord $item): array
+    {
+        $done = $item->sittings->count();
+        $names = array_column(self::stagesOf($item->description), 'name');
+        $total = $item->sittings_total !== null ? (int) $item->sittings_total : (count($names) > 1 ? count($names) : null);
+        $stages = [];
+        for ($i = 1; $i <= max($total ?? 0, $done); $i++) {
+            $stages[] = ['name' => $names[$i - 1] ?? 'Sitting '.$i, 'state' => $i <= $done ? 'done' : ($i === $done + 1 ? 'next' : 'later')];
+        }
+        $last = $item->sittings->last();
+
+        return [
+            'sittings_total' => $total,
+            'sittings_done' => $done,
+            'next_stage' => collect($stages)->firstWhere('state', 'next')['name'] ?? null,
+            'last_note' => $last?->note,
+            'last_date' => $last?->done_at?->toDateString(),
+            'stages' => $stages,
+        ];
+    }
+
+    /**
+     * @return list<array{kind: string, label: string}>
+     */
+    private function alerts(Patient $patient): array
+    {
+        $allergies = collect(app(PrescriptionAllergyCheck::class)->stateFor($patient)['allergies'])
+            ->map(fn (array $allergy) => ['kind' => 'allergy', 'label' => $allergy['label']]);
+        $conditions = PatientClinicalEntry::withoutGlobalScopes()->where('clinic_id', $patient->clinic_id)->where('patient_id', $patient->id)
+            ->where('kind', DefaultClinicalCatalogue::KIND_CONDITION)->where('status', PatientClinicalEntry::ACTIVE)->orderBy('label')->limit(8)->pluck('label')
+            ->map(fn (string $label) => ['kind' => 'condition', 'label' => $label]);
+
+        return $allergies->concat($conditions)->values()->all();
+    }
+
+    /**
+     * The prescription written on the visit screen, issued with the visit. Where the patient has documented allergies the doctor
+     * must have said they reviewed them (the same rule as the prescription studio); the review is recorded against the
+     * allergy list the screen showed.
+     *
+     * @param  array<string, mixed>  $prescription  items[{drug_name, dosage, frequency, duration, instructions?}], allergy_fingerprint?
+     */
+    private function prescribe(ClinicalEncounter $encounter, array $prescription, ClinicEmployee $me, User $by): void
+    {
+        $items = array_values(array_filter((array) ($prescription['items'] ?? []), fn ($line) => trim((string) ($line['drug_name'] ?? '')) !== ''));
+        if ($items === []) {
+            return;
+        }
+        if (! $by->hasClinicPermission(ClinicPermission::PrescriptionManage)) {
+            throw new InvalidArgumentException('You cannot write prescriptions at this clinic.');
+        }
+
+        $service = app(ClinicalPrescriptionService::class);
+        $draft = $service->draftFor($encounter, $me);
+        foreach ($items as $line) {
+            $service->addItem($draft, $line);
+        }
+        $state = $service->allergyState($draft);
+        if ($state['status'] === PrescriptionAllergyCheck::DOCUMENTED) {
+            $service->reviewAllergies($draft, $by, (string) ($prescription['allergy_fingerprint'] ?? ''));
+        }
+        $service->finalize($draft->fresh(), $me);
     }
 
     /**
@@ -216,8 +331,17 @@ class DentalConsultation
             if ($plan->status === TreatmentPlan::PROPOSED) {
                 $plan = $this->dental->acceptPlan($plan);
             }
+            // A treatment of several visits remembers how many it was planned for, from the first time it is worked on or planned.
+            $visits = max(0, min(8, (int) ($row['visits'] ?? 0)));
+            if ($item->sittings_total === null && $visits > 1) {
+                $item->update(['sittings_total' => $visits]);
+            }
             if (! empty($row['done'])) {
-                $this->dental->completeItem($plan, $item->fresh(), $encounter->fresh(), $me, $row['condition'] ?? $this->resultingCondition($item), null);
+                if ((int) $item->fresh()->sittings_total > 1) {
+                    $this->sitting($plan, $item->fresh(), $encounter->fresh(), $me, $row);
+                } else {
+                    $this->dental->completeItem($plan, $item->fresh(), $encounter->fresh(), $me, $row['condition'] ?? $this->resultingCondition($item), null);
+                }
                 $done++;
             } else {
                 $planned++;
@@ -225,6 +349,42 @@ class DentalConsultation
         }
 
         return [$done, $planned];
+    }
+
+    /**
+     * Today's visit of a treatment that takes several: recorded once per consultation, billed its share of the price (the last
+     * visit takes the remainder, so the shares always add up to the price), and the treatment closes on its last visit.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function sitting(TreatmentPlan $plan, TreatmentRecord $item, ClinicalEncounter $encounter, ClinicEmployee $me, array $row): void
+    {
+        if ($item->sittings()->where('encounter_id', $encounter->id)->exists()) {
+            return;
+        }
+        $total = (int) $item->sittings_total;
+        $number = $item->sittings()->count() + 1;
+        $stage = self::stagesOf($item->description)[$number - 1]['name'] ?? 'Sitting '.$number;
+        $final = $number >= $total;
+        $price = $item->price !== null ? (float) $item->price : null;
+        $share = $price === null ? null : round($price / $total, 2);
+        $charged = $price === null ? null : ($final ? round($price - $share * ($total - 1), 2) : $share);
+        $note = trim((string) ($row['sitting_note'] ?? '')) ?: null;
+        $label = "{$stage}, sitting {$number} of {$total}".($note ? '. '.$note : '');
+
+        if ($final) {
+            $this->dental->completeItem($plan, $item, $encounter, $me, $row['condition'] ?? $this->resultingCondition($item), $note ? "{$stage}. {$note}" : $stage, $charged);
+            $procedureId = $item->fresh()->patient_procedure_id;
+        } else {
+            $procedureId = $this->dental->recordSitting($plan, $item, $encounter, $me, $label, $charged)->id;
+        }
+
+        TreatmentRecordSitting::query()->create([
+            'clinic_id' => $item->clinic_id, 'treatment_record_id' => $item->id, 'encounter_id' => $encounter->id, 'patient_procedure_id' => $procedureId,
+            'number' => $number, 'stage' => $stage, 'note' => $note, 'charged' => $charged, 'done_at' => now(),
+        ]);
+        // The treatment lists (today's patients, Patient 360) read the mirrored treatment: bring its visit count up to date.
+        app(LegacyTreatmentMirror::class)->mirrorRecord($item->fresh(), $plan->fresh());
     }
 
     /**
@@ -258,6 +418,7 @@ class DentalConsultation
                 'id' => $service->id, 'code' => $service->code, 'name' => $service->name, 'category' => $service->category,
                 'price' => $this->catalogue->effectivePrice($clinic->id, $service, $branch->id),
                 ...self::sittingsFor($service),
+                'stages' => array_column(self::stagesOf($service->name), 'name'),
             ])->values()->all();
     }
 

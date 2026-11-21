@@ -297,12 +297,22 @@ class ConsultationController extends Controller
             'work.*.surfaces.*' => [$surfaces],
             'work.*.notes' => ['nullable', 'string', 'max:255'],
             'work.*.done' => ['boolean'],
+            'work.*.visits' => ['nullable', 'integer', 'between:1,8'],
+            'work.*.sitting_note' => ['nullable', 'string', 'max:500'],
             'work.*.condition' => ['nullable', Rule::in(array_keys(config('clinic_dental.conditions')))],
             'booking' => ['nullable', 'array'],
             'booking.date' => ['nullable', 'date_format:Y-m-d'],
             'booking.time' => ['nullable', 'date_format:H:i'],
             'booking.step' => ['nullable', 'integer', 'min:1', 'max:60'],
             'booking.count' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'prescription' => ['nullable', 'array'],
+            'prescription.items' => ['nullable', 'array', 'max:15'],
+            'prescription.items.*.drug_name' => ['required', 'string', 'max:150'],
+            'prescription.items.*.dosage' => ['required', 'string', 'max:60'],
+            'prescription.items.*.frequency' => ['required', 'string', 'max:30'],
+            'prescription.items.*.duration' => ['required', 'string', 'max:40'],
+            'prescription.items.*.instructions' => ['nullable', 'string', 'max:255'],
+            'prescription.allergy_fingerprint' => ['nullable', 'string', 'max:128'],
         ]);
 
         try {
