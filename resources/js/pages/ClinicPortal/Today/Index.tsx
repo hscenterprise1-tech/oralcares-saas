@@ -434,7 +434,7 @@ function DoctorDashboard({ branch, is_doctor: isDoctor, doctor, today, schedule,
         )}
 
         <section aria-label="Your day" className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          <Figure tone="amber" icon={Users} label="Waiting for you" value={waiting.length} detail={longest > 0 ? `Longest ${longest} min` : 'No one waiting'} />
+          <Figure tone="amber" icon={Users} label="Waiting for you" value={waiting.length} detail={longest > 0 ? `Longest ${longest} min` : waiting.length > 0 ? 'Just checked in' : 'No one waiting'} />
           <Figure tone="violet" icon={Stethoscope} label="With you now" value={withMe.length} detail={current ? current.patient?.name : 'Nobody in consultation'} />
           <Figure tone="mint" icon={HeartPulse} label="Seen today" value={seen.length} detail={mine ? `${mine.booked_today} booked today` : undefined} />
           <Figure tone="blue" icon={FileText} label="Notes to finish" value={drafts.length} detail={drafts.length > 0 ? 'Sign before the end of the day' : 'All notes signed'} />
