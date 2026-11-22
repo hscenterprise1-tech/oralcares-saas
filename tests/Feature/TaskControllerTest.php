@@ -72,6 +72,8 @@ test('update modifies an existing task', function () {
     $task = Task::factory()->create([
         'title' => 'Old Title',
         'status' => 'pending',
+        'assigned_user_id' => $user->id,
+        'organization_id' => $user->resolveOrganizationId(),
     ]);
 
     $data = [
@@ -97,7 +99,7 @@ test('update modifies an existing task', function () {
 test('destroy removes a task', function () {
     $this->withoutMiddleware(CompanyPortalMiddleware::class);
     $user = crmUser();
-    $task = Task::factory()->create();
+    $task = Task::factory()->create(['creator_id' => $user->id, 'organization_id' => $user->resolveOrganizationId()]);
 
     $this->actingAs($user)
         ->delete("/company/crm/tasks/{$task->id}")

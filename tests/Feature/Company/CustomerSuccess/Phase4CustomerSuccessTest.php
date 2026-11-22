@@ -345,16 +345,17 @@ it('links from CRM won deal to customer success account 360', function () {
     $response->assertOk();
 
     /*
-     * The account link is deferred with the Now zone rather than sent with the
-     * document — it is a link a rep follows occasionally, not something the
-     * command bar needs before the page paints.
+     * The deal carries the customer's organization id, which is all the page
+     * needs to link to the account. A separate `customer_account` prop used to
+     * be deferred for it; it cost a query nothing rendered, so it is gone
+     * (see LeadController).
      */
     $props = $response->viewData('page')['props'];
 
     expect($props['deal']['customer_organization_id'])->toBe($org->id);
 
     $deferred = $response->viewData('page')['deferredProps'] ?? [];
-    expect($deferred['now'] ?? [])->toContain('customer_account');
+    expect($deferred['now'] ?? [])->not->toContain('customer_account');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
