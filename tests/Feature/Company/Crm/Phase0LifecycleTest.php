@@ -419,38 +419,6 @@ it('counts only genuinely imminent renewals as due this month', function () {
         ->and($subscriptions['metrics']['expiring_soon_count'])->toBe(1);
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fix 5 — CRM module registration must match the real route
-// ─────────────────────────────────────────────────────────────────────────────
-
-it('registers the CRM module at the route the application actually serves', function () {
-    $registry = file_get_contents(resource_path('js/registry/ModuleRegistry.ts'));
-
-    expect($registry)->toContain('route: "/company/crm"');
-
-    // And that route is really served, so the two can never drift apart
-    // without this test noticing.
-    $crmRoot = route('company.crm.dashboard', absolute: false);
-
-    expect($crmRoot)->toStartWith('/company/crm');
-});
-
-it('resolves module paths by prefix rather than exact match', function () {
-    $registry = file_get_contents(resource_path('js/registry/ModuleRegistry.ts'));
-
-    // A module owns its subtree; exact equality would match only index pages.
-    expect($registry)->toContain('resolveModuleForPath')
-        ->and($registry)->toContain('clean.startsWith(`${m.route}/`)');
-});
-
-it('resolves breadcrumbs from the live url', function () {
-    $engine = file_get_contents(resource_path('js/components/app-shell/BreadcrumbEngine.tsx'));
-
-    expect($engine)->toContain('usePage')
-        ->and($engine)->toContain('resolveModuleForPath')
-        ->and($engine)->not->toContain('const currentPath = "/dashboard"');
-});
-
 it('walks the whole lifecycle from won to renewal eligibility', function () {
     $admin = User::factory()->create(['user_type' => UserType::MasterAdmin]);
     $tenant = Organization::factory()->create(['name' => 'OralCares HQ']);

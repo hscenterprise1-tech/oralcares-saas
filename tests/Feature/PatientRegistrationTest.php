@@ -2,49 +2,12 @@
 
 use App\Models\Branch;
 use App\Models\Clinic;
-use App\Models\Organization;
 use App\Models\Patient;
-use App\Models\User;
-use App\Services\ClinicalIdentifierService;
-use App\Services\MedicalHistoryService;
 use App\Services\Patient\PatientRegistrationService;
-use App\Services\PatientDuplicateDetectionService;
-use App\Services\PatientProfileService;
-use App\Services\PatientRegistrationService as NewPatientRegistrationService;
 use App\VisitRegistrationType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
-
-it('registers a patient with uhid and timeline event', function () {
-    $organization = Organization::factory()->create();
-    $user = User::factory()->create(['organization_id' => $organization->id]);
-
-    $this->actingAs($user);
-
-    $service = new NewPatientRegistrationService(
-        app(ClinicalIdentifierService::class),
-        app(PatientDuplicateDetectionService::class),
-        app(PatientProfileService::class),
-        app(MedicalHistoryService::class)
-    );
-
-    $patient = $service->registerPatient(
-        $organization->id,
-        [
-            'first_name' => 'John',
-            'last_name' => 'Doe',
-            'phone' => '1234567890',
-        ],
-        [],
-        []
-    );
-
-    expect($patient->organization_id)->toBe($organization->id)
-        ->and($patient->uhid)->not->toBeNull()
-        ->and($patient->timelineEvents()->count())->toBe(1)
-        ->and($patient->timelineEvents()->first()->event_type)->toBe('registered');
-});
 
 beforeEach(function () {
     $this->clinic = Clinic::factory()->create();

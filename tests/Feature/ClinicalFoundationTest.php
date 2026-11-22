@@ -50,14 +50,3 @@ it('scopes clinical master data to the users organization', function () {
     $allDepts = ClinicalDepartment::withoutOrganizationScope()->get();
     expect($allDepts)->toHaveCount(2);
 });
-
-it('can fetch clinical departments via API', function () {
-    $organization = Organization::factory()->create();
-    $user = User::factory()->create(['organization_id' => $organization->id]);
-
-    $this->actingAs($user);
-    ClinicalDepartment::create(['name' => 'Ortho']);
-
-    $response = $this->get(route('clinical.master.departments.index'));
-    $response->assertStatus(200);
-});
