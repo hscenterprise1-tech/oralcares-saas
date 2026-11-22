@@ -286,6 +286,35 @@ test('a root canal done over three visits is billed in three shares, resumes at 
         ->and(PatientDentalChart::withoutGlobalScopes()->where('patient_id', $this->patient->id)->where('tooth_number', 46)->value('status'))->toBe('root_canal');
 });
 
+test('a service the clinic gave its own named visits shows and records those names', function () {
+    $this->rct->forceFill(['metadata' => ['sittings' => ['visits' => 2, 'step' => 4, 'stages' => ['Open and clean', 'Fill and seal']]]])->save();
+
+    ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [
+        'consultation' => ['complaint' => 'Root canal'],
+        'work' => [['procedure_id' => $this->rct->id, 'tooth' => 46, 'done' => true, 'visits' => 2]],
+    ])->assertSessionHasNoErrors();
+
+    $item = TreatmentRecord::withoutGlobalScopes()->where('patient_id', $this->patient->id)->sole();
+    expect($item->sittings()->pluck('stage')->all())->toBe(['Open and clean']);
+
+    $second = app(EncounterWorkspace::class)->startForPatient($this->patient, $this->f->branch, $this->me);
+    ($this->asDoctor)()->get("/clinic/consultations/{$second->id}")->assertInertia(function (Assert $page) {
+        $continuing = $page->toArray()['props']['dental']['continuing'];
+        expect($continuing[0]['next_stage'])->toBe('Fill and seal')->and(array_column($continuing[0]['stages'], 'name'))->toBe(['Open and clean', 'Fill and seal']);
+    });
+});
+
+test('naming the visits of a service sets its number of visits and drops blank names', function () {
+    [$admin, $session] = $this->f->memberWithRole(ClinicRole::ClinicAdmin);
+
+    $this->actingAs($admin)->withSession($session)->putJson(route('admin.catalog.procedures.update', $this->rct->id, false), [
+        'code' => $this->rct->code, 'name' => $this->rct->name,
+        'sittings' => ['visits' => 9, 'step' => 5, 'stages' => ['Clean', '  ', 'Fill']],
+    ])->assertSuccessful();
+
+    expect($this->rct->fresh()->metadata['sittings'])->toBe(['visits' => 2, 'step' => 5, 'stages' => ['Clean', 'Fill']]);
+});
+
 test('a treatment of one visit is still done and billed in one go, even when the screen sends a visit count of one', function () {
     ($this->asDoctor)()->post("/clinic/consultations/{$this->encounter->id}/dental/finish", [
         'consultation' => ['complaint' => 'Filling'],

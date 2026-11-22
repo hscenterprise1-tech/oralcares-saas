@@ -28,8 +28,10 @@ interface Service {
   price: number | null;
   specialty: string | null;
   /** The clinic's own setting, or null when the standard for this kind of service applies. */
-  sittings: { visits: number; step: number } | null;
+  sittings: { visits: number; step: number; stages?: string[] } | null;
   usual_sittings: { visits: number; step: number };
+  /** What each visit usually does, for services the standard list knows (root canal, crown, implant …). */
+  usual_stages: string[];
   update_url: string;
   active_url: string;
 }
@@ -256,6 +258,17 @@ function ServiceDialog({
   const usual = service?.sittings ?? service?.usual_sittings ?? { visits: 1, step: 7 };
   const [visits, setVisits] = useState(String(usual.visits));
   const [step, setStep] = useState(String(usual.step));
+  const [stages, setStages] = useState<string[]>(service?.sittings?.stages?.length ? service.sittings.stages : service?.usual_stages ?? []);
+  /** Changing the number of visits adds or drops the named visits at the end, so the two never disagree. */
+  const changeVisits = (value: string) => {
+    setVisits(value);
+    const count = Math.min(12, Math.max(1, Number(value) || 1));
+    if (count <= 1) {
+      setStages([]);
+    } else {
+      setStages((current) => Array.from({ length: count }, (_, index) => current[index] ?? `Visit ${index + 1}`));
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -266,7 +279,11 @@ function ServiceDialog({
       const generated = code.trim() || `SVC-${name.trim().replace(/[^A-Za-z0-9]+/g, '').slice(0, 6).toUpperCase()}${Math.floor(Math.random() * 90 + 10)}`;
       const body = { code: generated, name: name.trim(), category: category.trim() || 'Other', default_duration_minutes: Number(duration) || 30,
         is_bookable: bookable,
-        sittings: { visits: Math.max(1, Number(visits) || 1), step: Math.max(1, Number(step) || 7) },
+        sittings: {
+          visits: Math.max(1, Number(visits) || 1),
+          step: Math.max(1, Number(step) || 7),
+          ...(stages.length > 1 ? { stages: stages.map((stage) => stage.trim()).filter(Boolean) } : {}),
+        },
       };
       const saved = service
         ? await requestJson<{ data: { id: number } }>('PUT', service.update_url, { body })
@@ -321,12 +338,24 @@ function ServiceDialog({
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Visits it usually takes" htmlFor="svc-visits" hint="The next visits are planned from this.">
-            <Input id="svc-visits" type="number" min={1} max={30} value={visits} onChange={(event) => setVisits(event.target.value)} />
+            <Input id="svc-visits" type="number" min={1} max={12} value={visits} onChange={(event) => changeVisits(event.target.value)} />
           </Field>
           <Field label="Days between visits" htmlFor="svc-step">
             <Input id="svc-step" type="number" min={1} max={365} value={step} onChange={(event) => setStep(event.target.value)} />
           </Field>
         </div>
+        {stages.length > 1 && (
+          <fieldset className="space-y-2">
+            <legend className="text-[13px] font-semibold text-cx-nav-ink">What each visit does</legend>
+            <p className="text-[12px] text-cx-text-3">The doctor sees these on the visit screen, for example “Visit 2 of 3: Cleaning and dressing”.</p>
+            {stages.map((stage, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-cx-blue-bg text-[12px] font-semibold text-cx-blue-ink" aria-hidden="true">{index + 1}</span>
+                <Input aria-label={`Visit ${index + 1}`} value={stage} maxLength={60} onChange={(event) => setStages((current) => current.map((s, i) => (i === index ? event.target.value : s)))} />
+              </div>
+            ))}
+          </fieldset>
+        )}
         <Switch checked={bookable} onCheckedChange={setBookable} label="Can be booked as an appointment" />
       </div>
     </Modal>

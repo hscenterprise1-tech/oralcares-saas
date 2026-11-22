@@ -81,6 +81,18 @@ class DentalConsultation
         return [];
     }
 
+    /**
+     * The visit names a clinic gave its own services (`metadata.sittings.stages`), by lower-cased service name.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function ownStageNames(int $clinicId): array
+    {
+        return ClinicalProcedure::query()->withoutGlobalScopes()->where('clinic_id', $clinicId)->whereNotNull('metadata')->get(['name', 'metadata'])
+            ->filter(fn (ClinicalProcedure $service) => ! empty($service->metadata['sittings']['stages']))
+            ->mapWithKeys(fn (ClinicalProcedure $service) => [strtolower(trim($service->name)) => array_values(array_map('strval', (array) $service->metadata['sittings']['stages']))])->all();
+    }
+
     /** @return array{visits: int, step: int} */
     public static function sittingsOf(?string $text): array
     {
@@ -120,6 +132,7 @@ class DentalConsultation
             ->whereIn('status', [TreatmentPlan::PROPOSED, TreatmentPlan::ACCEPTED, TreatmentPlan::ACTIVE])
             ->with(['records' => fn ($query) => $query->orderBy('sort_order')->orderBy('id'), 'records.sittings'])->latest('id')->limit(10)->get();
 
+        $ownStages = self::ownStageNames($clinic->id);
         // Services whose visits the clinic has set itself, by name (a plan item carries the name it was planned under).
         $ownSittings = ClinicalProcedure::query()->withoutGlobalScopes()->where('clinic_id', $clinic->id)->whereNotNull('metadata')->get(['id', 'name', 'metadata'])
             ->filter(fn (ClinicalProcedure $service) => isset($service->metadata['sittings']))
@@ -135,7 +148,7 @@ class DentalConsultation
             // Treatments already started on earlier visits: where each stands, so the doctor resumes without searching.
             'continuing' => $plans->flatMap(fn (TreatmentPlan $plan) => $plan->records)
                 ->filter(fn (TreatmentRecord $item) => $item->sittings->isNotEmpty() && ! in_array($item->status, [TreatmentStatus::Completed, TreatmentStatus::Aborted], true))
-                ->map(fn (TreatmentRecord $item) => ['id' => $item->id, 'label' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null, ...$this->progress($item)])
+                ->map(fn (TreatmentRecord $item) => ['id' => $item->id, 'label' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null, ...$this->progress($item, $ownStages)])
                 ->values()->all(),
             'complaints' => collect(self::COMPLAINTS)->map(fn (string $label, string $key) => ['key' => $key, 'label' => $label])->values()->all(),
             'teeth' => $this->dental->chart($patient)->map(fn (PatientDentalChart $tooth) => [
@@ -153,7 +166,7 @@ class DentalConsultation
                         'id' => $item->id, 'description' => $item->description, 'tooth' => $item->tooth_number !== null ? (int) $item->tooth_number : null,
                         'surfaces' => $item->surfaces ?? [], 'price' => $item->price !== null ? (float) $item->price : null,
                         ...($ownSittings[strtolower(trim((string) $item->description))] ?? self::sittingsOf($item->description)),
-                        ...$this->progress($item),
+                        ...$this->progress($item, $ownStages),
                     ])->values()->all(),
             ])->filter(fn (array $plan) => $plan['items'] !== [])->values()->all(),
             // What this visit has recorded so far (done today), so a reload shows the work.
@@ -238,10 +251,10 @@ class DentalConsultation
      *
      * @return array{sittings_total: ?int, sittings_done: int, next_stage: ?string, last_note: ?string, last_date: ?string, stages: list<array{name: string, state: string}>}
      */
-    private function progress(TreatmentRecord $item): array
+    private function progress(TreatmentRecord $item, array $ownStages = []): array
     {
         $done = $item->sittings->count();
-        $names = array_column(self::stagesOf($item->description), 'name');
+        $names = $ownStages[strtolower(trim((string) $item->description))] ?? array_column(self::stagesOf($item->description), 'name');
         $total = $item->sittings_total !== null ? (int) $item->sittings_total : (count($names) > 1 ? count($names) : null);
         $stages = [];
         for ($i = 1; $i <= max($total ?? 0, $done); $i++) {
@@ -364,7 +377,8 @@ class DentalConsultation
         }
         $total = (int) $item->sittings_total;
         $number = $item->sittings()->count() + 1;
-        $stage = self::stagesOf($item->description)[$number - 1]['name'] ?? 'Sitting '.$number;
+        $names = self::ownStageNames((int) $item->clinic_id)[strtolower(trim((string) $item->description))] ?? array_column(self::stagesOf($item->description), 'name');
+        $stage = $names[$number - 1] ?? 'Sitting '.$number;
         $final = $number >= $total;
         $price = $item->price !== null ? (float) $item->price : null;
         $share = $price === null ? null : round($price / $total, 2);
@@ -418,7 +432,7 @@ class DentalConsultation
                 'id' => $service->id, 'code' => $service->code, 'name' => $service->name, 'category' => $service->category,
                 'price' => $this->catalogue->effectivePrice($clinic->id, $service, $branch->id),
                 ...self::sittingsFor($service),
-                'stages' => array_column(self::stagesOf($service->name), 'name'),
+                'stages' => ! empty($service->metadata['sittings']['stages']) ? array_values(array_map('strval', (array) $service->metadata['sittings']['stages'])) : array_column(self::stagesOf($service->name), 'name'),
             ])->values()->all();
     }
 

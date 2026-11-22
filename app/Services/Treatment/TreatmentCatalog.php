@@ -292,7 +292,7 @@ class TreatmentCatalog
             'metadata' => [
                 ...((array) ($procedure->metadata ?? [])),
                 'targets' => $targets,
-                ...(array_key_exists('sittings', $data) ? ['sittings' => $data['sittings']] : []),
+                ...(array_key_exists('sittings', $data) ? ['sittings' => self::cleanSittings($data['sittings'])] : []),
             ],
         ])->save();
         $this->audit->record($created ? 'catalog.procedure.created' : 'catalog.procedure.updated', $procedure, ['code' => $procedure->code, 'changed' => array_keys($procedure->getChanges())], ['clinic_id' => $clinic->id]);
@@ -301,6 +301,24 @@ class TreatmentCatalog
     }
 
     /** Stop (or allow again) a procedure being selected or booked. Recorded procedures are unaffected. */
+    /**
+     * A service's own visits: blank stage names are dropped, and when stages are named their count is the number of
+     * visits. No stages left means the clinic only set a count and a gap, as before.
+     *
+     * @param  array<string, mixed>|null  $sittings
+     * @return array<string, mixed>|null
+     */
+    private static function cleanSittings(?array $sittings): ?array
+    {
+        if ($sittings === null) {
+            return null;
+        }
+        $stages = array_values(array_filter(array_map(fn ($name) => trim((string) $name), (array) ($sittings['stages'] ?? [])), fn (string $name) => $name !== ''));
+        unset($sittings['stages']);
+
+        return $stages === [] ? $sittings : [...$sittings, 'stages' => $stages, 'visits' => count($stages)];
+    }
+
     public function setProcedureActive(ClinicalProcedure $procedure, bool $active, User $by): void
     {
         $this->access->assertCanManageCatalog($by, Clinic::query()->findOrFail($procedure->clinic_id));

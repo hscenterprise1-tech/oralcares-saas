@@ -129,6 +129,9 @@ class ProcedureCatalogController extends Controller
             'sittings' => ['sometimes', 'nullable', 'array'],
             'sittings.visits' => ['required_with:sittings', 'integer', 'min:1', 'max:30'],
             'sittings.step' => ['required_with:sittings', 'integer', 'min:1', 'max:365'],
+            // What each visit does, in order, named by the clinic ("Cleaning and dressing"); the count of them is the visits.
+            'sittings.stages' => ['sometimes', 'nullable', 'array', 'max:12'],
+            'sittings.stages.*' => ['nullable', 'string', 'max:60'],
         ]);
     }
 }

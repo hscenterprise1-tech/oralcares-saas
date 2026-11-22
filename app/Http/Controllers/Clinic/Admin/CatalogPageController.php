@@ -75,7 +75,8 @@ class CatalogPageController extends Controller
                 'duration' => $p->default_duration_minutes, 'bookable' => (bool) $p->is_bookable, 'billable' => (bool) $p->is_billable,
                 'active' => (bool) $p->is_active, 'price' => $prices[$p->id] ?? null,
                 'usual_sittings' => DentalConsultation::sittingsOf($p->name),
-                'sittings' => isset($p->metadata['sittings']) ? ['visits' => (int) $p->metadata['sittings']['visits'], 'step' => (int) $p->metadata['sittings']['step']] : null,
+                'usual_stages' => array_column(DentalConsultation::stagesOf($p->name), 'name'),
+                'sittings' => isset($p->metadata['sittings']) ? ['visits' => (int) $p->metadata['sittings']['visits'], 'step' => (int) $p->metadata['sittings']['step'], 'stages' => array_values(array_map('strval', (array) ($p->metadata['sittings']['stages'] ?? [])))] : null,
                 'update_url' => route('admin.catalog.procedures.update', $p->id, false),
                 'active_url' => route('admin.catalog.procedures.active', $p->id, false),
             ])->values()->all();
