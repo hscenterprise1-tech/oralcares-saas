@@ -7,7 +7,7 @@ on:
 
 jobs:
   clinic-portal:
-    name: Clinic portal tests and build
+    name: Tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -36,10 +36,9 @@ jobs:
           cp .env.example .env
           php artisan key:generate --no-interaction
 
-      # The suite runs on in-memory SQLite (phpunit.xml). The Clinic folder is the part that is green today;
-      # widen this to the whole suite once the old, obsolete tests are repaired or removed.
-      - name: Clinic portal tests
-        run: php artisan test --compact tests/Feature/Clinic tests/Unit
+      # The whole suite, on in-memory SQLite (phpunit.xml).
+      - name: Tests
+        run: php artisan test --compact
 
       - name: Build the front end
         run: npm run build
