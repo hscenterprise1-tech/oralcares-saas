@@ -272,6 +272,77 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /**
+   * What the doctor has typed or ticked is kept in this browser while the visit is open, so a refresh, a closed tab or a
+   * dropped connection does not lose it. It is removed once the visit is signed, and the doctor can discard it.
+   */
+  const draftKey = `dental-draft:${encounter.id}`;
+  const snapshot = { complaintKeys, complaintText, findingsText, diagnosisText, diagnosisTouched, advice, findings, rxLines, allergyChecked, work: work.map((w) => ({ key: w.key, id: w.id, procedure_id: w.procedure_id, label: w.label, tooth: w.tooth, surfaces: w.surfaces, price: w.price, visits: w.visits, step: w.step, done: w.done, note: w.note, stages: w.stages })) };
+  const pristine = useRef<string | null>(null);
+  pristine.current ??= JSON.stringify(snapshot);
+  const hydrated = useRef(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  useEffect(() => {
+    try {
+      if (readOnly) {
+        window.localStorage.removeItem(draftKey);
+      } else {
+        const raw = window.localStorage.getItem(draftKey);
+        if (raw) {
+          const d = JSON.parse(raw) as typeof snapshot;
+          setComplaintKeys(d.complaintKeys ?? []);
+          setComplaintText(d.complaintText ?? '');
+          setFindingsText(d.findingsText ?? '');
+          setDiagnosisText(d.diagnosisText ?? '');
+          setDiagnosisTouched(Boolean(d.diagnosisTouched));
+          setAdvice(d.advice ?? '');
+          setShowExam(Boolean(d.findingsText) || showExam);
+          setFindings(d.findings ?? {});
+          setRxLines(d.rxLines ?? []);
+          setAllergyChecked(Boolean(d.allergyChecked));
+          setWork((current) => {
+            const saved = new Map((d.work ?? []).map((w) => [w.key, w]));
+            const kept = current.map((w) => (saved.has(w.key) ? { ...w, done: saved.get(w.key)!.done, note: saved.get(w.key)!.note ?? '', visits: saved.get(w.key)!.visits } : w));
+            const added = (d.work ?? []).filter((w) => w.key.startsWith('n') && !current.some((c) => c.key === w.key)).map((w) => ({ ...w, sittingsDone: 0, lastNote: null, lastDate: null }));
+
+            return [...kept, ...added] as Work[];
+          });
+          setDraftRestored(true);
+        }
+      }
+    } catch {
+      // Storage can be blocked or hold an old shape; the visit simply starts clean.
+    }
+    hydrated.current = true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const serialised = JSON.stringify(snapshot);
+  useEffect(() => {
+    if (!hydrated.current || readOnly) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      try {
+        if (serialised === pristine.current) {
+          window.localStorage.removeItem(draftKey);
+        } else {
+          window.localStorage.setItem(draftKey, serialised);
+        }
+      } catch {
+        // Not saving the draft must never get in the way of the visit.
+      }
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [serialised, readOnly, draftKey]);
+  const discardDraft = () => {
+    try {
+      window.localStorage.removeItem(draftKey);
+    } catch {
+      // Nothing to remove.
+    }
+    window.location.reload();
+  };
+
   const ageSex = [patient.age !== null ? `${patient.age} y` : null, patient.gender ? patient.gender[0].toUpperCase() + patient.gender.slice(1) : null].filter(Boolean).join(' · ');
   const next = dental.booking.upcoming[0] ?? null;
   const allergies = dental.alerts.filter((a) => a.kind === 'allergy');
@@ -318,6 +389,12 @@ function DentalPage({ encounter, patient, visit, dental, care, can_edit: canEdit
         )}
       </header>
 
+      {draftRestored && !readOnly && (
+        <p role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-cx-amber-bg px-4 py-2.5 text-[13px] font-semibold text-cx-amber-ink">
+          <span>We brought back what you had entered on this visit.</span>
+          <button type="button" onClick={discardDraft} className={cn('rounded-full px-3 py-1 text-[12.5px] font-bold underline', FOCUS)}>Start again</button>
+        </p>
+      )}
       {desk && <p className="rounded-xl bg-cx-blue-bg px-4 py-3 text-[13px] font-semibold text-cx-blue-ink">You are recording this visit for {desk.dentist}, who does not sign in. Everything you save is in {desk.dentist}’s name, with you noted as who recorded it. Root canal, implant, braces and lab records stay with the dentist.</p>}
       {!desk && !canEdit && !dental.finished && <p className="rounded-xl bg-cx-amber-bg px-4 py-3 text-[13px] font-semibold text-cx-amber-ink">You can read this visit but only its doctor can record in it.</p>}
       {(errors?.dental || errors?.booking) && <p role="alert" className="rounded-xl bg-cx-rose-bg px-4 py-3 text-[13px] font-semibold text-cx-rose-ink">{errors.dental ?? errors.booking}</p>}

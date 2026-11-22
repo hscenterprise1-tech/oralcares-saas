@@ -1,4 +1,5 @@
 import { Lock, ShieldAlert, UserCheck } from 'lucide-react';
+import { withDoctorTitle } from '@/clinic/ui/visuals';
 import { SectionCard } from './SectionCard';
 
 interface DoctorProtectionCardProps {
@@ -29,7 +30,7 @@ export function DoctorProtectionCard({
             <span className="text-[12px] font-bold uppercase tracking-wider">Default Doctor</span>
           </div>
           <p className="mt-1 text-[15px] font-bold text-slate-900">
-            {doctorName ? `Dr. ${doctorName}` : 'Unassigned'}
+            {doctorName ? withDoctorTitle(doctorName) : 'Unassigned'}
           </p>
           <p className="mt-1 flex items-center gap-1 text-[11.5px] text-slate-500">
             <Lock className="h-3 w-3 text-slate-400" />

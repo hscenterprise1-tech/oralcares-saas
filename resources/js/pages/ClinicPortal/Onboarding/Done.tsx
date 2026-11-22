@@ -40,6 +40,11 @@ export default function Done({ kind, clinicName, completedAt, links }: DoneProps
             : 'Your profile is saved. The clinic workspace is now open to you.'}
         </p>
         {when && <p className="mt-2 text-[12px] text-cx-text-3">Completed {when}</p>}
+        {isClinic && links.staff && (
+          <p className="mx-auto mt-4 max-w-md rounded-xl bg-cx-blue-bg px-4 py-3 text-left text-[12.5px] text-cx-blue-ink">
+            <span className="font-semibold">Do you also treat patients?</span> Add yourself under Staff as a Doctor or Dentist, with your own email, and you will appear in the check-in list and the calendar.
+          </p>
+        )}
         <div className="mt-7 flex flex-col-reverse items-stretch justify-center gap-2 sm:flex-row sm:items-center">
           {isClinic && links.staff && (
             <ButtonLink href={links.staff} icon={Users}>

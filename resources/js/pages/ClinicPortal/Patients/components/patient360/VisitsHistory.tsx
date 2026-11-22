@@ -7,6 +7,7 @@ import { Card } from '@/clinic/ui/Card';
 import { Skeleton } from '@/clinic/ui/Spinner';
 import { EmptyState, ErrorState, PermissionState } from '@/clinic/ui/states';
 import { ERROR_COPY, errorKind, requestJson, type ClinicHttpErrorKind } from '@/clinic/http';
+import { withDoctorTitle } from '@/clinic/ui/visuals';
 import type { HistoryRow, VisitsPage } from './types';
 
 /*
@@ -231,7 +232,7 @@ function HistoryItem({ row }: { row: HistoryRow }) {
               {row.practitioner && (
                 <span className="inline-flex items-center gap-1 font-medium">
                   <Stethoscope className="h-3.5 w-3.5 text-teal-600" aria-hidden="true" />
-                  Dr. {row.practitioner}
+                  {withDoctorTitle(row.practitioner)}
                 </span>
               )}
               {row.branch && (

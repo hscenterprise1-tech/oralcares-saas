@@ -167,7 +167,7 @@ function DocumentRow({ item, uploadUrl, accept, maxKb, disabled }: { item: Docum
   const expiryId = useFieldId();
   const done = UPLOADED.includes(item.state);
 
-  const upload = (event: FormEvent) => {
+  const upload = (event: { preventDefault: () => void }) => {
     event.preventDefault();
     if (!file) {
       return;
@@ -206,7 +206,8 @@ function DocumentRow({ item, uploadUrl, accept, maxKb, disabled }: { item: Docum
         </span>
       </div>
       {item.state !== 'verified' && item.state !== 'expiring_soon' && (
-        <form onSubmit={upload} className="mt-3 flex flex-wrap items-end gap-2">
+        // Not a <form>: this sits inside the wizard's own form, and a form inside a form is invalid HTML.
+        <div className="mt-3 flex flex-wrap items-end gap-2">
           <Field label={done ? 'Replace file' : 'File'} htmlFor={fileId} error={errors.file ?? errors.document_type_id} hint={maxKb ? `Up to ${Math.round(maxKb / 1024)} MB.` : undefined} className="min-w-0 flex-1">
             <input
               id={fileId}
@@ -222,10 +223,10 @@ function DocumentRow({ item, uploadUrl, accept, maxKb, disabled }: { item: Docum
               <Input id={expiryId} type="date" value={expires} onChange={(event) => setExpires(event.target.value)} disabled={disabled || uploading} />
             </Field>
           )}
-          <Button type="submit" icon={Upload} loading={uploading} loadingLabel="Uploading…" disabled={disabled || !file}>
+          <Button type="button" onClick={upload} icon={Upload} loading={uploading} loadingLabel="Uploading…" disabled={disabled || !file}>
             Upload
           </Button>
-        </form>
+        </div>
       )}
     </li>
   );

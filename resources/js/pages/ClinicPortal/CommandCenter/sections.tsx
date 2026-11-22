@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import { ErrorState } from '@/clinic/ui/states';
-import { formatMoney, formatNumber } from '@/clinic/ui/visuals';
+import { firstNameOf, formatMoney, formatNumber } from '@/clinic/ui/visuals';
 import { cn } from '@/lib/utils';
 import type { BranchesSection, DecisionsSection, Figure, MineSection, MoneyPeriod, MoneySection, PeopleSection, SpendingSection, TrailSection, TrendDay } from './types';
 
@@ -1301,7 +1301,7 @@ export function Welcome({
 
     return () => window.clearInterval(timer);
   }, []);
-  const first = name?.trim().split(/\s+/)[0] ?? null;
+  const first = firstNameOf(name);
   const art = useId().replace(/:/g, '');
 
   return (

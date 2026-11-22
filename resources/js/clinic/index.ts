@@ -30,6 +30,6 @@ export { PersonAvatar } from './ui/PersonAvatar';
 export { StatusBadge, ContextBadge } from './ui/badges';
 
 // Vocabulary
-export { contextForSpecialty, humanize } from './ui/visuals';
+export { contextForSpecialty, firstNameOf, humanize, withDoctorTitle } from './ui/visuals';
 
 export type * from './types';

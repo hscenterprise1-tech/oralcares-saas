@@ -9,6 +9,7 @@ import { Field, Input, Select } from '@/clinic/ui/controls';
 import { Modal } from '@/clinic/ui/Modal';
 import { ageSex, lastSeen, shortDate } from '../format';
 import { LifecycleBadge, MaskedMobile, PatientAvatar } from '../patientVisuals';
+import { withDoctorTitle } from '@/clinic/ui/visuals';
 import { SafetyStrip } from './SafetyStrip';
 import type { ConditionEditor, Patient360Action, SafetyEditor, Patient360Context, Patient360Identity } from './types';
 
@@ -219,7 +220,7 @@ export function PatientHeader({
             </Fact>
           )}
           <Fact tile="teal" icon={Stethoscope} label="Assigned Doctor">
-            <Value empty={!patient.practitioner}>{patient.practitioner ? `Dr. ${patient.practitioner}` : 'Unassigned'}</Value>
+            <Value empty={!patient.practitioner}>{patient.practitioner ? withDoctorTitle(patient.practitioner) : 'Unassigned'}</Value>
           </Fact>
           <Fact tile="green" icon={CalendarPlus} label="Registered">
             <Value empty={!patient.registered_on}>{shortDate(patient.registered_on) ?? 'Not recorded'}</Value>

@@ -223,7 +223,7 @@ class OnboardingEngine
                 $context = $this->context($session, $actor);
                 $section = $this->templates->section($stepKey);
                 $rules = $section->rules($context);
-                $data = Validator::make($input, $rules, [], $this->attributeNames($section, $context, $rules))->validate();
+                $data = Validator::make($input, $rules, $this->messages(), $this->attributeNames($section, $context, $rules))->validate();
 
                 if ($stepKey === $this->finalStepKey($session)) {
                     $this->assertReadyToFinish($session, $stepKey);
@@ -596,6 +596,21 @@ class OnboardingEngine
     private function auditScope(OnboardingSession $session, ?User $actor): array
     {
         return ['clinic_id' => $session->clinic_id, 'actor_user_id' => $actor?->id];
+    }
+
+    /**
+     * Plain-language wording for the checks a person is most likely to trip,
+     * instead of the framework's "The service ids field is required".
+     *
+     * @return array<string, string>
+     */
+    private function messages(): array
+    {
+        return [
+            'service_ids.required' => 'Choose at least one service you provide.',
+            'service_ids.min' => 'Choose at least one service you provide.',
+            'confirmed.accepted' => 'Tick the box to confirm that the details are correct.',
+        ];
     }
 
     /**

@@ -122,7 +122,7 @@ class OwnerInvitationService
         Mail::to($invitation->email)->send(new OwnerInvitationMail(
             ownerName: trim(explode(' ', (string) $owner->name)[0]) ?: 'there',
             clinicName: $clinic->display_name ?: $clinic->name,
-            acceptUrl: $this->url($token),
+            acceptUrl: $this->url($token, $clinic),
             validDays: $this->validDays(),
         ));
 
@@ -266,9 +266,18 @@ class OwnerInvitationService
             ->update(['status' => OwnerInvitationStatus::Expired->value, 'updated_at' => now()]);
     }
 
-    public function url(string $plainToken): string
+    /**
+     * The signed link in the owner's email. When clinics live on their own subdomain the link must be signed for that
+     * subdomain: a queued job has no request to supply it, and a link signed for another host fails its signature.
+     */
+    public function url(string $plainToken, ?Clinic $clinic = null): string
     {
-        return URL::temporarySignedRoute('clinic.owner-invitation.accept', now()->addDays($this->validDays()), ['token' => $plainToken]);
+        $parameters = ['token' => $plainToken];
+        if ($clinic !== null && config('app.routing_mode') !== 'path') {
+            $parameters['clinic'] = $clinic->slug;
+        }
+
+        return URL::temporarySignedRoute('clinic.owner-invitation.accept', now()->addDays($this->validDays()), $parameters);
     }
 
     private function refreshExpiry(ClinicOwnerInvitation $invitation): void

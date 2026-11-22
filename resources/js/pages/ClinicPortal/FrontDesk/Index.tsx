@@ -6,7 +6,7 @@ import { DsButton, DsButtonLink } from '@/clinic/ds';
 import { useLiveProps } from '@/clinic/live';
 import { ClinicPortalShell } from '@/clinic/shell/ClinicPortalShell';
 import { useIntake } from '@/clinic/shell/IntakeContext';
-import { formatMoney, formatNumber } from '@/clinic/ui/visuals';
+import { firstNameOf, formatMoney, formatNumber } from '@/clinic/ui/visuals';
 import { cn } from '@/lib/utils';
 import { FOCUS, KpiCard, rise, SURFACE, Welcome } from '@/pages/ClinicPortal/CommandCenter/sections';
 import { deskMode } from './components/desk';
@@ -178,7 +178,7 @@ function FrontDesk({ desk, billing, follow_ups, lab, intake, can, links }: Props
       : [];
     const money = (value: number) => formatMoney(value, billing?.currency ?? 'INR');
     const hour = Number(desk.now.slice(11, 13));
-    const first = auth.user?.name.trim().split(/\s+/)[0] ?? null;
+    const first = firstNameOf(auth.user?.name);
     const today = new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(desk.now.slice(0, 10) + 'T00:00:00'));
     const followUpsDue = follow_ups ? follow_ups.count.today + follow_ups.count.overdue : 0;
 

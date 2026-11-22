@@ -271,7 +271,26 @@ export function statusTone(status: string | null | undefined): Tone {
 }
 
 export function humanize(value: string | null | undefined): string {
-  return value ? value.replace(/[_-]+/g, ' ').replace(/^\w/, (first) => first.toUpperCase()) : '';
+  return value
+    ? value
+        .replace(/[_-]+/g, ' ')
+        .replace(/^\w/, (first) => first.toUpperCase())
+        .replace(/\b(upi|gst|opd|ipd|id|sms|pdf|rct|mri|ecg)\b/gi, (acronym) => acronym.toUpperCase())
+    : '';
+}
+
+/** A person's first name without a title, so "Dr. Demo Owner" is greeted as "Demo", not "Dr.". */
+export function firstNameOf(name: string | null | undefined): string | null {
+  const stripped = (name ?? '').trim().replace(/^(dr|mr|mrs|ms|miss|prof)\.?\s+/i, '');
+
+  return stripped.split(/\s+/)[0] || null;
+}
+
+/** "Dr. Name", without doubling the title when the stored name already carries it. */
+export function withDoctorTitle(name: string | null | undefined): string {
+  const trimmed = (name ?? '').trim();
+
+  return trimmed === '' ? '' : /^dr\.?\s/i.test(trimmed) ? trimmed : `Dr. ${trimmed}`;
 }
 
 export function formatNumber(value: number): string {

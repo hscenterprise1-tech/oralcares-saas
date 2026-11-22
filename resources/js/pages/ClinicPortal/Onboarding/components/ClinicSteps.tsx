@@ -370,6 +370,21 @@ export function StaffInvitationsStep(form: StepFormProps) {
   const branches = asArray<Option & { primary: boolean }>(form.meta.branches);
   const invited = asArray<{ name: string; email: string | null; role: string | null; status: string | null }>(form.meta.invited);
   const primary = branches.find((branch) => branch.primary) ?? branches[0];
+  /** The role a person of that kind of job needs, so "Dentist" is not left on whichever role happens to sort first. */
+  const roleFor = (staffType: string): number | null => {
+    const wanted = ['doctor', 'dentist', 'physiotherapist', 'therapist'].includes(staffType)
+      ? 'doctor'
+      : ['receptionist', 'nurse', 'assistant', 'lab_staff'].includes(staffType)
+        ? 'receptionist'
+        : ['billing', 'accountant'].includes(staffType)
+          ? 'billing'
+          : staffType === 'admin'
+            ? 'admin'
+            : '';
+    const match = wanted ? roles.find((role) => role.label.toLowerCase().includes(wanted)) : undefined;
+
+    return match ? Number(match.value) : roles[0] ? Number(roles[0].value) : null;
+  };
   const update = (index: number, patch: Partial<InviteRow>) =>
     form.set(
       'invites',
@@ -378,7 +393,7 @@ export function StaffInvitationsStep(form: StepFormProps) {
   const add = () =>
     form.set('invites', [
       ...invites,
-      { name: '', email: '', staff_type: asString(staffTypes[0]?.value), role_id: roles[0] ? Number(roles[0].value) : null, branch_ids: primary ? [Number(primary.value)] : [] },
+      { name: '', email: '', staff_type: asString(staffTypes[0]?.value), role_id: roleFor(asString(staffTypes[0]?.value)), branch_ids: primary ? [Number(primary.value)] : [] },
     ]);
 
   return (
@@ -436,7 +451,7 @@ export function StaffInvitationsStep(form: StepFormProps) {
                     <Select
                       id={`invite-${index}-type`}
                       value={row.staff_type}
-                      onChange={(event) => update(index, { staff_type: event.target.value })}
+                      onChange={(event) => update(index, { staff_type: event.target.value, role_id: roleFor(event.target.value) })}
                       options={staffTypes.map((type) => ({ value: String(type.value), label: type.label }))}
                       invalid={Boolean(field('staff_type'))}
                       disabled={form.disabled}

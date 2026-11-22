@@ -8,7 +8,7 @@ import { Field, Input, Select } from '@/clinic/ui/controls';
 import { Modal } from '@/clinic/ui/Modal';
 import { Skeleton } from '@/clinic/ui/Spinner';
 import { EmptyState, ErrorState, PermissionState } from '@/clinic/ui/states';
-import { humanize } from '@/clinic/ui/visuals';
+import { humanize, withDoctorTitle } from '@/clinic/ui/visuals';
 import { ClinicHttpError, ERROR_COPY, errorKind, requestJson, type ClinicHttpErrorKind } from '@/clinic/http';
 import { shortDate } from '../format';
 
@@ -175,7 +175,7 @@ export function AppointmentsSection({ endpoint }: { endpoint: string }) {
                       {row.date_label} · {row.time_label}
                     </p>
                     <p className="mt-0.5 text-[13px] font-medium text-slate-500 [overflow-wrap:anywhere]">
-                      {[row.type ? humanize(row.type) : null, row.practitioner ? `Dr. ${row.practitioner}` : null, row.branch, row.duration ? `${row.duration} min` : null].filter(Boolean).join(' · ')}
+                      {[row.type ? humanize(row.type) : null, row.practitioner ? withDoctorTitle(row.practitioner) : null, row.branch, row.duration ? `${row.duration} min` : null].filter(Boolean).join(' · ')}
                     </p>
                     {row.notes && <p className="mt-1 text-[12.5px] text-slate-600 [overflow-wrap:anywhere]">{row.notes}</p>}
                   </div>
@@ -471,7 +471,7 @@ export function ClinicalSection({ endpoint }: { endpoint: string }) {
                       ) : (
                         (row.number ?? 'Consultation')
                       )}
-                      <span className="font-normal text-slate-500"> · {[shortDate(row.date), row.practitioner ? `Dr. ${row.practitioner}` : null, row.branch].filter(Boolean).join(' · ')}</span>
+                      <span className="font-normal text-slate-500"> · {[shortDate(row.date), row.practitioner ? withDoctorTitle(row.practitioner) : null, row.branch].filter(Boolean).join(' · ')}</span>
                     </p>
                     <Pill tone={ENCOUNTER_TONE[row.status] ?? 'slate'}>{row.status === 'draft' ? 'Open' : humanize(row.status)}</Pill>
                   </div>
